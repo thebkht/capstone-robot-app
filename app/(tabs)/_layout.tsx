@@ -1,5 +1,5 @@
-import { Tabs, useRouter } from 'expo-router';
-import React, { useEffect } from 'react';
+import { Redirect, Tabs } from 'expo-router';
+import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -9,15 +9,13 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const router = useRouter();
   const { status } = useRobot();
 
-  useEffect(() => {
-    const isConnected = Boolean(status?.network?.ip);
-    if (!isConnected) {
-      router.replace('/connection');
-    }
-  }, [router, status?.network?.ip]);
+  const isConnected = Boolean(status?.network?.ip);
+
+  if (!isConnected) {
+    return <Redirect href="/connection" />;
+  }
 
   return (
     <Tabs
