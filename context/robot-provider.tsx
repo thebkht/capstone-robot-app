@@ -1,6 +1,19 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { RobotAPI, RobotStatus, createRobotApi } from '@/services/robot-api';
 
+interface OptionalBleManager {
+  startDeviceScan: (
+    uuids: string[] | null,
+    options: unknown,
+    listener: (
+      error: Error | null,
+      device: { id: string; name: string | null; rssi: number | null } | null,
+    ) => void,
+  ) => void;
+  stopDeviceScan: () => void;
+  destroy: () => void;
+}
+
 interface RobotContextValue {
   api: RobotAPI;
   baseUrl: string;
@@ -14,6 +27,7 @@ interface RobotContextValue {
   setBluetoothEnabled: (enabled: boolean) => void;
   bluetoothEnabled: boolean;
   bluetoothSupported: boolean;
+  bleManager: OptionalBleManager | null;
 }
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
@@ -27,8 +41,64 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
   const [bluetoothEnabled, setBluetoothEnabled] = useState<boolean>(false);
-  const bluetoothSupported =
+  const shouldAttemptBle =
     typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_ENABLE_BLE === 'true';
+  const [bleManager, setBleManager] = useState<OptionalBleManager | null>(null);
+
+  useEffect(() => {
+    if (!shouldAttemptBle) {
+      setBleManager(null);
+      return;
+    }
+
+    let isMounted = true;
+    let activeManager: OptionalBleManager | null = null;
+
+    const loadBleManager = async () => {
+      try {
+        // eslint-disable-next-line no-eval
+        const optionalRequire: ((moduleId: string) => unknown) | undefined = eval('require');
+        if (typeof optionalRequire !== 'function') {
+          return;
+        }
+
+        const moduleName = ['react-native-ble-plx'].join('');
+        const bleModule = optionalRequire(moduleName) as
+          | { BleManager: new () => OptionalBleManager }
+          | undefined;
+
+        if (!bleModule?.BleManager) {
+          if (isMounted) {
+            setBleManager(null);
+          }
+          return;
+        }
+
+        activeManager = new bleModule.BleManager();
+        if (isMounted) {
+          setBleManager(activeManager);
+        } else {
+          activeManager.destroy();
+        }
+      } catch (error) {
+        console.warn('Bluetooth manager unavailable', error);
+        if (isMounted) {
+          setBleManager(null);
+        }
+      }
+    };
+
+    loadBleManager();
+
+    return () => {
+      isMounted = false;
+      if (activeManager) {
+        activeManager.destroy();
+      }
+    };
+  }, [shouldAttemptBle]);
+
+  const bluetoothSupported = shouldAttemptBle && Boolean(bleManager);
 
   useEffect(() => {
     if (!bluetoothSupported && bluetoothEnabled) {
@@ -81,8 +151,19 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       bluetoothEnabled,
       setBluetoothEnabled,
       bluetoothSupported,
+      bleManager,
     }),
-    [api, baseUrl, status, statusError, lastUpdated, isPolling, bluetoothEnabled, bluetoothSupported],
+    [
+      api,
+      baseUrl,
+      status,
+      statusError,
+      lastUpdated,
+      isPolling,
+      bluetoothEnabled,
+      bluetoothSupported,
+      bleManager,
+    ],
   );
 
   return <RobotContext.Provider value={value}>{children}</RobotContext.Provider>;

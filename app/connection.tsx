@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -19,6 +20,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useRobot } from '@/context/robot-provider';
@@ -72,6 +74,7 @@ export default function ConnectionScreen() {
     bluetoothEnabled,
     bluetoothSupported,
     setBluetoothEnabled,
+    bleManager,
   } = useRobot();
   const router = useRouter();
   const [ssid, setSsid] = useState('');
@@ -84,6 +87,8 @@ export default function ConnectionScreen() {
   const [showWifiModal, setShowWifiModal] = useState(false);
   const [showManualIpModal, setShowManualIpModal] = useState(false);
   const [manualUrl, setManualUrl] = useState(baseUrl);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setManualUrl(baseUrl);
@@ -147,6 +152,33 @@ export default function ConnectionScreen() {
     }
   }, [connectionState, lastError]);
 
+  const stopScan = useCallback(() => {
+    if (scanTimeoutRef.current) {
+      clearTimeout(scanTimeoutRef.current);
+      scanTimeoutRef.current = null;
+    }
+
+    if (bleManager) {
+      bleManager.stopDeviceScan();
+    }
+
+    setIsScanning(false);
+  }, [bleManager]);
+
+  useEffect(() => {
+    return () => {
+      stopScan();
+    };
+  }, [stopScan]);
+
+  useEffect(() => {
+    if (!bluetoothEnabled || !bluetoothSupported) {
+      stopScan();
+      setDevices([]);
+      setScanError(null);
+    }
+  }, [bluetoothEnabled, bluetoothSupported, stopScan]);
+
   const handleScan = useCallback(() => {
     if (!bluetoothSupported) {
       Alert.alert(
@@ -161,18 +193,50 @@ export default function ConnectionScreen() {
       return;
     }
 
+    if (!bleManager) {
+      Alert.alert(
+        'Bluetooth unavailable',
+        'The Bluetooth module failed to load. Reinstall the optional dependency and try again.',
+      );
+      return;
+    }
+
+    stopScan();
     setDevices([]);
     setIsScanning(true);
+    setScanError(null);
 
-    const simulatedDevices: DiscoveredDevice[] = [
-      { id: 'mock-robot-1', name: 'Mock Robot (install BLE package)', rssi: -82 },
-    ];
+    bleManager.startDeviceScan(null, null, (error, device) => {
+      if (error) {
+        stopScan();
+        setScanError(error.message);
+        return;
+      }
 
-    setTimeout(() => {
-      setDevices(simulatedDevices);
-      setIsScanning(false);
-    }, 800);
-  }, [bluetoothEnabled, bluetoothSupported]);
+      if (!device) {
+        return;
+      }
+
+      setDevices((previous) => {
+        if (previous.some((existing) => existing.id === device.id)) {
+          return previous;
+        }
+
+        return [
+          ...previous,
+          {
+            id: device.id,
+            name: device.name ?? undefined,
+            rssi: device.rssi ?? undefined,
+          },
+        ];
+      });
+    });
+
+    scanTimeoutRef.current = setTimeout(() => {
+      stopScan();
+    }, 10_000);
+  }, [bleManager, bluetoothEnabled, bluetoothSupported, stopScan]);
 
   const handleToggleBluetooth = useCallback(() => {
     if (!bluetoothSupported) {
@@ -217,13 +281,14 @@ export default function ConnectionScreen() {
   }, [manualUrl, setBaseUrl]);
 
   return (
-    <View style={styles.gradient}>
-      <ThemedView style={styles.container}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.heroCard}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
+      <View style={styles.gradient}>
+        <ThemedView style={styles.container}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.heroCard}>
             <View style={styles.heroAccent} />
             <View style={styles.heroHeader}>
               <View style={styles.heroHeading}>
@@ -331,6 +396,7 @@ export default function ConnectionScreen() {
                 })
               )}
             </View>
+            {scanError ? <ThemedText style={styles.errorText}>{scanError}</ThemedText> : null}
           </View>
 
           <View style={styles.card}>
@@ -559,12 +625,17 @@ export default function ConnectionScreen() {
             </View>
           </KeyboardAvoidingView>
         </Modal>
-      </ThemedView>
-    </View>
+        </ThemedView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#020617',
+  },
   gradient: {
     flex: 1,
     backgroundColor: '#020617',
