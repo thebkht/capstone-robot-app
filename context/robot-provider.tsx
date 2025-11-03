@@ -1,7 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
-import { BleManager } from 'react-native-ble-plx';
-
 import { RobotAPI, RobotStatus, createRobotApi } from '@/services/robot-api';
 
 interface RobotContextValue {
@@ -13,9 +11,9 @@ interface RobotContextValue {
   isPolling: boolean;
   setIsPolling: (value: boolean) => void;
   refreshStatus: () => Promise<void>;
-  bluetoothManager?: BleManager;
   setBluetoothEnabled: (enabled: boolean) => void;
   bluetoothEnabled: boolean;
+  bluetoothSupported: boolean;
 }
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
@@ -28,23 +26,16 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
   const [bluetoothEnabled, setBluetoothEnabled] = useState<boolean>(false);
-  const [bluetoothManager, setBluetoothManager] = useState<BleManager | undefined>(undefined);
+  const bluetoothSupported =
+    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_ENABLE_BLE === 'true';
 
   useEffect(() => {
-    if (bluetoothEnabled) {
-      const manager = new BleManager();
-      setBluetoothManager(manager);
-      return () => {
-        manager.destroy();
-        setBluetoothManager(undefined);
-      };
+    if (!bluetoothSupported && bluetoothEnabled) {
+      setBluetoothEnabled(false);
     }
+  }, [bluetoothEnabled, bluetoothSupported]);
 
-    setBluetoothManager(undefined);
-    return undefined;
-  }, [bluetoothEnabled]);
-
-  const api = useMemo(() => createRobotApi(baseUrl, bluetoothManager), [baseUrl, bluetoothManager]);
+  const api = useMemo(() => createRobotApi(baseUrl), [baseUrl]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -82,11 +73,11 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       isPolling,
       setIsPolling,
       refreshStatus,
-      bluetoothManager,
       bluetoothEnabled,
       setBluetoothEnabled,
+      bluetoothSupported,
     }),
-    [api, baseUrl, status, lastUpdated, isPolling, bluetoothManager, bluetoothEnabled],
+    [api, baseUrl, status, lastUpdated, isPolling, bluetoothEnabled, bluetoothSupported],
   );
 
   return <RobotContext.Provider value={value}>{children}</RobotContext.Provider>;

@@ -1,5 +1,3 @@
-import type { BleManager } from 'react-native-ble-plx';
-
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type RobotConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -30,18 +28,15 @@ export interface SnapshotResponse {
 export interface RobotApiOptions {
   baseUrl: string;
   fetchImpl?: typeof fetch;
-  bluetoothManager?: BleManager;
 }
 
 export class RobotAPI {
   private baseUrl: string;
   private fetchImpl: typeof fetch;
-  private bluetoothManager?: BleManager;
 
   constructor(options: RobotApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.bluetoothManager = options.bluetoothManager;
   }
 
   public updateBaseUrl(baseUrl: string) {
@@ -101,14 +96,6 @@ export class RobotAPI {
     return this.request<SnapshotResponse>('/camera/snapshot', 'POST');
   }
 
-  public async listBluetoothDevices() {
-    if (!this.bluetoothManager) {
-      throw new Error('Bluetooth manager is not available.');
-    }
-
-    return this.bluetoothManager.startDeviceScan(null, null, () => undefined);
-  }
 }
 
-export const createRobotApi = (baseUrl: string, bluetoothManager?: BleManager) =>
-  new RobotAPI({ baseUrl, bluetoothManager });
+export const createRobotApi = (baseUrl: string) => new RobotAPI({ baseUrl });

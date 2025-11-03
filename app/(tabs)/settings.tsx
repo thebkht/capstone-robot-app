@@ -6,7 +6,14 @@ import { ThemedView } from '@/components/themed-view';
 import { useRobot } from '@/context/robot-provider';
 
 export default function SettingsScreen() {
-  const { baseUrl, setBaseUrl, bluetoothEnabled, setBluetoothEnabled, refreshStatus } = useRobot();
+  const {
+    baseUrl,
+    setBaseUrl,
+    bluetoothEnabled,
+    setBluetoothEnabled,
+    refreshStatus,
+    bluetoothSupported,
+  } = useRobot();
   const [draftUrl, setDraftUrl] = useState(baseUrl);
 
   const handleSave = useCallback(() => {
@@ -44,10 +51,16 @@ export default function SettingsScreen() {
       <ThemedView style={styles.card}>
         <View style={styles.rowBetween}>
           <ThemedText type="subtitle">Enable Bluetooth discovery</ThemedText>
-          <Switch value={bluetoothEnabled} onValueChange={setBluetoothEnabled} />
+          <Switch
+            value={bluetoothEnabled}
+            onValueChange={setBluetoothEnabled}
+            disabled={!bluetoothSupported}
+          />
         </View>
         <ThemedText style={styles.description}>
-          Uses react-native-ble-plx to scan for nearby robots exposing BLE beacons.
+          {bluetoothSupported
+            ? 'Uses react-native-ble-plx to scan for nearby robots exposing BLE beacons.'
+            : 'Install react-native-ble-plx and rebuild the app to enable Bluetooth scanning.'}
         </ThemedText>
       </ThemedView>
 

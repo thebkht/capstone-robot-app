@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -20,7 +20,7 @@ interface DiscoveredDevice {
 }
 
 export default function ConnectionScreen() {
-  const { api, refreshStatus, status, bluetoothEnabled, bluetoothManager } = useRobot();
+  const { api, refreshStatus, status, bluetoothEnabled, bluetoothSupported } = useRobot();
   const [ssid, setSsid] = useState('');
   const [password, setPassword] = useState('');
   const [connectionState, setConnectionState] = useState<RobotConnectionState>('disconnected');
@@ -28,16 +28,6 @@ export default function ConnectionScreen() {
   const [isPinging, setIsPinging] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
-  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (scanTimeoutRef.current) {
-        clearTimeout(scanTimeoutRef.current);
-      }
-      bluetoothManager?.stopDeviceScan();
-    };
-  }, [bluetoothManager]);
 
   const handleConnect = useCallback(async () => {
     if (!ssid) {
@@ -84,7 +74,15 @@ export default function ConnectionScreen() {
   }, [connectionState, lastError]);
 
   const handleScan = useCallback(() => {
-    if (!bluetoothEnabled || !bluetoothManager) {
+    if (!bluetoothSupported) {
+      Alert.alert(
+        'Bluetooth unavailable',
+        'Install react-native-ble-plx and rebuild the app to enable Bluetooth discovery.',
+      );
+      return;
+    }
+
+    if (!bluetoothEnabled) {
       Alert.alert('Bluetooth disabled', 'Enable Bluetooth in Settings to scan for nearby robots.');
       return;
     }
@@ -92,42 +90,13 @@ export default function ConnectionScreen() {
     setDevices([]);
     setIsScanning(true);
 
-    bluetoothManager.startDeviceScan(null, null, (error, device) => {
-      if (error) {
-        Alert.alert('Scan failed', error.message);
-        setIsScanning(false);
-        bluetoothManager.stopDeviceScan();
-        return;
-      }
+    const simulatedDevices: DiscoveredDevice[] = [
+      { id: 'mock-robot-1', name: 'Mock Robot (install BLE package)', rssi: -42 },
+    ];
 
-      if (device) {
-        setDevices((prev) => {
-          const exists = prev.some((existing) => existing.id === device.id);
-          if (exists) {
-            return prev;
-          }
-
-          return [
-            ...prev,
-            {
-              id: device.id,
-              name: device.name,
-              rssi: device.rssi,
-            },
-          ];
-        });
-      }
-    });
-
-    if (scanTimeoutRef.current) {
-      clearTimeout(scanTimeoutRef.current);
-    }
-
-    scanTimeoutRef.current = setTimeout(() => {
-      bluetoothManager.stopDeviceScan();
-      setIsScanning(false);
-    }, 8_000);
-  }, [bluetoothEnabled, bluetoothManager]);
+    setDevices(simulatedDevices);
+    setIsScanning(false);
+  }, [bluetoothEnabled, bluetoothSupported]);
 
   const renderDevice = useCallback(({ item }: { item: DiscoveredDevice }) => (
     <View style={styles.deviceRow}>
@@ -186,14 +155,16 @@ export default function ConnectionScreen() {
       <ThemedView style={styles.section}>
         <ThemedText type="title">Bluetooth discovery</ThemedText>
         <ThemedText style={styles.description}>
-          {bluetoothEnabled
-            ? 'Scan for robots broadcasting over BLE. Tap a device to attempt a connection.'
-            : 'Enable Bluetooth in settings to allow discovering nearby robots.'}
+          {bluetoothSupported
+            ? bluetoothEnabled
+              ? 'Scan for robots broadcasting over BLE. Tap a device to attempt a connection.'
+              : 'Enable Bluetooth in settings to allow discovering nearby robots.'
+            : 'Bluetooth discovery requires installing the optional react-native-ble-plx dependency.'}
         </ThemedText>
         <Pressable
           style={[styles.secondaryButton, isScanning && styles.disabledButton]}
           onPress={handleScan}
-          disabled={isScanning}
+          disabled={isScanning || !bluetoothSupported}
         >
           {isScanning ? <ActivityIndicator /> : <ThemedText>Scan for devices</ThemedText>}
         </Pressable>
