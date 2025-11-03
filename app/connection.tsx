@@ -187,22 +187,22 @@ export default function ConnectionScreen() {
 
   const bluetoothStatus = useMemo(() => {
     if (!bluetoothSupported) {
-      return { color: '#f97316', label: 'Unavailable' };
+      return { color: '#fb923c', label: 'Unavailable' };
     }
 
     return bluetoothEnabled
-      ? { color: '#22c55e', label: 'ON' }
-      : { color: '#ef4444', label: 'OFF' };
+      ? { color: '#22d3ee', label: 'ON' }
+      : { color: '#f472b6', label: 'OFF' };
   }, [bluetoothEnabled, bluetoothSupported]);
 
   const wifiStatus = useMemo(() => {
     if (connectionState === 'error') {
-      return { color: '#ef4444', label: 'Error' };
+      return { color: '#f87171', label: 'Error' };
     }
 
     return wifiConnected
-      ? { color: '#22c55e', label: 'Connected' }
-      : { color: '#f97316', label: 'Offline' };
+      ? { color: '#34d399', label: 'Connected' }
+      : { color: '#facc15', label: 'Offline' };
   }, [connectionState, wifiConnected]);
 
   const handleSaveManualUrl = useCallback(() => {
@@ -216,427 +216,599 @@ export default function ConnectionScreen() {
   }, [manualUrl, setBaseUrl]);
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <ThemedText type="title">Connect to a robot</ThemedText>
-          <ThemedText style={styles.helperText}>
-            Manage Bluetooth discovery, Wi-Fi credentials, and manual IP configuration from a single place.
-          </ThemedText>
-        </View>
-
-        <ThemedView style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View>
-              <ThemedText style={styles.cardTitle} type="subtitle">
-                Bluetooth
-              </ThemedText>
-              <ThemedText style={styles.cardSubtitle}>
-                {bluetoothSupported
-                  ? 'Discover nearby robots broadcasting over BLE.'
-                  : 'Optional Bluetooth support is not installed.'}
-              </ThemedText>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Toggle Bluetooth discovery"
-              onPress={handleToggleBluetooth}
-            >
-              <StatusPill color={bluetoothStatus.color} label={`Bluetooth ${bluetoothStatus.label}`} />
-            </Pressable>
-          </View>
-
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionLabel}>Nearby devices</ThemedText>
-            <Pressable
-              style={styles.iconButton}
-              onPress={handleScan}
-              disabled={isScanning || !bluetoothSupported}
-            >
-              {isScanning ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <Ionicons
-                  name="refresh"
-                  size={18}
-                  color={bluetoothSupported ? '#ffffff' : 'rgba(255,255,255,0.4)'}
-                />
-              )}
-            </Pressable>
-          </View>
-
-          <View style={styles.deviceList}>
-            {devices.length === 0 ? (
-              <ThemedText style={styles.placeholderText}>
-                {bluetoothSupported
-                  ? 'Tap the refresh icon to look for nearby robots.'
-                  : 'Enable Bluetooth support to discover robots.'}
-              </ThemedText>
-            ) : (
-              devices.map((device) => {
-                const signalStrength = getSignalStrength(device.rssi);
-                return (
-                  <Pressable key={device.id} style={styles.deviceItem}>
-                    <View style={styles.deviceDetails}>
-                      <ThemedText style={styles.deviceName} type="defaultSemiBold">
-                        {device.name ?? 'Unnamed device'}
-                      </ThemedText>
-                      <ThemedText style={styles.deviceId}>{device.id}</ThemedText>
-                    </View>
-                    {signalStrength ? (
-                      <View style={styles.signalBadge}>
-                        <ThemedText style={styles.signalBadgeText}>{signalStrength}</ThemedText>
-                      </View>
-                    ) : null}
-                  </Pressable>
-                );
-              })
-            )}
-          </View>
-        </ThemedView>
-
-        <ThemedView style={styles.card}>
-          <ThemedText style={styles.cardTitle} type="subtitle">
-            Robot Wi-Fi Status
-          </ThemedText>
-
-          <View style={styles.metaRow}>
-            <ThemedText style={styles.metaLabel}>Wi-Fi Connection</ThemedText>
-            <StatusPill color={wifiStatus.color} label={wifiStatus.label} />
-          </View>
-          <View style={styles.metaRow}>
-            <ThemedText style={styles.metaLabel}>Network Name</ThemedText>
-            <ThemedText style={styles.metaValue}>
-              {status?.network?.wifiSsid ?? 'Not connected'}
-            </ThemedText>
-          </View>
-          <View style={styles.metaRow}>
-            <ThemedText style={styles.metaLabel}>IP Address</ThemedText>
-            <ThemedText style={styles.metaValue}>
-              {status?.network?.ip ?? '—'}
-            </ThemedText>
-          </View>
-
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionLabel}>Available networks</ThemedText>
-            <Pressable style={styles.iconButton} onPress={refreshStatus}>
-              <Ionicons name="refresh" size={18} color="#ffffff" />
-            </Pressable>
-          </View>
-
-          <View style={styles.networkList}>
-            {availableNetworks.length === 0 ? (
-              <ThemedText style={styles.placeholderText}>
-                No networks discovered yet.
-              </ThemedText>
-            ) : (
-              availableNetworks.map((network) => (
-                <View key={network} style={styles.networkRow}>
-                  <ThemedText style={styles.networkName}>{network}</ThemedText>
-                </View>
-              ))
-            )}
-          </View>
-
-          <View style={styles.actionRow}>
-            <Pressable
-              style={[styles.actionButton, styles.primaryAction]}
-              onPress={handlePing}
-              disabled={isPinging}
-            >
-              {isPinging ? (
-                <ActivityIndicator color="#0f172a" />
-              ) : (
-                <ThemedText style={styles.primaryActionText}>Connect to Robot</ThemedText>
-              )}
-            </Pressable>
-            <Pressable
-              style={[styles.actionButton, styles.secondaryAction]}
-              onPress={() => setShowWifiModal(true)}
-            >
-              <ThemedText style={styles.secondaryActionText}>Change Robot Wi-Fi</ThemedText>
-            </Pressable>
-          </View>
-
-          <ThemedText style={styles.helperText}>{connectionDescription}</ThemedText>
-          {lastError ? <ThemedText style={styles.errorText}>{lastError}</ThemedText> : null}
-        </ThemedView>
-
-        <Pressable
-          style={styles.outlineButton}
-          onPress={() => setShowManualIpModal(true)}
+    <View style={styles.gradient}>
+      <ThemedView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          <ThemedText style={styles.outlineButtonText}>Connect to a specific IP</ThemedText>
-        </Pressable>
-
-        <Image source={ROBOT_ART} style={styles.footerArt} contentFit="contain" />
-      </ScrollView>
-
-      <Modal
-        animationType="fade"
-        transparent
-        visible={showWifiModal}
-        onRequestClose={() => setShowWifiModal(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalBackdrop}
-        >
-          <View style={styles.modalCard}>
-            <ThemedText style={styles.modalTitle} type="subtitle">
-              Update Wi-Fi Credentials
-            </ThemedText>
-            <ThemedText style={styles.modalDescription}>
-              Provide the Wi-Fi network name and password the robot should join.
-            </ThemedText>
-
-            <View style={styles.formRow}>
-              <ThemedText style={styles.formLabel}>SSID</ThemedText>
-              <TextInput
-                value={ssid}
-                onChangeText={setSsid}
-                placeholder="Robot Wi-Fi network"
-                placeholderTextColor="rgba(255,255,255,0.4)"
-                style={styles.input}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+          <View style={styles.heroCard}>
+            <View style={styles.heroAccent} />
+            <View style={styles.heroHeader}>
+              <View style={styles.heroHeading}>
+                <ThemedText style={styles.heroEyebrow}>Robot Control</ThemedText>
+                <ThemedText style={styles.heroTitle} type="title">
+                  Connection Control Center
+                </ThemedText>
+              </View>
+              <StatusPill color={wifiStatus.color} label={wifiStatus.label} />
             </View>
-
-            <View style={styles.formRow}>
-              <ThemedText style={styles.formLabel}>Password</ThemedText>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Network password"
-                placeholderTextColor="rgba(255,255,255,0.4)"
-                secureTextEntry
-                style={styles.input}
-              />
+            <ThemedText style={styles.heroSubtitle}>
+              Pair the robot over Wi-Fi or Bluetooth with a crisp interface inspired by the reference mockup.
+            </ThemedText>
+            <View style={styles.heroMeta}>
+              <View style={styles.heroMetaItem}>
+                <ThemedText style={styles.heroMetaLabel}>Current SSID</ThemedText>
+                <ThemedText style={styles.heroMetaValue}>
+                  {status?.network?.wifiSsid ?? 'Not connected'}
+                </ThemedText>
+              </View>
+              <View style={styles.heroMetaDivider} />
+              <View style={styles.heroMetaItem}>
+                <ThemedText style={styles.heroMetaLabel}>IP Address</ThemedText>
+                <ThemedText style={styles.heroMetaValue}>
+                  {status?.network?.ip ?? '—'}
+                </ThemedText>
+              </View>
             </View>
+          </View>
 
-            <View style={styles.modalActions}>
+          <View style={styles.card}>
+            <View style={styles.cardAccent} />
+            <View style={styles.cardHeader}>
+              <View>
+                <ThemedText style={styles.cardTitle} type="subtitle">
+                  Bluetooth Discovery
+                </ThemedText>
+                <ThemedText style={styles.cardSubtitle}>
+                  {bluetoothSupported
+                    ? 'Discover nearby robots broadcasting over BLE.'
+                    : 'Optional Bluetooth support is not installed.'}
+                </ThemedText>
+              </View>
               <Pressable
-                style={[styles.modalButton, styles.modalSecondaryButton]}
-                onPress={() => setShowWifiModal(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle Bluetooth discovery"
+                onPress={handleToggleBluetooth}
+                style={({ pressed }) => [pressed && styles.pressablePressed]}
               >
-                <ThemedText style={styles.secondaryActionText}>Cancel</ThemedText>
+                <StatusPill color={bluetoothStatus.color} label={`Bluetooth ${bluetoothStatus.label}`} />
               </Pressable>
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <ThemedText style={styles.sectionLabel}>Nearby devices</ThemedText>
               <Pressable
-                style={[styles.modalButton, styles.modalPrimaryButton]}
-                onPress={handleConnect}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  (isScanning || !bluetoothSupported) && styles.iconButtonDisabled,
+                  pressed && styles.pressablePressed,
+                ]}
+                onPress={handleScan}
+                disabled={isScanning || !bluetoothSupported}
               >
-                {connectionState === 'connecting' ? (
-                  <ActivityIndicator color="#0f172a" />
+                {isScanning ? (
+                  <ActivityIndicator size="small" color="#0f172a" />
                 ) : (
-                  <ThemedText style={styles.primaryActionText}>Save &amp; Connect</ThemedText>
+                  <Ionicons
+                    name="refresh"
+                    size={18}
+                    color={bluetoothSupported ? '#041021' : 'rgba(4,16,33,0.4)'}
+                  />
                 )}
               </Pressable>
             </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
-      <Modal
-        animationType="fade"
-        transparent
-        visible={showManualIpModal}
-        onRequestClose={() => setShowManualIpModal(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalBackdrop}
+            <View style={styles.deviceList}>
+              {devices.length === 0 ? (
+                <ThemedText style={styles.placeholderText}>
+                  {bluetoothSupported
+                    ? 'Tap the refresh icon to look for nearby robots.'
+                    : 'Enable Bluetooth support to discover robots.'}
+                </ThemedText>
+              ) : (
+                devices.map((device) => {
+                  const signalStrength = getSignalStrength(device.rssi);
+                  return (
+                    <Pressable
+                      key={device.id}
+                      style={({ pressed }) => [styles.deviceItem, pressed && styles.pressablePressed]}
+                    >
+                      <View style={styles.deviceDetails}>
+                        <ThemedText style={styles.deviceName} type="defaultSemiBold">
+                          {device.name ?? 'Unnamed device'}
+                        </ThemedText>
+                        <ThemedText style={styles.deviceId}>{device.id}</ThemedText>
+                      </View>
+                      {signalStrength ? (
+                        <View style={styles.signalBadge}>
+                          <ThemedText style={styles.signalBadgeText}>{signalStrength}</ThemedText>
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  );
+                })
+              )}
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.cardAccent} />
+            <ThemedText style={styles.cardTitle} type="subtitle">
+              Robot Wi-Fi Status
+            </ThemedText>
+
+            <View style={styles.metaRow}>
+              <ThemedText style={styles.metaLabel}>Wi-Fi Connection</ThemedText>
+              <StatusPill color={wifiStatus.color} label={wifiStatus.label} />
+            </View>
+            <View style={styles.metaRow}>
+              <ThemedText style={styles.metaLabel}>Network Name</ThemedText>
+              <ThemedText style={styles.metaValue}>
+                {status?.network?.wifiSsid ?? 'Not connected'}
+              </ThemedText>
+            </View>
+            <View style={styles.metaRow}>
+              <ThemedText style={styles.metaLabel}>IP Address</ThemedText>
+              <ThemedText style={styles.metaValue}>
+                {status?.network?.ip ?? '—'}
+              </ThemedText>
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <ThemedText style={styles.sectionLabel}>Available networks</ThemedText>
+              <Pressable
+                style={({ pressed }) => [styles.iconButton, pressed && styles.pressablePressed]}
+                onPress={refreshStatus}
+              >
+                <Ionicons name="refresh" size={18} color="#041021" />
+              </Pressable>
+            </View>
+
+            <View style={styles.networkList}>
+              {availableNetworks.length === 0 ? (
+                <ThemedText style={styles.placeholderText}>
+                  No networks discovered yet.
+                </ThemedText>
+              ) : (
+                availableNetworks.map((network) => (
+                  <View key={network} style={styles.networkRow}>
+                    <ThemedText style={styles.networkName}>{network}</ThemedText>
+                  </View>
+                ))
+              )}
+            </View>
+
+            <View style={styles.actionRow}>
+              <View style={[styles.actionButton, styles.primaryAction]}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.primaryActionPressable,
+                    pressed && styles.pressablePressed,
+                    isPinging && styles.pressableDisabled,
+                  ]}
+                  onPress={handlePing}
+                  disabled={isPinging}
+                >
+                  {isPinging ? (
+                    <ActivityIndicator color="#020617" />
+                  ) : (
+                    <ThemedText style={styles.primaryActionText}>Test Robot Link</ThemedText>
+                  )}
+                </Pressable>
+              </View>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  styles.secondaryAction,
+                  pressed && styles.pressablePressed,
+                ]}
+                onPress={() => setShowWifiModal(true)}
+              >
+                <ThemedText style={styles.secondaryActionText}>Update Credentials</ThemedText>
+              </Pressable>
+            </View>
+
+            <ThemedText style={styles.helperText}>{connectionDescription}</ThemedText>
+            {lastError ? <ThemedText style={styles.errorText}>{lastError}</ThemedText> : null}
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [styles.outlineButton, pressed && styles.pressablePressed]}
+            onPress={() => setShowManualIpModal(true)}
+          >
+            <ThemedText style={styles.outlineButtonText}>Connect to a specific IP</ThemedText>
+          </Pressable>
+
+          <Image source={ROBOT_ART} style={styles.footerArt} contentFit="contain" />
+        </ScrollView>
+
+        <Modal
+          animationType="fade"
+          transparent
+          visible={showWifiModal}
+          onRequestClose={() => setShowWifiModal(false)}
         >
-          <View style={styles.modalCard}>
-            <ThemedText style={styles.modalTitle} type="subtitle">
-              Connect to a specific IP
-            </ThemedText>
-            <ThemedText style={styles.modalDescription}>
-              Enter the robot&apos;s base URL or IP address to connect directly.
-            </ThemedText>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalBackdrop}
+          >
+            <View style={styles.modalCard}>
+              <ThemedText style={styles.modalTitle} type="subtitle">
+                Update Wi-Fi Credentials
+              </ThemedText>
+              <ThemedText style={styles.modalDescription}>
+                Provide the Wi-Fi network name and password the robot should join.
+              </ThemedText>
 
-            <View style={styles.formRow}>
-              <ThemedText style={styles.formLabel}>Robot URL</ThemedText>
-              <TextInput
-                value={manualUrl}
-                onChangeText={setManualUrl}
-                placeholder="http://10.0.0.10:8000"
-                placeholderTextColor="rgba(255,255,255,0.4)"
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.input}
-              />
-            </View>
+              <View style={styles.formRow}>
+                <ThemedText style={styles.formLabel}>SSID</ThemedText>
+                <TextInput
+                  value={ssid}
+                  onChangeText={setSsid}
+                  placeholder="Robot Wi-Fi network"
+                  placeholderTextColor="rgba(226,232,240,0.35)"
+                  style={styles.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
 
-            <View style={styles.modalActions}>
-              <Pressable
-                style={[styles.modalButton, styles.modalSecondaryButton]}
-                onPress={() => setShowManualIpModal(false)}
-              >
-                <ThemedText style={styles.secondaryActionText}>Cancel</ThemedText>
-              </Pressable>
-              <Pressable
-                style={[styles.modalButton, styles.modalPrimaryButton]}
-                onPress={handleSaveManualUrl}
-              >
-                <ThemedText style={styles.primaryActionText}>Save</ThemedText>
-              </Pressable>
+              <View style={styles.formRow}>
+                <ThemedText style={styles.formLabel}>Password</ThemedText>
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Network password"
+                  placeholderTextColor="rgba(226,232,240,0.35)"
+                  secureTextEntry
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.modalButton,
+                    styles.modalSecondaryButton,
+                    pressed && styles.pressablePressed,
+                  ]}
+                  onPress={() => setShowWifiModal(false)}
+                >
+                  <ThemedText style={styles.secondaryActionText}>Cancel</ThemedText>
+                </Pressable>
+                <View style={[styles.modalButton, styles.modalPrimaryButton]}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.primaryActionPressable,
+                      pressed && styles.pressablePressed,
+                      connectionState === 'connecting' && styles.pressableDisabled,
+                    ]}
+                    onPress={handleConnect}
+                    disabled={connectionState === 'connecting'}
+                  >
+                    {connectionState === 'connecting' ? (
+                      <ActivityIndicator color="#020617" />
+                    ) : (
+                      <ThemedText style={styles.primaryActionText}>Save &amp; Connect</ThemedText>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-    </ThemedView>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        <Modal
+          animationType="fade"
+          transparent
+          visible={showManualIpModal}
+          onRequestClose={() => setShowManualIpModal(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalBackdrop}
+          >
+            <View style={styles.modalCard}>
+              <ThemedText style={styles.modalTitle} type="subtitle">
+                Connect to a specific IP
+              </ThemedText>
+              <ThemedText style={styles.modalDescription}>
+                Enter the robot&apos;s base URL or IP address to connect directly.
+              </ThemedText>
+
+              <View style={styles.formRow}>
+                <ThemedText style={styles.formLabel}>Robot URL</ThemedText>
+                <TextInput
+                  value={manualUrl}
+                  onChangeText={setManualUrl}
+                  placeholder="http://10.0.0.10:8000"
+                  placeholderTextColor="rgba(226,232,240,0.35)"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.modalButton,
+                    styles.modalSecondaryButton,
+                    pressed && styles.pressablePressed,
+                  ]}
+                  onPress={() => setShowManualIpModal(false)}
+                >
+                  <ThemedText style={styles.secondaryActionText}>Cancel</ThemedText>
+                </Pressable>
+                <View style={[styles.modalButton, styles.modalPrimaryButton]}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.primaryActionPressable,
+                      pressed && styles.pressablePressed,
+                    ]}
+                    onPress={handleSaveManualUrl}
+                  >
+                    <ThemedText style={styles.primaryActionText}>Save</ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+    backgroundColor: '#020617',
+  },
   container: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
   scrollContent: {
-    padding: 24,
+    padding: 28,
     paddingBottom: 120,
-    gap: 24,
-  },
-  header: {
-    gap: 8,
+    gap: 28,
   },
   helperText: {
     opacity: 0.8,
     fontSize: 14,
     lineHeight: 20,
   },
-  card: {
-    borderRadius: 24,
-    padding: 20,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.08)',
+  heroCard: {
+    borderRadius: 30,
+    padding: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(125,211,252,0.25)',
+    backgroundColor: 'rgba(1,8,20,0.92)',
+    gap: 20,
+    shadowColor: '#38bdf8',
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 18 },
+    shadowRadius: 48,
+    elevation: 24,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  heroAccent: {
+    position: 'absolute',
+    width: '160%',
+    height: '160%',
+    top: -120,
+    right: -80,
+    backgroundColor: 'rgba(59,130,246,0.35)',
+    opacity: 0.45,
+    transform: [{ rotate: '28deg' }],
+    zIndex: -1,
+  },
+  heroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 16,
+  },
+  heroHeading: {
+    flex: 1,
+    gap: 6,
+  },
+  heroEyebrow: {
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: 'rgba(148,163,184,0.85)',
+  },
+  heroTitle: {
+    flex: 1,
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(226,232,240,0.88)',
+  },
+  heroMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: 'rgba(8,47,73,0.55)',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 20,
+  },
+  heroMetaItem: {
+    flex: 1,
+    gap: 4,
+  },
+  heroMetaLabel: {
+    fontSize: 12,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: 'rgba(148,163,184,0.88)',
+  },
+  heroMetaValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'rgba(226,232,240,0.96)',
+  },
+  heroMetaDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: '100%',
+    backgroundColor: 'rgba(148,163,184,0.25)',
+  },
+  card: {
+    borderRadius: 26,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(125,211,252,0.16)',
+    backgroundColor: 'rgba(1,8,20,0.9)',
+    gap: 18,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.35,
+    shadowOffset: { width: 0, height: 18 },
+    shadowRadius: 40,
+    elevation: 18,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  cardAccent: {
+    position: 'absolute',
+    width: '120%',
+    height: '120%',
+    top: -80,
+    right: -60,
+    backgroundColor: 'rgba(56,189,248,0.18)',
+    transform: [{ rotate: '20deg' }],
+    zIndex: -1,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 16,
   },
   cardTitle: {
-    marginBottom: 4,
+    marginBottom: 6,
   },
   cardSubtitle: {
-    opacity: 0.7,
     fontSize: 14,
     lineHeight: 20,
+    color: 'rgba(148,163,184,0.88)',
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(148,163,184,0.3)',
+    backgroundColor: 'rgba(15,23,42,0.75)',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  statusLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(226,232,240,0.92)',
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 4,
   },
   sectionLabel: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: 'rgba(148,163,184,0.9)',
   },
   iconButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(125,211,252,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(15,23,42,0.4)',
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  statusLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+  iconButtonDisabled: {
+    opacity: 0.35,
   },
   deviceList: {
     gap: 12,
   },
+  placeholderText: {
+    fontSize: 14,
+    color: 'rgba(148,163,184,0.75)',
+  },
   deviceItem: {
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: 'rgba(15,23,42,0.5)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.12)',
+    backgroundColor: 'rgba(8,25,48,0.7)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
   },
   deviceDetails: {
-    flex: 1,
     gap: 4,
   },
   deviceName: {
-    fontSize: 16,
+    fontSize: 15,
   },
   deviceId: {
-    opacity: 0.6,
     fontSize: 12,
+    color: 'rgba(148,163,184,0.75)',
   },
   signalBadge: {
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: 'rgba(34,197,94,0.16)',
+    backgroundColor: 'rgba(129,140,248,0.28)',
   },
   signalBadgeText: {
-    color: '#4ade80',
     fontSize: 12,
     fontWeight: '600',
-  },
-  placeholderText: {
-    opacity: 0.6,
-    fontSize: 14,
-    lineHeight: 20,
+    color: 'rgba(226,232,240,0.9)',
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 16,
   },
   metaLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
+    color: 'rgba(148,163,184,0.85)',
   },
   metaValue: {
     fontSize: 16,
-    opacity: 0.8,
+    fontWeight: '600',
+    color: 'rgba(226,232,240,0.94)',
   },
   networkList: {
-    gap: 8,
+    gap: 10,
   },
   networkRow: {
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: 'rgba(15,23,42,0.4)',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.14)',
+    backgroundColor: 'rgba(1,8,20,0.78)',
   },
   networkName: {
     fontSize: 15,
+    color: 'rgba(226,232,240,0.92)',
   },
   actionRow: {
     flexDirection: 'row',
@@ -644,25 +816,45 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  primaryAction: {
+    borderWidth: 0,
+    backgroundColor: '#4f46e5',
+    shadowColor: '#38bdf8',
+    shadowOpacity: 0.45,
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 32,
+    elevation: 16,
+  },
+  primaryActionPressable: {
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
   },
-  primaryAction: {
-    backgroundColor: '#38bdf8',
+  pressablePressed: {
+    opacity: 0.85,
   },
-  secondaryAction: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'transparent',
+  pressableDisabled: {
+    opacity: 0.6,
   },
   primaryActionText: {
-    fontWeight: '600',
-    color: '#0f172a',
+    fontWeight: '700',
+    color: '#020617',
+  },
+  secondaryAction: {
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.25)',
+    backgroundColor: 'rgba(8,25,48,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
   },
   secondaryActionText: {
     fontWeight: '600',
+    color: 'rgba(226,232,240,0.9)',
   },
   errorText: {
     color: '#f87171',
@@ -670,56 +862,69 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   outlineButton: {
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.28)',
     paddingVertical: 16,
     alignItems: 'center',
+    backgroundColor: 'rgba(8,25,48,0.55)',
   },
   outlineButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: 'rgba(226,232,240,0.94)',
   },
   footerArt: {
     width: '100%',
     height: 160,
-    marginTop: 12,
+    marginTop: 8,
     opacity: 0.8,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(1,2,6,0.82)',
     padding: 24,
     justifyContent: 'center',
   },
   modalCard: {
-    borderRadius: 24,
-    padding: 24,
-    backgroundColor: 'rgba(15,15,15,0.96)',
-    gap: 16,
+    borderRadius: 28,
+    padding: 26,
+    borderWidth: 1,
+    borderColor: 'rgba(125,211,252,0.18)',
+    gap: 18,
+    backgroundColor: 'rgba(5,14,34,0.96)',
+    shadowColor: '#38bdf8',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 20 },
+    shadowRadius: 48,
+    elevation: 20,
   },
   modalTitle: {
     marginBottom: -4,
   },
   modalDescription: {
-    opacity: 0.7,
-    fontSize: 14,
-    lineHeight: 20,
+    opacity: 0.82,
+    fontSize: 15,
+    lineHeight: 21,
+    color: 'rgba(226,232,240,0.9)',
   },
   formRow: {
     gap: 8,
   },
   formLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    color: 'rgba(148,163,184,0.85)',
   },
   input: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(12,12,12,0.8)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.16)',
+    backgroundColor: 'rgba(2,6,23,0.94)',
     color: '#ffffff',
   },
   modalActions: {
@@ -728,16 +933,26 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 18,
+    overflow: 'hidden',
   },
   modalPrimaryButton: {
-    backgroundColor: '#38bdf8',
+    borderWidth: 0,
+    backgroundColor: '#4f46e5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#38bdf8',
+    shadowOpacity: 0.45,
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 30,
+    elevation: 16,
   },
   modalSecondaryButton: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.25)',
+    backgroundColor: 'rgba(8,25,48,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
   },
 });
