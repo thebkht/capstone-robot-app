@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   heroCard: {
-    borderRadius: 30,
+    borderRadius: 0,
     padding: 28,
     borderWidth: 1,
     borderColor: 'rgba(125,211,252,0.25)',
@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
   heroMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: 0,
     backgroundColor: 'rgba(8,47,73,0.55)',
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(148,163,184,0.25)',
   },
   card: {
-    borderRadius: 26,
+    borderRadius: 0,
     padding: 24,
     borderWidth: 1,
     borderColor: 'rgba(125,211,252,0.16)',
@@ -707,7 +707,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 18,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: 0,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(148,163,184,0.3)',
     backgroundColor: 'rgba(15,23,42,0.75)',
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
   statusDot: {
     width: 8,
     height: 8,
-    borderRadius: 999,
+    borderRadius: 0,
   },
   statusLabel: {
     fontSize: 13,
@@ -737,7 +737,7 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 38,
     height: 38,
-    borderRadius: 12,
+    borderRadius: 0,
     backgroundColor: 'rgba(125,211,252,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -753,7 +753,7 @@ const styles = StyleSheet.create({
     color: 'rgba(148,163,184,0.75)',
   },
   deviceItem: {
-    borderRadius: 18,
+    borderRadius: 0,
     padding: 18,
     borderWidth: 1,
     borderColor: 'rgba(148,163,184,0.12)',
@@ -773,7 +773,7 @@ const styles = StyleSheet.create({
     color: 'rgba(148,163,184,0.75)',
   },
   signalBadge: {
-    borderRadius: 999,
+    borderRadius: 0,
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: 'rgba(129,140,248,0.28)',
@@ -802,7 +802,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   networkRow: {
-    borderRadius: 14,
+    borderRadius: 0,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderWidth: 1,
@@ -819,7 +819,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: 0,
     overflow: 'hidden',
   },
   primaryAction: {
@@ -865,7 +865,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   outlineButton: {
-    borderRadius: 20,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: 'rgba(148,163,184,0.28)',
     paddingVertical: 16,
@@ -890,7 +890,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalCard: {
-    borderRadius: 28,
+    borderRadius: 0,
     padding: 26,
     borderWidth: 1,
     borderColor: 'rgba(125,211,252,0.18)',
@@ -924,7 +924,7 @@ const styles = StyleSheet.create({
   input: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 16,
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: 'rgba(148,163,184,0.16)',
     backgroundColor: 'rgba(2,6,23,0.94)',
@@ -936,7 +936,7 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: 0,
     overflow: 'hidden',
   },
   modalPrimaryButton: {
