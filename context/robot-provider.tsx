@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
 import { RobotAPI, RobotStatus, createRobotApi } from '@/services/robot-api';
 
 interface RobotContextValue {
@@ -7,6 +6,7 @@ interface RobotContextValue {
   baseUrl: string;
   setBaseUrl: (url: string) => void;
   status: RobotStatus | null;
+  statusError: string | null;
   lastUpdated?: Date;
   isPolling: boolean;
   setIsPolling: (value: boolean) => void;
@@ -23,6 +23,7 @@ const DEFAULT_URL = 'http://192.168.1.10:8000';
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [baseUrl, setBaseUrlState] = useState<string>(DEFAULT_URL);
   const [status, setStatus] = useState<RobotStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
   const [bluetoothEnabled, setBluetoothEnabled] = useState<boolean>(false);
@@ -42,9 +43,11 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       const latest = await api.fetchStatus();
       setStatus(latest);
       setLastUpdated(new Date());
+      setStatusError(null);
     } catch (error) {
       console.warn('Failed to refresh robot status', error);
-      Alert.alert('Robot status', (error as Error).message);
+      setStatus(null);
+      setStatusError((error as Error).message);
     }
   }, [api]);
 
@@ -61,6 +64,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const setBaseUrl = (url: string) => {
     setBaseUrlState(url);
     api.updateBaseUrl(url);
+    setStatusError(null);
   };
 
   const value = useMemo(
@@ -69,6 +73,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       baseUrl,
       setBaseUrl,
       status,
+      statusError,
       lastUpdated,
       isPolling,
       setIsPolling,
@@ -77,7 +82,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       setBluetoothEnabled,
       bluetoothSupported,
     }),
-    [api, baseUrl, status, lastUpdated, isPolling, bluetoothEnabled, bluetoothSupported],
+    [api, baseUrl, status, statusError, lastUpdated, isPolling, bluetoothEnabled, bluetoothSupported],
   );
 
   return <RobotContext.Provider value={value}>{children}</RobotContext.Provider>;

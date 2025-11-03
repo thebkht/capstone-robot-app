@@ -68,6 +68,7 @@ export default function ConnectionScreen() {
     setBaseUrl,
     refreshStatus,
     status,
+    statusError,
     bluetoothEnabled,
     bluetoothSupported,
     setBluetoothEnabled,
@@ -410,7 +411,9 @@ export default function ConnectionScreen() {
             </View>
 
             <ThemedText style={styles.helperText}>{connectionDescription}</ThemedText>
-            {lastError ? <ThemedText style={styles.errorText}>{lastError}</ThemedText> : null}
+            {lastError || statusError ? (
+              <ThemedText style={styles.errorText}>{lastError ?? statusError}</ThemedText>
+            ) : null}
           </View>
 
           <Pressable
