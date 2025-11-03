@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +22,7 @@ interface DiscoveredDevice {
 
 export default function ConnectionScreen() {
   const { api, refreshStatus, status, bluetoothEnabled, bluetoothSupported } = useRobot();
+  const router = useRouter();
   const [ssid, setSsid] = useState('');
   const [password, setPassword] = useState('');
   const [connectionState, setConnectionState] = useState<RobotConnectionState>('disconnected');
@@ -28,6 +30,12 @@ export default function ConnectionScreen() {
   const [isPinging, setIsPinging] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
+
+  useEffect(() => {
+    if (connectionState === 'connected' || status?.network?.ip) {
+      router.replace('/(tabs)/camera');
+    }
+  }, [connectionState, router, status?.network?.ip]);
 
   const handleConnect = useCallback(async () => {
     if (!ssid) {

@@ -1,13 +1,23 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { Tabs, useRouter } from 'expo-router';
+import React, { useEffect } from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { useRobot } from '@/context/robot-provider';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const router = useRouter();
+  const { status } = useRobot();
+
+  useEffect(() => {
+    const isConnected = Boolean(status?.network?.ip);
+    if (!isConnected) {
+      router.replace('/connection');
+    }
+  }, [router, status?.network?.ip]);
 
   return (
     <Tabs
@@ -16,15 +26,6 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
       }}>
-      <Tabs.Screen
-        name="connection"
-        options={{
-          title: 'Connection',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={26} name="antenna.radiowaves.left.and.right" color={color} />
-          ),
-        }}
-      />
       <Tabs.Screen
         name="camera"
         options={{
