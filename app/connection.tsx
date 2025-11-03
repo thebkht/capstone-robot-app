@@ -354,12 +354,12 @@ export default function ConnectionScreen() {
                 disabled={isScanning || !bluetoothSupported}
               >
                 {isScanning ? (
-                  <ActivityIndicator size="small" color="#0f172a" />
+                  <ActivityIndicator size="small" color="#111111" />
                 ) : (
                   <Ionicons
                     name="refresh"
                     size={18}
-                    color={bluetoothSupported ? '#041021' : 'rgba(4,16,33,0.4)'}
+                    color={bluetoothSupported ? '#111111' : 'rgba(17,17,17,0.4)'}
                   />
                 )}
               </Pressable>
@@ -428,7 +428,7 @@ export default function ConnectionScreen() {
                 style={({ pressed }) => [styles.iconButton, pressed && styles.pressablePressed]}
                 onPress={refreshStatus}
               >
-                <Ionicons name="refresh" size={18} color="#041021" />
+                <Ionicons name="refresh" size={18} color="#111111" />
               </Pressable>
             </View>
 
@@ -458,7 +458,7 @@ export default function ConnectionScreen() {
                   disabled={isPinging}
                 >
                   {isPinging ? (
-                    <ActivityIndicator color="#020617" />
+                    <ActivityIndicator color="#111111" />
                   ) : (
                     <ThemedText style={styles.primaryActionText}>Test Robot Link</ThemedText>
                   )}
@@ -516,7 +516,7 @@ export default function ConnectionScreen() {
                   value={ssid}
                   onChangeText={setSsid}
                   placeholder="Robot Wi-Fi network"
-                  placeholderTextColor="rgba(226,232,240,0.35)"
+                  placeholderTextColor="rgba(220,220,220,0.35)"
                   style={styles.input}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -529,7 +529,7 @@ export default function ConnectionScreen() {
                   value={password}
                   onChangeText={setPassword}
                   placeholder="Network password"
-                  placeholderTextColor="rgba(226,232,240,0.35)"
+                  placeholderTextColor="rgba(220,220,220,0.35)"
                   secureTextEntry
                   style={styles.input}
                 />
@@ -557,7 +557,7 @@ export default function ConnectionScreen() {
                     disabled={connectionState === 'connecting'}
                   >
                     {connectionState === 'connecting' ? (
-                      <ActivityIndicator color="#020617" />
+                      <ActivityIndicator color="#111111" />
                     ) : (
                       <ThemedText style={styles.primaryActionText}>Save &amp; Connect</ThemedText>
                     )}
@@ -592,7 +592,7 @@ export default function ConnectionScreen() {
                   value={manualUrl}
                   onChangeText={setManualUrl}
                   placeholder="http://10.0.0.10:8000"
-                  placeholderTextColor="rgba(226,232,240,0.35)"
+                  placeholderTextColor="rgba(220,220,220,0.35)"
                   autoCapitalize="none"
                   autoCorrect={false}
                   style={styles.input}
@@ -634,11 +634,11 @@ export default function ConnectionScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#020617',
+    backgroundColor: '#050505',
   },
   gradient: {
     flex: 1,
-    backgroundColor: '#020617',
+    backgroundColor: '#101010',
   },
   container: {
     flex: 1,
@@ -658,10 +658,10 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     padding: 28,
     borderWidth: 1,
-    borderColor: 'rgba(125,211,252,0.25)',
-    backgroundColor: 'rgba(1,8,20,0.92)',
+    borderColor: 'rgba(160,160,160,0.25)',
+    backgroundColor: 'rgba(10,10,10,0.92)',
     gap: 20,
-    shadowColor: '#38bdf8',
+    shadowColor: '#101010',
     shadowOpacity: 0.25,
     shadowOffset: { width: 0, height: 18 },
     shadowRadius: 48,
@@ -675,7 +675,7 @@ const styles = StyleSheet.create({
     height: '160%',
     top: -120,
     right: -80,
-    backgroundColor: 'rgba(59,130,246,0.35)',
+    backgroundColor: 'rgba(140,140,140,0.25)',
     opacity: 0.45,
     transform: [{ rotate: '28deg' }],
     zIndex: -1,
@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 1,
     textTransform: 'uppercase',
-    color: 'rgba(148,163,184,0.85)',
+    color: 'rgba(190,190,190,0.85)',
   },
   heroTitle: {
     flex: 1,
@@ -702,13 +702,13 @@ const styles = StyleSheet.create({
   heroSubtitle: {
     fontSize: 15,
     lineHeight: 22,
-    color: 'rgba(226,232,240,0.88)',
+    color: 'rgba(230,230,230,0.88)',
   },
   heroMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 0,
-    backgroundColor: 'rgba(8,47,73,0.55)',
+    backgroundColor: 'rgba(32,32,32,0.75)',
     paddingVertical: 16,
     paddingHorizontal: 20,
     gap: 20,
@@ -721,26 +721,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
-    color: 'rgba(148,163,184,0.88)',
+    color: 'rgba(195,195,195,0.88)',
   },
   heroMetaValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'rgba(226,232,240,0.96)',
+    color: 'rgba(235,235,235,0.96)',
   },
   heroMetaDivider: {
     width: StyleSheet.hairlineWidth,
     height: '100%',
-    backgroundColor: 'rgba(148,163,184,0.25)',
+    backgroundColor: 'rgba(200,200,200,0.15)',
   },
   card: {
     borderRadius: 0,
     padding: 24,
     borderWidth: 1,
-    borderColor: 'rgba(125,211,252,0.16)',
-    backgroundColor: 'rgba(1,8,20,0.9)',
+    borderColor: 'rgba(170,170,170,0.16)',
+    backgroundColor: 'rgba(12,12,12,0.9)',
     gap: 18,
-    shadowColor: '#0f172a',
+    shadowColor: '#111111',
     shadowOpacity: 0.35,
     shadowOffset: { width: 0, height: 18 },
     shadowRadius: 40,
@@ -754,7 +754,7 @@ const styles = StyleSheet.create({
     height: '120%',
     top: -80,
     right: -60,
-    backgroundColor: 'rgba(56,189,248,0.18)',
+    backgroundColor: 'rgba(160,160,160,0.18)',
     transform: [{ rotate: '20deg' }],
     zIndex: -1,
   },
@@ -770,7 +770,7 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: 14,
     lineHeight: 20,
-    color: 'rgba(148,163,184,0.88)',
+    color: 'rgba(195,195,195,0.88)',
   },
   statusPill: {
     flexDirection: 'row',
@@ -780,8 +780,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 0,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(148,163,184,0.3)',
-    backgroundColor: 'rgba(15,23,42,0.75)',
+    borderColor: 'rgba(170,170,170,0.3)',
+    backgroundColor: 'rgba(34,34,34,0.75)',
   },
   statusDot: {
     width: 8,
@@ -791,7 +791,7 @@ const styles = StyleSheet.create({
   statusLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(226,232,240,0.92)',
+    color: 'rgba(235,235,235,0.92)',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -803,13 +803,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
-    color: 'rgba(148,163,184,0.9)',
+    color: 'rgba(195,195,195,0.9)',
   },
   iconButton: {
     width: 38,
     height: 38,
     borderRadius: 0,
-    backgroundColor: 'rgba(125,211,252,0.9)',
+    backgroundColor: '#f0f0f0',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -821,14 +821,14 @@ const styles = StyleSheet.create({
   },
   placeholderText: {
     fontSize: 14,
-    color: 'rgba(148,163,184,0.75)',
+    color: 'rgba(195,195,195,0.75)',
   },
   deviceItem: {
     borderRadius: 0,
     padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.12)',
-    backgroundColor: 'rgba(8,25,48,0.7)',
+    borderColor: 'rgba(170,170,170,0.12)',
+    backgroundColor: 'rgba(36,36,36,0.7)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -841,18 +841,18 @@ const styles = StyleSheet.create({
   },
   deviceId: {
     fontSize: 12,
-    color: 'rgba(148,163,184,0.75)',
+    color: 'rgba(190,190,190,0.75)',
   },
   signalBadge: {
     borderRadius: 0,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: 'rgba(129,140,248,0.28)',
+    backgroundColor: 'rgba(160,160,160,0.28)',
   },
   signalBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(226,232,240,0.9)',
+    color: 'rgba(235,235,235,0.9)',
   },
   metaRow: {
     flexDirection: 'row',
@@ -862,12 +862,12 @@ const styles = StyleSheet.create({
   metaLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'rgba(148,163,184,0.85)',
+    color: 'rgba(195,195,195,0.85)',
   },
   metaValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'rgba(226,232,240,0.94)',
+    color: 'rgba(235,235,235,0.94)',
   },
   networkList: {
     gap: 10,
@@ -877,12 +877,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.14)',
-    backgroundColor: 'rgba(1,8,20,0.78)',
+    borderColor: 'rgba(170,170,170,0.14)',
+    backgroundColor: 'rgba(24,24,24,0.78)',
   },
   networkName: {
     fontSize: 15,
-    color: 'rgba(226,232,240,0.92)',
+    color: 'rgba(235,235,235,0.92)',
   },
   actionRow: {
     flexDirection: 'row',
@@ -895,9 +895,9 @@ const styles = StyleSheet.create({
   },
   primaryAction: {
     borderWidth: 0,
-    backgroundColor: '#4f46e5',
-    shadowColor: '#38bdf8',
-    shadowOpacity: 0.45,
+    backgroundColor: '#f3f4f6',
+    shadowColor: '#111111',
+    shadowOpacity: 0.35,
     shadowOffset: { width: 0, height: 12 },
     shadowRadius: 32,
     elevation: 16,
@@ -916,19 +916,19 @@ const styles = StyleSheet.create({
   },
   primaryActionText: {
     fontWeight: '700',
-    color: '#020617',
+    color: '#111111',
   },
   secondaryAction: {
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.25)',
-    backgroundColor: 'rgba(8,25,48,0.55)',
+    borderColor: 'rgba(185,185,185,0.25)',
+    backgroundColor: 'rgba(40,40,40,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
   },
   secondaryActionText: {
     fontWeight: '600',
-    color: 'rgba(226,232,240,0.9)',
+    color: 'rgba(235,235,235,0.9)',
   },
   errorText: {
     color: '#f87171',
@@ -938,15 +938,15 @@ const styles = StyleSheet.create({
   outlineButton: {
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.28)',
+    borderColor: 'rgba(190,190,190,0.28)',
     paddingVertical: 16,
     alignItems: 'center',
-    backgroundColor: 'rgba(8,25,48,0.55)',
+    backgroundColor: 'rgba(40,40,40,0.55)',
   },
   outlineButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'rgba(226,232,240,0.94)',
+    color: 'rgba(235,235,235,0.94)',
   },
   footerArt: {
     width: '100%',
@@ -956,7 +956,7 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(1,2,6,0.82)',
+    backgroundColor: 'rgba(0,0,0,0.82)',
     padding: 24,
     justifyContent: 'center',
   },
@@ -964,10 +964,10 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     padding: 26,
     borderWidth: 1,
-    borderColor: 'rgba(125,211,252,0.18)',
+    borderColor: 'rgba(185,185,185,0.18)',
     gap: 18,
-    backgroundColor: 'rgba(5,14,34,0.96)',
-    shadowColor: '#38bdf8',
+    backgroundColor: 'rgba(18,18,18,0.96)',
+    shadowColor: '#111111',
     shadowOpacity: 0.3,
     shadowOffset: { width: 0, height: 20 },
     shadowRadius: 48,
@@ -980,7 +980,7 @@ const styles = StyleSheet.create({
     opacity: 0.82,
     fontSize: 15,
     lineHeight: 21,
-    color: 'rgba(226,232,240,0.9)',
+    color: 'rgba(235,235,235,0.9)',
   },
   formRow: {
     gap: 8,
@@ -990,15 +990,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.4,
     textTransform: 'uppercase',
-    color: 'rgba(148,163,184,0.85)',
+    color: 'rgba(195,195,195,0.85)',
   },
   input: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.16)',
-    backgroundColor: 'rgba(2,6,23,0.94)',
+    borderColor: 'rgba(200,200,200,0.16)',
+    backgroundColor: 'rgba(22,22,22,0.94)',
     color: '#ffffff',
   },
   modalActions: {
@@ -1012,19 +1012,19 @@ const styles = StyleSheet.create({
   },
   modalPrimaryButton: {
     borderWidth: 0,
-    backgroundColor: '#4f46e5',
+    backgroundColor: '#f3f4f6',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#38bdf8',
-    shadowOpacity: 0.45,
+    shadowColor: '#111111',
+    shadowOpacity: 0.35,
     shadowOffset: { width: 0, height: 12 },
     shadowRadius: 30,
     elevation: 16,
   },
   modalSecondaryButton: {
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.25)',
-    backgroundColor: 'rgba(8,25,48,0.55)',
+    borderColor: 'rgba(185,185,185,0.25)',
+    backgroundColor: 'rgba(40,40,40,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 15,
