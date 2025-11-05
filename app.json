@@ -48,7 +48,7 @@
         }
       ],
       [
-        "react-native-ble-plx",
+        "./plugins/with-react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
           "modes": ["peripheral", "central"],
