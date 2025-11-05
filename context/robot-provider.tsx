@@ -76,16 +76,21 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
     const loadBleManager = async () => {
       try {
-        const { BleManager } = await import('react-native-ble-plx');
+        const bleModule = await import('react-native-ble-plx');
+        const BleManagerCtor =
+          bleModule.BleManager ??
+          (typeof bleModule.default === 'function'
+            ? bleModule.default
+            : bleModule.default?.BleManager);
 
-        if (!BleManager) {
+        if (typeof BleManagerCtor !== 'function') {
           if (isMounted) {
             setBleManager(null);
           }
           return;
         }
 
-        activeManager = new BleManager();
+        activeManager = new BleManagerCtor();
         console.log('BleManager loaded successfully');
         if (isMounted) {
           setBleManager(activeManager);
