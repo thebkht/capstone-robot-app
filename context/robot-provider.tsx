@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
   createContext,
   useCallback,
@@ -23,6 +24,7 @@ interface RobotContextValue {
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
+export const ROBOT_BASE_URL_STORAGE_KEY = 'robot_base_url';
 const DEFAULT_URL = 'http://192.168.1.10:8000';
 
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
@@ -50,6 +52,25 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   }, [api, baseUrl]);
 
   useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const storedUrl = await AsyncStorage.getItem(ROBOT_BASE_URL_STORAGE_KEY);
+        if (storedUrl && isMounted) {
+          console.log('Loaded stored robot base URL', storedUrl);
+          setBaseUrlState(storedUrl);
+        }
+      } catch (error) {
+        console.warn('Failed to load stored robot base URL', error);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isPolling) {
       return;
     }
@@ -61,10 +82,14 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
   const setBaseUrl = useCallback(
     (url: string) => {
-      console.log('Updating robot base URL', { previous: baseUrl, next: url });
-      setBaseUrlState(url);
-      api.updateBaseUrl(url);
+      const normalized = url.replace(/\/$/, '');
+      console.log('Updating robot base URL', { previous: baseUrl, next: normalized });
+      api.updateBaseUrl(normalized);
+      setBaseUrlState(normalized);
       setStatusError(null);
+      void AsyncStorage.setItem(ROBOT_BASE_URL_STORAGE_KEY, normalized).catch((error) => {
+        console.warn('Failed to persist robot base URL', error);
+      });
     },
     [api, baseUrl],
   );

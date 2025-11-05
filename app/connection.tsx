@@ -1,13 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+// eslint-disable-next-line import/no-unresolved
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,447 +10,298 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useRobot } from '@/context/robot-provider';
-import type { RobotConnectionState } from '@/services/robot-api';
+import {
+  ROBOT_BASE_URL_STORAGE_KEY,
+  useRobot,
+} from '@/context/robot-provider';
 
-const ROBOT_ART = require('../assets/images/partial-react-logo.png');
+const DEFAULT_HOTSPOT_URL = 'http://192.168.4.1:8000';
+const RECENT_URLS_STORAGE_KEY = 'robot_recent_urls';
 
-const StatusPill = ({
-  color,
-  label,
-}: {
-  color: string;
-  label: string;
-}) => (
-  <View style={styles.statusPill}>
-    <View style={[styles.statusDot, { backgroundColor: color }]} />
-    <ThemedText style={styles.statusLabel}>{label}</ThemedText>
-  </View>
-);
+type ConnectionPhase = 'idle' | 'connecting' | 'connected' | 'error';
+
+const normalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
+
+const ensureHttpScheme = (value: string) =>
+  /^https?:\/\//i.test(value) ? value : `http://${value}`;
+
+const STATUS_META: Record<ConnectionPhase, { label: string; color: string; emoji: string }> = {
+  idle: { label: 'Not connected', color: '#ef4444', emoji: '🟥' },
+  connecting: { label: 'Trying to connect…', color: '#facc15', emoji: '🟡' },
+  connected: { label: 'Connected', color: '#34d399', emoji: '🟩' },
+  error: { label: 'Not connected', color: '#ef4444', emoji: '🟥' },
+};
 
 export default function ConnectionScreen() {
-  const {
-    api,
-    baseUrl,
-    setBaseUrl,
-    refreshStatus,
-    status,
-    statusError,
-  } = useRobot();
-  const router = useRouter();
-  const [ssid, setSsid] = useState('');
-  const [password, setPassword] = useState('');
-  const [connectionState, setConnectionState] = useState<RobotConnectionState>('disconnected');
-  const [lastError, setLastError] = useState<string | null>(null);
-  const [isPinging, setIsPinging] = useState(false);
-  const [showWifiModal, setShowWifiModal] = useState(false);
-  const [showManualIpModal, setShowManualIpModal] = useState(false);
-  const [manualUrl, setManualUrl] = useState(baseUrl);
-  const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
-  const [isWifiScanning, setIsWifiScanning] = useState(false);
-  const [wifiScanError, setWifiScanError] = useState<string | null>(null);
-  const hasRequestedInitialWifiScan = useRef(false);
+  const { baseUrl, setBaseUrl, refreshStatus } = useRobot();
+  const [inputUrl, setInputUrl] = useState(baseUrl);
+  const [phase, setPhase] = useState<ConnectionPhase>('idle');
+  const [statusMessage, setStatusMessage] = useState('Enter the robot address to connect.');
+  const [recentUrls, setRecentUrls] = useState<string[]>([]);
+  const hasAutoAttemptedRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    setManualUrl(baseUrl);
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setInputUrl(baseUrl);
   }, [baseUrl]);
 
-  useEffect(() => {
-    if (connectionState === 'connected' || status?.network?.ip) {
-      setShowWifiModal(false);
-      router.replace('/(tabs)/camera');
-    }
-  }, [connectionState, router, status?.network?.ip]);
+  const persistRecentUrls = useCallback((urls: string[]) => {
+    void AsyncStorage.setItem(RECENT_URLS_STORAGE_KEY, JSON.stringify(urls)).catch((error) => {
+      console.warn('Failed to persist recent robot URLs', error);
+    });
+  }, []);
 
-  const wifiConnected = Boolean(status?.network?.ip);
+  const recordRecentUrl = useCallback(
+    (url: string) => {
+      setRecentUrls((prev) => {
+        const next = [url, ...prev.filter((item) => item !== url)].slice(0, 5);
+        persistRecentUrls(next);
+        return next;
+      });
+    },
+    [persistRecentUrls],
+  );
 
-  useEffect(() => {
-    const networkInfo = status?.network as { availableNetworks?: string[] } | undefined;
-    if (networkInfo?.availableNetworks) {
-      console.log('Robot reported Wi-Fi networks from status', networkInfo.availableNetworks);
-      setWifiNetworks(networkInfo.availableNetworks);
-    }
-  }, [status?.network]);
+  const attemptConnection = useCallback(
+    async (rawUrl: string) => {
+      const trimmed = rawUrl.trim();
+      if (!trimmed) {
+        if (isMountedRef.current) {
+          setPhase('error');
+          setStatusMessage('Please enter a robot URL (including http:// or https://).');
+        }
+        return false;
+      }
 
-  const handleConnect = useCallback(async () => {
-    if (!ssid) {
-      Alert.alert('Wi-Fi credentials', 'Please enter the network SSID.');
-      return;
-    }
+      const prepared = ensureHttpScheme(normalizeUrl(trimmed));
+      try {
+        // Validate the URL before attempting to fetch so we can surface immediate feedback.
+        // Assign to a throwaway variable to avoid lint complaints about unused expressions.
+        const _validated = new URL(prepared);
+        void _validated;
+      } catch {
+        if (isMountedRef.current) {
+          setPhase('error');
+          setStatusMessage('Please provide a valid URL including host and protocol.');
+        }
+        return false;
+      }
+      if (isMountedRef.current) {
+        setPhase('connecting');
+        setStatusMessage(`Trying ${prepared} …`);
+        setInputUrl(prepared);
+      }
 
-    console.log('Attempting to connect Wi-Fi', { ssid });
-    setConnectionState('connecting');
-    setLastError(null);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
 
-    try {
-      await api.connectWifi({ ssid, password });
-      await refreshStatus();
-      setConnectionState('connected');
-      console.log('Wi-Fi credentials submitted successfully');
-    } catch (error) {
-      setConnectionState('error');
-      setLastError((error as Error).message);
-      console.warn('Failed to connect Wi-Fi', error);
-    }
-  }, [api, password, refreshStatus, ssid]);
+      try {
+        const response = await fetch(`${prepared}/health`, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
 
-  const handlePing = useCallback(async () => {
-    setIsPinging(true);
-    console.log('Pinging robot for connectivity check');
-    try {
-      const data = await api.ping();
-      console.log('Ping successful', data);
-      Alert.alert('Robot reachable', JSON.stringify(data, null, 2));
-    } catch (error) {
-      console.warn('Ping failed', error);
-      Alert.alert('Ping failed', (error as Error).message);
-    } finally {
-      setIsPinging(false);
-    }
-  }, [api]);
+        if (!response.ok) {
+          throw new Error(`Robot responded with status ${response.status}`);
+        }
 
-  const connectionDescription = useMemo(() => {
-    switch (connectionState) {
-      case 'connecting':
-        return 'Connecting to Wi-Fi…';
-      case 'connected':
-        return 'Connected. Robot status will refresh automatically.';
-      case 'error':
-        return lastError ?? 'An unknown error occurred.';
-      default:
-        return 'Update the robot Wi-Fi credentials to join your network.';
-    }
-  }, [connectionState, lastError]);
+        let payload: unknown;
+        try {
+          payload = await response.json();
+        } catch (error) {
+          console.warn('Robot health response was not JSON', error);
+        }
 
-  const wifiStatus = useMemo(() => {
-    if (connectionState === 'error') {
-      return { color: '#f87171', label: 'Error' };
-    }
+        const robotName =
+          payload && typeof payload === 'object' && 'name' in payload && typeof payload.name === 'string'
+            ? payload.name
+            : undefined;
 
-    return wifiConnected
-      ? { color: '#34d399', label: 'Connected' }
-      : { color: '#facc15', label: 'Offline' };
-  }, [connectionState, wifiConnected]);
+        if (isMountedRef.current) {
+          setPhase('connected');
+          setStatusMessage(
+            robotName ? `Connected to ${robotName} at ${prepared}` : `Connected to ${prepared}`,
+          );
+        }
 
-  const handleSaveManualUrl = useCallback(() => {
-    if (!manualUrl.trim()) {
-      Alert.alert('Base URL', 'Please enter a valid robot URL.');
-      return;
-    }
+        setBaseUrl(prepared);
+        recordRecentUrl(prepared);
+        await refreshStatus().catch((error) => {
+          console.warn('Failed to refresh robot status after connecting', error);
+        });
 
-    console.log('Saving manual robot URL', manualUrl.trim());
-    setBaseUrl(manualUrl.trim());
-    setShowManualIpModal(false);
-  }, [manualUrl, setBaseUrl]);
-
-  const handleRefreshNetworks = useCallback(async () => {
-    console.log('Requesting Wi-Fi network scan');
-    setIsWifiScanning(true);
-    setWifiScanError(null);
-    try {
-      const response = await api.listWifiNetworks();
-      console.log('Wi-Fi scan successful', response.networks);
-      setWifiNetworks(response.networks);
-      await refreshStatus();
-    } catch (error) {
-      console.warn('Wi-Fi scan failed', error);
-      setWifiScanError((error as Error).message);
-    } finally {
-      setIsWifiScanning(false);
-    }
-  }, [api, refreshStatus]);
+        return true;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : 'Unknown error';
+        if (isMountedRef.current) {
+          setPhase('error');
+          setStatusMessage(`Could not connect to ${prepared}: ${reason}`);
+        }
+        return false;
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+    [recordRecentUrl, refreshStatus, setBaseUrl],
+  );
 
   useEffect(() => {
-    if (hasRequestedInitialWifiScan.current) {
-      return;
-    }
+    let isActive = true;
+    (async () => {
+      try {
+        const [storedUrl, storedRecentUrls] = await Promise.all([
+          AsyncStorage.getItem(ROBOT_BASE_URL_STORAGE_KEY),
+          AsyncStorage.getItem(RECENT_URLS_STORAGE_KEY),
+        ]);
 
-    hasRequestedInitialWifiScan.current = true;
-    void handleRefreshNetworks();
-  }, [handleRefreshNetworks]);
+        if (!isActive) {
+          return;
+        }
+
+        if (storedRecentUrls) {
+          try {
+            const parsed = JSON.parse(storedRecentUrls);
+            if (Array.isArray(parsed)) {
+              setRecentUrls(parsed.filter((item): item is string => typeof item === 'string'));
+            }
+          } catch (error) {
+            console.warn('Failed to parse stored recent URLs', error);
+          }
+        }
+
+        if (storedUrl && !hasAutoAttemptedRef.current) {
+          hasAutoAttemptedRef.current = true;
+          await attemptConnection(storedUrl);
+        }
+      } catch (error) {
+        console.warn('Failed to hydrate connection screen state', error);
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [attemptConnection]);
+
+  const statusMeta = useMemo(() => {
+    return STATUS_META[phase];
+  }, [phase]);
+
+  const handleConnectPress = useCallback(() => {
+    hasAutoAttemptedRef.current = true;
+    void attemptConnection(inputUrl);
+  }, [attemptConnection, inputUrl]);
+
+  const handleHotspotPress = useCallback(() => {
+    hasAutoAttemptedRef.current = true;
+    void attemptConnection(DEFAULT_HOTSPOT_URL);
+  }, [attemptConnection]);
+
+  const handleRecentPress = useCallback(
+    (url: string) => {
+      hasAutoAttemptedRef.current = true;
+      void attemptConnection(url);
+    },
+    [attemptConnection],
+  );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
-      <View style={styles.gradient}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <ThemedView style={styles.container}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.heroCard}>
-            <View style={styles.heroAccent} />
-            <View style={styles.heroHeader}>
-              <View style={styles.heroHeading}>
-                <ThemedText style={styles.heroEyebrow}>Robot Control</ThemedText>
-                <ThemedText style={styles.heroTitle} type="title">
-                  Connection Control Center
-                </ThemedText>
-              </View>
-              <StatusPill color={wifiStatus.color} label={wifiStatus.label} />
-            </View>
-            <ThemedText style={styles.heroSubtitle}>
-              Configure the robot over Wi-Fi with a crisp interface inspired by the reference mockup.
+          <ThemedText type="title" style={styles.heading}>
+            Connect to Robot
+          </ThemedText>
+          <ThemedText style={styles.subheading}>
+            Tell the app where the rover is hosted. We will try your last working address automatically
+            and remember any IPs you confirm.
+          </ThemedText>
+
+          <View style={[styles.statusCard, { borderColor: statusMeta.color }]}> 
+            <ThemedText style={styles.statusLabel}>
+              {statusMeta.emoji} {statusMeta.label}
             </ThemedText>
-            <View style={styles.heroMeta}>
-              <View style={styles.heroMetaItem}>
-                <ThemedText style={styles.heroMetaLabel}>Current SSID</ThemedText>
-                <ThemedText style={styles.heroMetaValue}>
-                  {status?.network?.wifiSsid ?? 'Not connected'}
-                </ThemedText>
-              </View>
-              <View style={styles.heroMetaDivider} />
-              <View style={styles.heroMetaItem}>
-                <ThemedText style={styles.heroMetaLabel}>IP Address</ThemedText>
-                <ThemedText style={styles.heroMetaValue}>
-                  {status?.network?.ip ?? '—'}
-                </ThemedText>
-              </View>
-            </View>
+            <ThemedText style={styles.statusMessage}>{statusMessage}</ThemedText>
           </View>
 
-          <View style={styles.card}>
-            <View style={styles.cardAccent} />
-            <ThemedText style={styles.cardTitle} type="subtitle">
-              Robot Wi-Fi Status
-            </ThemedText>
-
-            <View style={styles.metaRow}>
-              <ThemedText style={styles.metaLabel}>Wi-Fi Connection</ThemedText>
-              <StatusPill color={wifiStatus.color} label={wifiStatus.label} />
-            </View>
-            <View style={styles.metaRow}>
-              <ThemedText style={styles.metaLabel}>Network Name</ThemedText>
-              <ThemedText style={styles.metaValue}>
-                {status?.network?.wifiSsid ?? 'Not connected'}
-              </ThemedText>
-            </View>
-            <View style={styles.metaRow}>
-              <ThemedText style={styles.metaLabel}>IP Address</ThemedText>
-              <ThemedText style={styles.metaValue}>
-                {status?.network?.ip ?? '—'}
-              </ThemedText>
-            </View>
-
-            <View style={styles.sectionHeader}>
-              <ThemedText style={styles.sectionLabel}>Available networks</ThemedText>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.iconButton,
-                  isWifiScanning && styles.iconButtonDisabled,
-                  pressed && styles.pressablePressed,
-                ]}
-                onPress={() => {
-                  void handleRefreshNetworks();
-                }}
-                disabled={isWifiScanning}
-              >
-                {isWifiScanning ? (
-                  <ActivityIndicator size="small" color="#111111" />
-                ) : (
-                  <Ionicons name="refresh" size={18} color="#111111" />
-                )}
-              </Pressable>
-            </View>
-
-            <View style={styles.networkList}>
-              {wifiNetworks.length === 0 ? (
-                <ThemedText style={styles.placeholderText}>
-                  {isWifiScanning ? 'Scanning for networks…' : 'No networks discovered yet.'}
-                </ThemedText>
+          <View style={styles.section}>
+            <ThemedText style={styles.fieldLabel}>Robot IP / Host</ThemedText>
+            <TextInput
+              value={inputUrl}
+              onChangeText={setInputUrl}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              placeholder="http://192.168.0.52:8000"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              style={styles.input}
+            />
+            <Pressable
+              style={[styles.primaryButton, phase === 'connecting' && styles.disabledButton]}
+              onPress={handleConnectPress}
+              disabled={phase === 'connecting'}
+            >
+              {phase === 'connecting' ? (
+                <ActivityIndicator color="#111" />
               ) : (
-                wifiNetworks.map((network) => (
-                  <View key={network} style={styles.networkRow}>
-                    <ThemedText style={styles.networkName}>{network}</ThemedText>
-                  </View>
-                ))
+                <ThemedText style={styles.primaryButtonText}>Connect</ThemedText>
               )}
-            </View>
+            </Pressable>
+          </View>
 
-            {wifiScanError ? <ThemedText style={styles.errorText}>{wifiScanError}</ThemedText> : null}
-
-            <View style={styles.actionRow}>
-              <View style={[styles.actionButton, styles.primaryAction]}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.primaryActionPressable,
-                    pressed && styles.pressablePressed,
-                    isPinging && styles.pressableDisabled,
-                  ]}
-                  onPress={handlePing}
-                  disabled={isPinging}
-                >
-                  {isPinging ? (
-                    <ActivityIndicator color="#111111" />
-                  ) : (
-                    <ThemedText style={styles.primaryActionText}>Test Robot Link</ThemedText>
-                  )}
-                </Pressable>
-              </View>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.actionButton,
-                  styles.secondaryAction,
-                  pressed && styles.pressablePressed,
-                ]}
-                onPress={() => setShowWifiModal(true)}
-              >
-                <ThemedText style={styles.secondaryActionText}>Update Credentials</ThemedText>
-              </Pressable>
-            </View>
-
-            <ThemedText style={styles.helperText}>{connectionDescription}</ThemedText>
-            {lastError || statusError ? (
-              <ThemedText style={styles.errorText}>{lastError ?? statusError}</ThemedText>
-            ) : null}
+          <View style={styles.dividerContainer}>
+            <View style={styles.divider} />
+            <ThemedText style={styles.dividerText}>Or connect to robot hotspot</ThemedText>
+            <View style={styles.divider} />
           </View>
 
           <Pressable
-            style={({ pressed }) => [styles.outlineButton, pressed && styles.pressablePressed]}
-            onPress={() => setShowManualIpModal(true)}
+            style={[styles.secondaryButton, phase === 'connecting' && styles.disabledSecondary]}
+            onPress={handleHotspotPress}
+            disabled={phase === 'connecting'}
           >
-            <ThemedText style={styles.outlineButtonText}>Connect to a specific IP</ThemedText>
+            <ThemedText style={styles.secondaryButtonText}>
+              Try hotspot ({DEFAULT_HOTSPOT_URL})
+            </ThemedText>
           </Pressable>
 
-          <Image source={ROBOT_ART} style={styles.footerArt} contentFit="contain" />
-        </ScrollView>
-
-        <Modal
-          animationType="fade"
-          transparent
-          visible={showWifiModal}
-          onRequestClose={() => setShowWifiModal(false)}
-        >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.modalBackdrop}
-          >
-            <View style={styles.modalCard}>
-              <ThemedText style={styles.modalTitle} type="subtitle">
-                Update Wi-Fi Credentials
-              </ThemedText>
-              <ThemedText style={styles.modalDescription}>
-                Provide the Wi-Fi network name and password the robot should join.
-              </ThemedText>
-
-              <View style={styles.formRow}>
-                <ThemedText style={styles.formLabel}>SSID</ThemedText>
-                <TextInput
-                  value={ssid}
-                  onChangeText={setSsid}
-                  placeholder="Robot Wi-Fi network"
-                  placeholderTextColor="rgba(220,220,220,0.35)"
-                  style={styles.input}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-
-              <View style={styles.formRow}>
-                <ThemedText style={styles.formLabel}>Password</ThemedText>
-                <TextInput
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Network password"
-                  placeholderTextColor="rgba(220,220,220,0.35)"
-                  secureTextEntry
-                  style={styles.input}
-                />
-              </View>
-
-              <View style={styles.modalActions}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.modalButton,
-                    styles.modalSecondaryButton,
-                    pressed && styles.pressablePressed,
-                  ]}
-                  onPress={() => setShowWifiModal(false)}
-                >
-                  <ThemedText style={styles.secondaryActionText}>Cancel</ThemedText>
-                </Pressable>
-                <View style={[styles.modalButton, styles.modalPrimaryButton]}>
+          {recentUrls.length > 1 ? (
+            <View style={styles.recentsContainer}>
+              <ThemedText style={styles.recentsLabel}>Recent addresses</ThemedText>
+              <View style={styles.recentsList}>
+                {recentUrls.map((url) => (
                   <Pressable
+                    key={url}
                     style={({ pressed }) => [
-                      styles.primaryActionPressable,
-                      pressed && styles.pressablePressed,
-                      connectionState === 'connecting' && styles.pressableDisabled,
+                      styles.recentChip,
+                      pressed && { opacity: 0.75 },
+                      phase === 'connecting' && styles.disabledChip,
                     ]}
-                    onPress={handleConnect}
-                    disabled={connectionState === 'connecting'}
+                    onPress={() => handleRecentPress(url)}
+                    disabled={phase === 'connecting'}
                   >
-                    {connectionState === 'connecting' ? (
-                      <ActivityIndicator color="#111111" />
-                    ) : (
-                      <ThemedText style={styles.primaryActionText}>Save &amp; Connect</ThemedText>
-                    )}
+                    <ThemedText style={styles.recentChipText}>{url}</ThemedText>
                   </Pressable>
-                </View>
+                ))}
               </View>
             </View>
-          </KeyboardAvoidingView>
-        </Modal>
+          ) : null}
 
-        <Modal
-          animationType="fade"
-          transparent
-          visible={showManualIpModal}
-          onRequestClose={() => setShowManualIpModal(false)}
-        >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.modalBackdrop}
-          >
-            <View style={styles.modalCard}>
-              <ThemedText style={styles.modalTitle} type="subtitle">
-                Connect to a specific IP
-              </ThemedText>
-              <ThemedText style={styles.modalDescription}>
-                Enter the robot&apos;s base URL or IP address to connect directly.
-              </ThemedText>
-
-              <View style={styles.formRow}>
-                <ThemedText style={styles.formLabel}>Robot URL</ThemedText>
-                <TextInput
-                  value={manualUrl}
-                  onChangeText={setManualUrl}
-                  placeholder="http://10.0.0.10:8000"
-                  placeholderTextColor="rgba(220,220,220,0.35)"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={styles.input}
-                />
-              </View>
-
-              <View style={styles.modalActions}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.modalButton,
-                    styles.modalSecondaryButton,
-                    pressed && styles.pressablePressed,
-                  ]}
-                  onPress={() => setShowManualIpModal(false)}
-                >
-                  <ThemedText style={styles.secondaryActionText}>Cancel</ThemedText>
-                </Pressable>
-                <View style={[styles.modalButton, styles.modalPrimaryButton]}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.primaryActionPressable,
-                      pressed && styles.pressablePressed,
-                    ]}
-                    onPress={handleSaveManualUrl}
-                  >
-                    <ThemedText style={styles.primaryActionText}>Save</ThemedText>
-                  </Pressable>
-                </View>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </Modal>
+          <View style={styles.currentConfig}>
+            <ThemedText style={styles.currentConfigLabel}>Current base URL</ThemedText>
+            <ThemedText style={styles.currentConfigValue}>{baseUrl}</ThemedText>
+          </View>
         </ThemedView>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -463,365 +309,131 @@ export default function ConnectionScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#050505',
-  },
-  gradient: {
-    flex: 1,
-    backgroundColor: '#101010',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
   },
   scrollContent: {
-    padding: 28,
-    paddingBottom: 120,
-    gap: 28,
+    padding: 20,
   },
-  helperText: {
-    opacity: 0.8,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  heroCard: {
-    borderRadius: 0,
-    padding: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(160,160,160,0.25)',
-    backgroundColor: 'rgba(10,10,10,0.92)',
-    gap: 20,
-    shadowColor: '#101010',
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 18 },
-    shadowRadius: 48,
-    elevation: 24,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  heroAccent: {
-    position: 'absolute',
-    width: '160%',
-    height: '160%',
-    top: -120,
-    right: -80,
-    backgroundColor: 'rgba(140,140,140,0.25)',
-    opacity: 0.45,
-    transform: [{ rotate: '28deg' }],
-    zIndex: -1,
-  },
-  heroHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 16,
-  },
-  heroHeading: {
-    flex: 1,
-    gap: 6,
-  },
-  heroEyebrow: {
-    fontSize: 12,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: 'rgba(190,190,190,0.85)',
-  },
-  heroTitle: {
-    flex: 1,
-  },
-  heroSubtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: 'rgba(230,230,230,0.88)',
-  },
-  heroMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 0,
-    backgroundColor: 'rgba(32,32,32,0.75)',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+  container: {
     gap: 20,
   },
-  heroMetaItem: {
-    flex: 1,
-    gap: 4,
+  heading: {
+    marginBottom: 4,
   },
-  heroMetaLabel: {
-    fontSize: 12,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    color: 'rgba(195,195,195,0.88)',
-  },
-  heroMetaValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'rgba(235,235,235,0.96)',
-  },
-  heroMetaDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: '100%',
-    backgroundColor: 'rgba(200,200,200,0.15)',
-  },
-  card: {
-    borderRadius: 0,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(170,170,170,0.16)',
-    backgroundColor: 'rgba(12,12,12,0.9)',
-    gap: 18,
-    shadowColor: '#111111',
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 18 },
-    shadowRadius: 40,
-    elevation: 18,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  cardAccent: {
-    position: 'absolute',
-    width: '120%',
-    height: '120%',
-    top: -80,
-    right: -60,
-    backgroundColor: 'rgba(160,160,160,0.18)',
-    transform: [{ rotate: '20deg' }],
-    zIndex: -1,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 16,
-  },
-  cardTitle: {
-    marginBottom: 6,
-  },
-  cardSubtitle: {
-    fontSize: 14,
+  subheading: {
+    opacity: 0.75,
     lineHeight: 20,
-    color: 'rgba(195,195,195,0.88)',
   },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 0,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(170,170,170,0.3)',
-    backgroundColor: 'rgba(34,34,34,0.75)',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 0,
+  statusCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 8,
+    backgroundColor: 'rgba(17,17,17,0.85)',
   },
   statusLabel: {
-    fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(235,235,235,0.92)',
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  statusMessage: {
+    opacity: 0.85,
+    lineHeight: 20,
   },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    color: 'rgba(195,195,195,0.9)',
-  },
-  iconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 0,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconButtonDisabled: {
-    opacity: 0.35,
-  },
-  placeholderText: {
-    fontSize: 14,
-    color: 'rgba(195,195,195,0.75)',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  metaLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(195,195,195,0.85)',
-  },
-  metaValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'rgba(235,235,235,0.94)',
-  },
-  networkList: {
-    gap: 10,
-  },
-  networkRow: {
-    borderRadius: 0,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(170,170,170,0.14)',
-    backgroundColor: 'rgba(24,24,24,0.78)',
-  },
-  networkName: {
-    fontSize: 15,
-    color: 'rgba(235,235,235,0.92)',
-  },
-  actionRow: {
-    flexDirection: 'row',
+  section: {
     gap: 12,
   },
-  actionButton: {
-    flex: 1,
-    borderRadius: 0,
-    overflow: 'hidden',
-  },
-  primaryAction: {
-    borderWidth: 0,
-    backgroundColor: '#f3f4f6',
-    shadowColor: '#111111',
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 12 },
-    shadowRadius: 32,
-    elevation: 16,
-  },
-  primaryActionPressable: {
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  pressablePressed: {
-    opacity: 0.85,
-  },
-  pressableDisabled: {
-    opacity: 0.6,
-  },
-  primaryActionText: {
-    fontWeight: '700',
-    color: '#111111',
-  },
-  secondaryAction: {
-    borderWidth: 1,
-    borderColor: 'rgba(185,185,185,0.25)',
-    backgroundColor: 'rgba(40,40,40,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-  },
-  secondaryActionText: {
+  fieldLabel: {
     fontWeight: '600',
-    color: 'rgba(235,235,235,0.9)',
-  },
-  errorText: {
-    color: '#f87171',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  outlineButton: {
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: 'rgba(190,190,190,0.28)',
-    paddingVertical: 16,
-    alignItems: 'center',
-    backgroundColor: 'rgba(40,40,40,0.55)',
-  },
-  outlineButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'rgba(235,235,235,0.94)',
-  },
-  footerArt: {
-    width: '100%',
-    height: 160,
-    marginTop: 8,
-    opacity: 0.8,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.82)',
-    padding: 24,
-    justifyContent: 'center',
-  },
-  modalCard: {
-    borderRadius: 0,
-    padding: 26,
-    borderWidth: 1,
-    borderColor: 'rgba(185,185,185,0.18)',
-    gap: 18,
-    backgroundColor: 'rgba(18,18,18,0.96)',
-    shadowColor: '#111111',
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 20 },
-    shadowRadius: 48,
-    elevation: 20,
-  },
-  modalTitle: {
-    marginBottom: -4,
-  },
-  modalDescription: {
-    opacity: 0.82,
-    fontSize: 15,
-    lineHeight: 21,
-    color: 'rgba(235,235,235,0.9)',
-  },
-  formRow: {
-    gap: 8,
-  },
-  formLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    color: 'rgba(195,195,195,0.85)',
   },
   input: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 12,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: 'rgba(200,200,200,0.16)',
-    backgroundColor: 'rgba(22,22,22,0.94)',
-    color: '#ffffff',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    color: '#fff',
   },
-  modalActions: {
+  primaryButton: {
+    backgroundColor: '#34d399',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    fontWeight: '600',
+    color: '#111',
+  },
+  disabledButton: {
+    opacity: 0.7,
+  },
+  dividerContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
-  modalButton: {
+  divider: {
     flex: 1,
-    borderRadius: 0,
-    overflow: 'hidden',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  modalPrimaryButton: {
-    borderWidth: 0,
-    backgroundColor: '#f3f4f6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#111111',
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 12 },
-    shadowRadius: 30,
-    elevation: 16,
+  dividerText: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    opacity: 0.7,
   },
-  modalSecondaryButton: {
-    borderWidth: 1,
-    borderColor: 'rgba(185,185,185,0.25)',
-    backgroundColor: 'rgba(40,40,40,0.55)',
+  secondaryButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 15,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  secondaryButtonText: {
+    fontWeight: '600',
+  },
+  disabledSecondary: {
+    opacity: 0.7,
+  },
+  recentsContainer: {
+    gap: 12,
+  },
+  recentsLabel: {
+    fontWeight: '600',
+  },
+  recentsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  recentChip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  disabledChip: {
+    opacity: 0.6,
+  },
+  recentChipText: {
+    fontWeight: '500',
+  },
+  currentConfig: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    gap: 4,
+  },
+  currentConfigLabel: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    opacity: 0.7,
+  },
+  currentConfigValue: {
+    fontWeight: '600',
   },
 });
