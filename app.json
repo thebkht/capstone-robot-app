@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "Allow robot-controller to discover and connect to nearby robots via Bluetooth.",
-        "NSBluetoothPeripheralUsageDescription": "Allow robot-controller to communicate with nearby robots using Bluetooth."
+        "NSBluetoothPeripheralUsageDescription": "Allow robot-controller to communicate with nearby robots using Bluetooth.",
+        "UIBackgroundModes": ["bluetooth-central", "bluetooth-peripheral"]
       }
     },
     "android": {
