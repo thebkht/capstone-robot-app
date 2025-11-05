@@ -173,64 +173,99 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       return true;
     }
 
-    const androidVersion = typeof Platform.Version === 'number' ? Platform.Version : parseInt(Platform.Version, 10);
-
-    if (Number.isNaN(androidVersion)) {
-      console.log('Unknown Android version, assuming BLE permissions granted');
-      return true;
-    }
-
-    if (androidVersion >= 31) {
-      const scanResult = await PermissionsAndroid.request(
+    const requestAndroid31Permissions = async () => {
+      const bluetoothScanPermission = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         {
-          title: 'Bluetooth scan permission',
-          message: 'Allow the app to scan for nearby robots over Bluetooth.',
-          buttonPositive: 'Allow',
+          title: 'Location Permission',
+          message: 'Bluetooth Low Energy requires Location',
+          buttonPositive: 'OK',
         },
       );
-      const connectResult = await PermissionsAndroid.request(
+      const bluetoothConnectPermission = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
         {
-          title: 'Bluetooth connection permission',
-          message: 'Allow the app to connect to nearby robots over Bluetooth.',
-          buttonPositive: 'Allow',
+          title: 'Location Permission',
+          message: 'Bluetooth Low Energy requires Location',
+          buttonPositive: 'OK',
         },
       );
-      const fineLocationResult = await PermissionsAndroid.request(
+      const fineLocationPermission = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         {
-          title: 'Location permission',
-          message: 'Allow the app to use location to discover nearby robots.',
-          buttonPositive: 'Allow',
+          title: 'Location Permission',
+          message: 'Bluetooth Low Energy requires Location',
+          buttonPositive: 'OK',
         },
       );
 
       const granted =
-        scanResult === PermissionsAndroid.RESULTS.GRANTED &&
-        connectResult === PermissionsAndroid.RESULTS.GRANTED &&
-        fineLocationResult === PermissionsAndroid.RESULTS.GRANTED;
-      console.log('Android 12+ BLE permission results', { scanResult, connectResult, fineLocationResult });
+        bluetoothScanPermission === PermissionsAndroid.RESULTS.GRANTED &&
+        bluetoothConnectPermission === PermissionsAndroid.RESULTS.GRANTED &&
+        fineLocationPermission === PermissionsAndroid.RESULTS.GRANTED;
+
+      console.log('Android 12+ BLE permission results', {
+        bluetoothScanPermission,
+        bluetoothConnectPermission,
+        fineLocationPermission,
+      });
+
       return granted;
+    };
+
+    const resolveAndroidApiLevel = () => {
+      const fallbackVersion =
+        typeof Platform.Version === 'number'
+          ? Platform.Version
+          : parseInt(String(Platform.Version), 10);
+
+      if (Number.isNaN(fallbackVersion)) {
+        return -1;
+      }
+
+      try {
+        // eslint-disable-next-line no-eval
+        const optionalRequire: ((moduleId: string) => unknown) | undefined = eval('require');
+        if (typeof optionalRequire !== 'function') {
+          return fallbackVersion;
+        }
+
+        const moduleName = ['expo-device'].join('');
+        const expoDeviceModule = optionalRequire(moduleName) as { platformApiLevel?: number | null } | undefined;
+
+        if (typeof expoDeviceModule?.platformApiLevel === 'number') {
+          return expoDeviceModule.platformApiLevel;
+        }
+      } catch (error) {
+        console.log('ExpoDevice module unavailable, falling back to Platform.Version', error);
+      }
+
+      return fallbackVersion;
+    };
+
+    const androidApiLevel = resolveAndroidApiLevel();
+
+    if (androidApiLevel < 0) {
+      console.log('Unknown Android API level, assuming BLE permissions granted');
+      return true;
     }
 
-    if (androidVersion >= 23) {
-      const fineLocationResult = await PermissionsAndroid.request(
+    if (androidApiLevel < 31) {
+      const fineLocationPermission = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         {
-          title: 'Location permission',
-          message: 'Allow the app to use location to discover nearby robots.',
-          buttonPositive: 'Allow',
+          title: 'Location Permission',
+          message: 'Bluetooth Low Energy requires Location',
+          buttonPositive: 'OK',
         },
       );
 
-      const granted = fineLocationResult === PermissionsAndroid.RESULTS.GRANTED;
-      console.log('Android 6-11 BLE permission result', { fineLocationResult });
+      const granted = fineLocationPermission === PermissionsAndroid.RESULTS.GRANTED;
+      console.log('Android 6-11 BLE permission result', { fineLocationPermission });
       return granted;
     }
 
-    console.log('Android version below 6, no BLE permissions required');
-    return true;
+    return requestAndroid31Permissions();
   }, []);
 
   const refreshStatus = useCallback(async () => {
