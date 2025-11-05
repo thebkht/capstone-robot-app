@@ -1,7 +1,15 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { PermissionsAndroid, Platform } from 'react-native';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { PermissionsAndroid, Platform } from "react-native";
 
-import { RobotAPI, RobotStatus, createRobotApi } from '@/services/robot-api';
+import { RobotAPI, RobotStatus, createRobotApi } from "@/services/robot-api";
 
 interface OptionalBleManager {
   startDeviceScan: (
@@ -9,26 +17,26 @@ interface OptionalBleManager {
     options: unknown,
     listener: (
       error: Error | null,
-      device: { id: string; name: string | null; rssi: number | null } | null,
-    ) => void,
+      device: { id: string; name: string | null; rssi: number | null } | null
+    ) => void
   ) => void;
   stopDeviceScan: () => void;
   destroy: () => void;
   onStateChange?: (
     listener: (state: BleState) => void,
-    emitCurrentState?: boolean,
+    emitCurrentState?: boolean
   ) => { remove: () => void } | undefined;
   state?: () => Promise<BleState>;
   enable?: () => Promise<void>;
 }
 
 type BleState =
-  | 'Unknown'
-  | 'Resetting'
-  | 'Unsupported'
-  | 'Unauthorized'
-  | 'PoweredOff'
-  | 'PoweredOn';
+  | "Unknown"
+  | "Resetting"
+  | "Unsupported"
+  | "Unauthorized"
+  | "PoweredOff"
+  | "PoweredOn";
 
 interface RobotContextValue {
   api: RobotAPI;
@@ -50,7 +58,7 @@ interface RobotContextValue {
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
-const DEFAULT_URL = 'http://192.168.1.10:8000';
+const DEFAULT_URL = "http://192.168.1.10:8000";
 
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [baseUrl, setBaseUrlState] = useState<string>(DEFAULT_URL);
@@ -59,13 +67,16 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
   const [bluetoothEnabled, setBluetoothEnabled] = useState<boolean>(false);
+  const consecutiveFailuresRef = useRef<number>(0);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldAttemptBle =
-    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_ENABLE_BLE === 'true';
+    typeof process !== "undefined" &&
+    process.env?.EXPO_PUBLIC_ENABLE_BLE === "true";
   const [bleManager, setBleManager] = useState<OptionalBleManager | null>(null);
   const [bleState, setBleState] = useState<BleState | null>(null);
 
   useEffect(() => {
-    console.log('RobotProvider BLE initialization', { shouldAttemptBle });
+    console.log("RobotProvider BLE initialization", { shouldAttemptBle });
     if (!shouldAttemptBle) {
       setBleManager(null);
       return;
@@ -76,18 +87,39 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
     const loadBleManager = async () => {
       try {
-        // eslint-disable-next-line no-eval
-        const optionalRequire: ((moduleId: string) => unknown) | undefined = eval('require');
-        if (typeof optionalRequire !== 'function') {
+        // Skip BLE loading on web platform
+        if (Platform.OS === "web") {
+          console.log("Bluetooth not available on web platform");
+          if (isMounted) {
+            setBleManager(null);
+          }
           return;
         }
 
-        const moduleName = ['react-native-ble-plx'].join('');
-        const bleModule = optionalRequire(moduleName) as
-          | { BleManager: new () => OptionalBleManager }
-          | undefined;
+        // Try to dynamically require the BLE module
+        // This will work in native React Native environments but fail gracefully on web
+        let bleModule: { BleManager: new () => OptionalBleManager } | undefined;
+
+        try {
+          // Use a function wrapper to avoid direct require() call that triggers lint errors
+          const loadModule = (moduleName: string) => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            return require(moduleName);
+          };
+
+          bleModule = loadModule("react-native-ble-plx") as
+            | { BleManager: new () => OptionalBleManager }
+            | undefined;
+        } catch (moduleError) {
+          console.log("react-native-ble-plx module not available", moduleError);
+          if (isMounted) {
+            setBleManager(null);
+          }
+          return;
+        }
 
         if (!bleModule?.BleManager) {
+          console.log("BleManager class not found in react-native-ble-plx");
           if (isMounted) {
             setBleManager(null);
           }
@@ -95,14 +127,14 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         }
 
         activeManager = new bleModule.BleManager();
-        console.log('BleManager loaded successfully');
+        console.log("BleManager loaded successfully");
         if (isMounted) {
           setBleManager(activeManager);
         } else {
           activeManager.destroy();
         }
       } catch (error) {
-        console.warn('Bluetooth manager unavailable', error);
+        console.warn("Bluetooth manager unavailable", error);
         if (isMounted) {
           setBleManager(null);
         }
@@ -129,7 +161,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
     let isMounted = true;
     const subscription = bleManager.onStateChange?.((state) => {
-      console.log('BleManager state changed', state);
+      console.log("BleManager state changed", state);
       if (isMounted) {
         setBleState(state);
       }
@@ -139,13 +171,13 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       bleManager
         .state()
         .then((state) => {
-          console.log('BleManager initial state resolved', state);
+          console.log("BleManager initial state resolved", state);
           if (isMounted) {
             setBleState(state);
           }
         })
         .catch(() => {
-          console.log('BleManager initial state lookup failed');
+          console.log("BleManager initial state lookup failed");
           if (isMounted) {
             setBleState(null);
           }
@@ -164,19 +196,22 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     }
   }, [bluetoothEnabled, bluetoothSupported]);
 
-  const api = useMemo(() => createRobotApi(baseUrl), [baseUrl]);
+  const api = useMemo(() => createRobotApi(baseUrl, 5000), [baseUrl]);
 
   const requestBlePermissions = useCallback(async () => {
-    console.log('Requesting BLE permissions');
-    if (Platform.OS !== 'android') {
-      console.log('BLE permissions granted by default on non-Android platform');
+    console.log("Requesting BLE permissions");
+    if (Platform.OS !== "android") {
+      console.log("BLE permissions granted by default on non-Android platform");
       return true;
     }
 
-    const androidVersion = typeof Platform.Version === 'number' ? Platform.Version : parseInt(Platform.Version, 10);
+    const androidVersion =
+      typeof Platform.Version === "number"
+        ? Platform.Version
+        : parseInt(Platform.Version, 10);
 
     if (Number.isNaN(androidVersion)) {
-      console.log('Unknown Android version, assuming BLE permissions granted');
+      console.log("Unknown Android version, assuming BLE permissions granted");
       return true;
     }
 
@@ -184,33 +219,37 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       const scanResult = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         {
-          title: 'Bluetooth scan permission',
-          message: 'Allow the app to scan for nearby robots over Bluetooth.',
-          buttonPositive: 'Allow',
-        },
+          title: "Bluetooth scan permission",
+          message: "Allow the app to scan for nearby robots over Bluetooth.",
+          buttonPositive: "Allow",
+        }
       );
       const connectResult = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
         {
-          title: 'Bluetooth connection permission',
-          message: 'Allow the app to connect to nearby robots over Bluetooth.',
-          buttonPositive: 'Allow',
-        },
+          title: "Bluetooth connection permission",
+          message: "Allow the app to connect to nearby robots over Bluetooth.",
+          buttonPositive: "Allow",
+        }
       );
       const fineLocationResult = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         {
-          title: 'Location permission',
-          message: 'Allow the app to use location to discover nearby robots.',
-          buttonPositive: 'Allow',
-        },
+          title: "Location permission",
+          message: "Allow the app to use location to discover nearby robots.",
+          buttonPositive: "Allow",
+        }
       );
 
       const granted =
         scanResult === PermissionsAndroid.RESULTS.GRANTED &&
         connectResult === PermissionsAndroid.RESULTS.GRANTED &&
         fineLocationResult === PermissionsAndroid.RESULTS.GRANTED;
-      console.log('Android 12+ BLE permission results', { scanResult, connectResult, fineLocationResult });
+      console.log("Android 12+ BLE permission results", {
+        scanResult,
+        connectResult,
+        fineLocationResult,
+      });
       return granted;
     }
 
@@ -218,35 +257,76 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       const fineLocationResult = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         {
-          title: 'Location permission',
-          message: 'Allow the app to use location to discover nearby robots.',
-          buttonPositive: 'Allow',
-        },
+          title: "Location permission",
+          message: "Allow the app to use location to discover nearby robots.",
+          buttonPositive: "Allow",
+        }
       );
 
       const granted = fineLocationResult === PermissionsAndroid.RESULTS.GRANTED;
-      console.log('Android 6-11 BLE permission result', { fineLocationResult });
+      console.log("Android 6-11 BLE permission result", { fineLocationResult });
       return granted;
     }
 
-    console.log('Android version below 6, no BLE permissions required');
+    console.log("Android version below 6, no BLE permissions required");
     return true;
   }, []);
 
-  const refreshStatus = useCallback(async () => {
-    try {
-      console.log('Refreshing robot status from', baseUrl);
-      const latest = await api.fetchStatus();
-      setStatus(latest);
-      setLastUpdated(new Date());
-      setStatusError(null);
-      console.log('Robot status updated', latest);
-    } catch (error) {
-      console.warn('Failed to refresh robot status', error);
-      setStatus(null);
-      setStatusError((error as Error).message);
-    }
-  }, [api, baseUrl]);
+  const refreshStatus = useCallback(
+    async (retryCount = 0): Promise<void> => {
+      const maxRetries = 2;
+      const baseDelay = 1000; // 1 second base delay
+
+      try {
+        console.log("Refreshing robot status from", baseUrl);
+        const latest = await api.fetchStatus();
+        setStatus(latest);
+        setLastUpdated(new Date());
+        setStatusError(null);
+        consecutiveFailuresRef.current = 0;
+        console.log("Robot status updated", latest);
+      } catch (error) {
+        const errorMessage = (error as Error).message;
+
+        console.warn("Failed to refresh robot status", error);
+        setStatus(null);
+        setStatusError(errorMessage);
+
+        consecutiveFailuresRef.current += 1;
+        const newFailures = consecutiveFailuresRef.current;
+
+        // If we've failed too many times, pause polling temporarily
+        if (newFailures >= 5) {
+          console.warn(
+            "Too many consecutive failures, pausing polling temporarily"
+          );
+          setIsPolling(false);
+          // Auto-resume after 30 seconds
+          if (retryTimeoutRef.current) {
+            clearTimeout(retryTimeoutRef.current);
+          }
+          retryTimeoutRef.current = setTimeout(() => {
+            consecutiveFailuresRef.current = 0;
+            setIsPolling(true);
+          }, 30000);
+          return;
+        }
+
+        // Retry with exponential backoff if we haven't exceeded max retries
+        if (retryCount < maxRetries) {
+          const delay = baseDelay * Math.pow(2, retryCount);
+          console.log(
+            `Retrying status refresh in ${delay}ms (attempt ${
+              retryCount + 1
+            }/${maxRetries})`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return refreshStatus(retryCount + 1);
+        }
+      }
+    },
+    [api, baseUrl]
+  );
 
   useEffect(() => {
     if (!isPolling) {
@@ -254,16 +334,33 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     }
 
     refreshStatus();
-    const interval = setInterval(refreshStatus, 10_000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      refreshStatus();
+    }, 10_000);
+
+    return () => {
+      clearInterval(interval);
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
   }, [isPolling, refreshStatus]);
 
-  const setBaseUrl = (url: string) => {
-    console.log('Updating robot base URL', { previous: baseUrl, next: url });
-    setBaseUrlState(url);
-    api.updateBaseUrl(url);
-    setStatusError(null);
-  };
+  const setBaseUrl = useCallback(
+    (url: string) => {
+      console.log("Updating robot base URL", { previous: baseUrl, next: url });
+      setBaseUrlState(url);
+      api.updateBaseUrl(url);
+      setStatusError(null);
+      consecutiveFailuresRef.current = 0;
+      // Clear any pending retry timeout
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+    },
+    [api, baseUrl]
+  );
 
   const value = useMemo(
     () => ({
@@ -290,21 +387,26 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       statusError,
       lastUpdated,
       isPolling,
+      refreshStatus,
+      setBaseUrl,
       bluetoothEnabled,
+      setBluetoothEnabled,
       bluetoothSupported,
       bleManager,
       bleState,
       requestBlePermissions,
-    ],
+    ]
   );
 
-  return <RobotContext.Provider value={value}>{children}</RobotContext.Provider>;
+  return (
+    <RobotContext.Provider value={value}>{children}</RobotContext.Provider>
+  );
 };
 
 export const useRobot = () => {
   const context = useContext(RobotContext);
   if (!context) {
-    throw new Error('useRobot must be used within a RobotProvider');
+    throw new Error("useRobot must be used within a RobotProvider");
   }
 
   return context;

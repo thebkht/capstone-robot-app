@@ -33,15 +33,18 @@ export interface WifiScanResponse {
 export interface RobotApiOptions {
   baseUrl: string;
   fetchImpl?: typeof fetch;
+  timeout?: number; // Timeout in milliseconds, default 5000
 }
 
 export class RobotAPI {
   private baseUrl: string;
   private fetchImpl: typeof fetch;
+  private timeout: number;
 
   constructor(options: RobotApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.timeout = options.timeout ?? 5000;
   }
 
   public updateBaseUrl(baseUrl: string) {
@@ -57,30 +60,44 @@ export class RobotAPI {
       throw new Error('Robot base URL is not configured.');
     }
 
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Robot request failed (${response.status}): ${text}`);
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Robot request failed (${response.status}): ${text}`);
+      }
+
+      if (response.status === 204) {
+        return {} as T;
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        return (await response.json()) as T;
+      }
+
+      return (await response.text()) as unknown as T;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`Network request timed out after ${this.timeout}ms`);
+      }
+      throw error;
     }
-
-    if (response.status === 204) {
-      return {} as T;
-    }
-
-    const contentType = response.headers.get('content-type');
-    if (contentType?.includes('application/json')) {
-      return (await response.json()) as T;
-    }
-
-    return (await response.text()) as unknown as T;
   }
 
   public async ping(): Promise<RobotStatus> {
@@ -107,4 +124,4 @@ export class RobotAPI {
 }
 
 
-export const createRobotApi = (baseUrl: string) => new RobotAPI({ baseUrl });
+export const createRobotApi = (baseUrl: string, timeout?: number) => new RobotAPI({ baseUrl, timeout });
