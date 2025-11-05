@@ -17,12 +17,17 @@ export interface RobotStatus {
     ip?: string;
     wifiSsid?: string;
     signalStrength?: number;
+    availableNetworks?: string[];
   };
   [key: string]: unknown;
 }
 
 export interface SnapshotResponse {
   url: string;
+}
+
+export interface WifiScanResponse {
+  networks: string[];
 }
 
 export interface RobotApiOptions {
@@ -96,6 +101,10 @@ export class RobotAPI {
     return this.request<SnapshotResponse>('/camera/snapshot', 'POST');
   }
 
+  public async listWifiNetworks(): Promise<WifiScanResponse> {
+    return this.request<WifiScanResponse>('/wifi/networks');
+  }
 }
+
 
 export const createRobotApi = (baseUrl: string) => new RobotAPI({ baseUrl });

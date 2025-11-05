@@ -65,6 +65,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [bleState, setBleState] = useState<BleState | null>(null);
 
   useEffect(() => {
+    console.log('RobotProvider BLE initialization', { shouldAttemptBle });
     if (!shouldAttemptBle) {
       setBleManager(null);
       return;
@@ -94,6 +95,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         }
 
         activeManager = new bleModule.BleManager();
+        console.log('BleManager loaded successfully');
         if (isMounted) {
           setBleManager(activeManager);
         } else {
@@ -127,6 +129,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
     let isMounted = true;
     const subscription = bleManager.onStateChange?.((state) => {
+      console.log('BleManager state changed', state);
       if (isMounted) {
         setBleState(state);
       }
@@ -136,11 +139,13 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       bleManager
         .state()
         .then((state) => {
+          console.log('BleManager initial state resolved', state);
           if (isMounted) {
             setBleState(state);
           }
         })
         .catch(() => {
+          console.log('BleManager initial state lookup failed');
           if (isMounted) {
             setBleState(null);
           }
@@ -162,13 +167,16 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const api = useMemo(() => createRobotApi(baseUrl), [baseUrl]);
 
   const requestBlePermissions = useCallback(async () => {
+    console.log('Requesting BLE permissions');
     if (Platform.OS !== 'android') {
+      console.log('BLE permissions granted by default on non-Android platform');
       return true;
     }
 
     const androidVersion = typeof Platform.Version === 'number' ? Platform.Version : parseInt(Platform.Version, 10);
 
     if (Number.isNaN(androidVersion)) {
+      console.log('Unknown Android version, assuming BLE permissions granted');
       return true;
     }
 
@@ -198,11 +206,12 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         },
       );
 
-      return (
+      const granted =
         scanResult === PermissionsAndroid.RESULTS.GRANTED &&
         connectResult === PermissionsAndroid.RESULTS.GRANTED &&
-        fineLocationResult === PermissionsAndroid.RESULTS.GRANTED
-      );
+        fineLocationResult === PermissionsAndroid.RESULTS.GRANTED;
+      console.log('Android 12+ BLE permission results', { scanResult, connectResult, fineLocationResult });
+      return granted;
     }
 
     if (androidVersion >= 23) {
@@ -215,24 +224,29 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         },
       );
 
-      return fineLocationResult === PermissionsAndroid.RESULTS.GRANTED;
+      const granted = fineLocationResult === PermissionsAndroid.RESULTS.GRANTED;
+      console.log('Android 6-11 BLE permission result', { fineLocationResult });
+      return granted;
     }
 
+    console.log('Android version below 6, no BLE permissions required');
     return true;
   }, []);
 
   const refreshStatus = useCallback(async () => {
     try {
+      console.log('Refreshing robot status from', baseUrl);
       const latest = await api.fetchStatus();
       setStatus(latest);
       setLastUpdated(new Date());
       setStatusError(null);
+      console.log('Robot status updated', latest);
     } catch (error) {
       console.warn('Failed to refresh robot status', error);
       setStatus(null);
       setStatusError((error as Error).message);
     }
-  }, [api]);
+  }, [api, baseUrl]);
 
   useEffect(() => {
     if (!isPolling) {
@@ -245,6 +259,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   }, [isPolling, refreshStatus]);
 
   const setBaseUrl = (url: string) => {
+    console.log('Updating robot base URL', { previous: baseUrl, next: url });
     setBaseUrlState(url);
     api.updateBaseUrl(url);
     setStatusError(null);

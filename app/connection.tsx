@@ -90,7 +90,11 @@ export default function ConnectionScreen() {
   const [showManualIpModal, setShowManualIpModal] = useState(false);
   const [manualUrl, setManualUrl] = useState(baseUrl);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
+  const [isWifiScanning, setIsWifiScanning] = useState(false);
+  const [wifiScanError, setWifiScanError] = useState<string | null>(null);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasRequestedInitialWifiScan = useRef(false);
 
   useEffect(() => {
     setManualUrl(baseUrl);
@@ -105,9 +109,12 @@ export default function ConnectionScreen() {
 
   const wifiConnected = Boolean(status?.network?.ip);
 
-  const availableNetworks = useMemo(() => {
+  useEffect(() => {
     const networkInfo = status?.network as { availableNetworks?: string[] } | undefined;
-    return networkInfo?.availableNetworks ?? [];
+    if (networkInfo?.availableNetworks) {
+      console.log('Robot reported Wi-Fi networks from status', networkInfo.availableNetworks);
+      setWifiNetworks(networkInfo.availableNetworks);
+    }
   }, [status?.network]);
 
   const handleConnect = useCallback(async () => {
@@ -116,6 +123,7 @@ export default function ConnectionScreen() {
       return;
     }
 
+    console.log('Attempting to connect Wi-Fi', { ssid });
     setConnectionState('connecting');
     setLastError(null);
 
@@ -123,18 +131,23 @@ export default function ConnectionScreen() {
       await api.connectWifi({ ssid, password });
       await refreshStatus();
       setConnectionState('connected');
+      console.log('Wi-Fi credentials submitted successfully');
     } catch (error) {
       setConnectionState('error');
       setLastError((error as Error).message);
+      console.warn('Failed to connect Wi-Fi', error);
     }
   }, [api, password, refreshStatus, ssid]);
 
   const handlePing = useCallback(async () => {
     setIsPinging(true);
+    console.log('Pinging robot for connectivity check');
     try {
       const data = await api.ping();
+      console.log('Ping successful', data);
       Alert.alert('Robot reachable', JSON.stringify(data, null, 2));
     } catch (error) {
+      console.warn('Ping failed', error);
       Alert.alert('Ping failed', (error as Error).message);
     } finally {
       setIsPinging(false);
@@ -162,6 +175,7 @@ export default function ConnectionScreen() {
 
     if (bleManager) {
       bleManager.stopDeviceScan();
+      console.log('Stopped BLE device scan');
     }
 
     setIsScanning(false);
@@ -208,6 +222,7 @@ export default function ConnectionScreen() {
       return;
     }
 
+    console.log('Starting BLE device scan');
     stopScan();
     setDevices([]);
     setIsScanning(true);
@@ -217,6 +232,7 @@ export default function ConnectionScreen() {
       if (error) {
         stopScan();
         setScanError(error.message);
+        console.warn('BLE scan error', error);
         return;
       }
 
@@ -229,6 +245,11 @@ export default function ConnectionScreen() {
           return previous;
         }
 
+        console.log('Discovered BLE device', {
+          id: device.id,
+          name: device.name,
+          rssi: device.rssi,
+        });
         return [
           ...previous,
           {
@@ -246,6 +267,11 @@ export default function ConnectionScreen() {
   }, [bleManager, bleState, bluetoothEnabled, bluetoothSupported, stopScan]);
 
   const handleToggleBluetooth = useCallback(async () => {
+    console.log('Toggling Bluetooth discovery', {
+      bluetoothSupported,
+      bluetoothEnabled,
+      bleState,
+    });
     if (!bluetoothSupported) {
       Alert.alert(
         'Bluetooth unavailable',
@@ -267,16 +293,19 @@ export default function ConnectionScreen() {
       if (bleState === 'PoweredOff' && bleManager?.enable) {
         try {
           await bleManager.enable();
+          console.log('Requested Bluetooth enable from BleManager');
         } catch (error) {
           console.warn('Failed to enable Bluetooth', error);
         }
       }
 
       setBluetoothEnabled(true);
+      console.log('Bluetooth discovery enabled');
       return;
     }
 
     setBluetoothEnabled(false);
+    console.log('Bluetooth discovery disabled');
   }, [
     bleManager,
     bleState,
@@ -318,9 +347,36 @@ export default function ConnectionScreen() {
       return;
     }
 
+    console.log('Saving manual robot URL', manualUrl.trim());
     setBaseUrl(manualUrl.trim());
     setShowManualIpModal(false);
   }, [manualUrl, setBaseUrl]);
+
+  const handleRefreshNetworks = useCallback(async () => {
+    console.log('Requesting Wi-Fi network scan');
+    setIsWifiScanning(true);
+    setWifiScanError(null);
+    try {
+      const response = await api.listWifiNetworks();
+      console.log('Wi-Fi scan successful', response.networks);
+      setWifiNetworks(response.networks);
+      await refreshStatus();
+    } catch (error) {
+      console.warn('Wi-Fi scan failed', error);
+      setWifiScanError((error as Error).message);
+    } finally {
+      setIsWifiScanning(false);
+    }
+  }, [api, refreshStatus]);
+
+  useEffect(() => {
+    if (hasRequestedInitialWifiScan.current) {
+      return;
+    }
+
+    hasRequestedInitialWifiScan.current = true;
+    void handleRefreshNetworks();
+  }, [handleRefreshNetworks]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
@@ -469,26 +525,39 @@ export default function ConnectionScreen() {
             <View style={styles.sectionHeader}>
               <ThemedText style={styles.sectionLabel}>Available networks</ThemedText>
               <Pressable
-                style={({ pressed }) => [styles.iconButton, pressed && styles.pressablePressed]}
-                onPress={refreshStatus}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  isWifiScanning && styles.iconButtonDisabled,
+                  pressed && styles.pressablePressed,
+                ]}
+                onPress={() => {
+                  void handleRefreshNetworks();
+                }}
+                disabled={isWifiScanning}
               >
-                <Ionicons name="refresh" size={18} color="#111111" />
+                {isWifiScanning ? (
+                  <ActivityIndicator size="small" color="#111111" />
+                ) : (
+                  <Ionicons name="refresh" size={18} color="#111111" />
+                )}
               </Pressable>
             </View>
 
             <View style={styles.networkList}>
-              {availableNetworks.length === 0 ? (
+              {wifiNetworks.length === 0 ? (
                 <ThemedText style={styles.placeholderText}>
-                  No networks discovered yet.
+                  {isWifiScanning ? 'Scanning for networks…' : 'No networks discovered yet.'}
                 </ThemedText>
               ) : (
-                availableNetworks.map((network) => (
+                wifiNetworks.map((network) => (
                   <View key={network} style={styles.networkRow}>
                     <ThemedText style={styles.networkName}>{network}</ThemedText>
                   </View>
                 ))
               )}
             </View>
+
+            {wifiScanError ? <ThemedText style={styles.errorText}>{wifiScanError}</ThemedText> : null}
 
             <View style={styles.actionRow}>
               <View style={[styles.actionButton, styles.primaryAction]}>
