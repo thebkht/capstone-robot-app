@@ -9,34 +9,12 @@ import React, {
 } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
 
+import {
+  loadBleManager,
+  type BleState,
+  type OptionalBleManager,
+} from "@/services/ble-manager-loader";
 import { RobotAPI, RobotStatus, createRobotApi } from "@/services/robot-api";
-
-interface OptionalBleManager {
-  startDeviceScan: (
-    uuids: string[] | null,
-    options: unknown,
-    listener: (
-      error: Error | null,
-      device: { id: string; name: string | null; rssi: number | null } | null
-    ) => void
-  ) => void;
-  stopDeviceScan: () => void;
-  destroy: () => void;
-  onStateChange?: (
-    listener: (state: BleState) => void,
-    emitCurrentState?: boolean
-  ) => { remove: () => void } | undefined;
-  state?: () => Promise<BleState>;
-  enable?: () => Promise<void>;
-}
-
-type BleState =
-  | "Unknown"
-  | "Resetting"
-  | "Unsupported"
-  | "Unauthorized"
-  | "PoweredOff"
-  | "PoweredOn";
 
 interface RobotContextValue {
   api: RobotAPI;
@@ -85,63 +63,31 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     let isMounted = true;
     let activeManager: OptionalBleManager | null = null;
 
-    const loadBleManager = async () => {
-      try {
-        // Skip BLE loading on web platform
-        if (Platform.OS === "web") {
-          console.log("Bluetooth not available on web platform");
-          if (isMounted) {
-            setBleManager(null);
-          }
-          return;
-        }
-
-        // Try to dynamically require the BLE module
-        // This will work in native React Native environments but fail gracefully on web
-        let bleModule: { BleManager: new () => OptionalBleManager } | undefined;
-
-        try {
-          // Use a function wrapper to avoid direct require() call that triggers lint errors
-          const loadModule = (moduleName: string) => {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            return require(moduleName);
-          };
-
-          bleModule = loadModule("react-native-ble-plx") as
-            | { BleManager: new () => OptionalBleManager }
-            | undefined;
-        } catch (moduleError) {
-          console.log("react-native-ble-plx module not available", moduleError);
-          if (isMounted) {
-            setBleManager(null);
-          }
-          return;
-        }
-
-        if (!bleModule?.BleManager) {
-          console.log("BleManager class not found in react-native-ble-plx");
-          if (isMounted) {
-            setBleManager(null);
-          }
-          return;
-        }
-
-        activeManager = new bleModule.BleManager();
+    // Load BLE manager using the loader function
+    // This handles platform checks and module loading internally
+    try {
+      activeManager = loadBleManager();
+      if (activeManager) {
         console.log("BleManager loaded successfully");
         if (isMounted) {
           setBleManager(activeManager);
         } else {
           activeManager.destroy();
         }
-      } catch (error) {
-        console.warn("Bluetooth manager unavailable", error);
+      } else {
+        console.log(
+          "BleManager not available (module not installed or web platform)"
+        );
         if (isMounted) {
           setBleManager(null);
         }
       }
-    };
-
-    loadBleManager();
+    } catch (error) {
+      console.warn("Bluetooth manager unavailable", error);
+      if (isMounted) {
+        setBleManager(null);
+      }
+    }
 
     return () => {
       isMounted = false;
