@@ -28,11 +28,11 @@ const normalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
 const ensureHttpScheme = (value: string) =>
   /^https?:\/\//i.test(value) ? value : `http://${value}`;
 
-const STATUS_META: Record<ConnectionPhase, { label: string; color: string; emoji: string }> = {
-  idle: { label: 'Not connected', color: '#ef4444', emoji: '🟥' },
-  connecting: { label: 'Trying to connect…', color: '#facc15', emoji: '🟡' },
-  connected: { label: 'Connected', color: '#34d399', emoji: '🟩' },
-  error: { label: 'Not connected', color: '#ef4444', emoji: '🟥' },
+const STATUS_META: Record<ConnectionPhase, { label: string; color: string }> = {
+  idle: { label: 'Not connected', color: '#ef4444' },
+  connecting: { label: 'Trying to connect…', color: '#facc15' },
+  connected: { label: 'Connected', color: '#34d399' },
+  error: { label: 'Not connected', color: '#ef4444' },
 };
 
 export default function ConnectionScreen() {
@@ -226,10 +226,11 @@ export default function ConnectionScreen() {
             and remember any IPs you confirm.
           </ThemedText>
 
-          <View style={[styles.statusCard, { borderColor: statusMeta.color }]}> 
-            <ThemedText style={styles.statusLabel}>
-              {statusMeta.emoji} {statusMeta.label}
-            </ThemedText>
+          <View style={[styles.statusCard, { borderColor: statusMeta.color }]}>
+            <View style={styles.statusHeader}>
+              <View style={[styles.statusIndicator, { backgroundColor: statusMeta.color }]} />
+              <ThemedText style={styles.statusLabel}>{statusMeta.label}</ThemedText>
+            </View>
             <ThemedText style={styles.statusMessage}>{statusMessage}</ThemedText>
           </View>
 
@@ -329,6 +330,16 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
     backgroundColor: 'rgba(17,17,17,0.85)',
+  },
+  statusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   statusLabel: {
     fontWeight: '600',
