@@ -1,13 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -27,28 +21,6 @@ import { useRobot } from '@/context/robot-provider';
 import type { RobotConnectionState } from '@/services/robot-api';
 
 const ROBOT_ART = require('../assets/images/partial-react-logo.png');
-
-interface DiscoveredDevice {
-  id: string;
-  name?: string | null;
-  rssi?: number | null;
-}
-
-const getSignalStrength = (rssi?: number | null) => {
-  if (typeof rssi !== 'number') {
-    return null;
-  }
-
-  if (rssi >= -60) {
-    return 'Strong';
-  }
-
-  if (rssi >= -75) {
-    return 'Medium';
-  }
-
-  return 'Low';
-};
 
 const StatusPill = ({
   color,
@@ -71,12 +43,6 @@ export default function ConnectionScreen() {
     refreshStatus,
     status,
     statusError,
-    bluetoothEnabled,
-    bluetoothSupported,
-    bleManager,
-    bleState,
-    requestBlePermissions,
-    setBluetoothEnabled,
   } = useRobot();
   const router = useRouter();
   const [ssid, setSsid] = useState('');
@@ -84,16 +50,12 @@ export default function ConnectionScreen() {
   const [connectionState, setConnectionState] = useState<RobotConnectionState>('disconnected');
   const [lastError, setLastError] = useState<string | null>(null);
   const [isPinging, setIsPinging] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-  const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
   const [showWifiModal, setShowWifiModal] = useState(false);
   const [showManualIpModal, setShowManualIpModal] = useState(false);
   const [manualUrl, setManualUrl] = useState(baseUrl);
-  const [scanError, setScanError] = useState<string | null>(null);
   const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
   const [isWifiScanning, setIsWifiScanning] = useState(false);
   const [wifiScanError, setWifiScanError] = useState<string | null>(null);
-  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasRequestedInitialWifiScan = useRef(false);
 
   useEffect(() => {
@@ -167,170 +129,6 @@ export default function ConnectionScreen() {
     }
   }, [connectionState, lastError]);
 
-  const stopScan = useCallback(() => {
-    if (scanTimeoutRef.current) {
-      clearTimeout(scanTimeoutRef.current);
-      scanTimeoutRef.current = null;
-    }
-
-    if (bleManager) {
-      bleManager.stopDeviceScan();
-      console.log('Stopped BLE device scan');
-    }
-
-    setIsScanning(false);
-  }, [bleManager]);
-
-  useEffect(() => {
-    return () => {
-      stopScan();
-    };
-  }, [stopScan]);
-
-  useEffect(() => {
-    if (!bluetoothEnabled || !bluetoothSupported) {
-      stopScan();
-      setDevices([]);
-      setScanError(null);
-    }
-  }, [bluetoothEnabled, bluetoothSupported, stopScan]);
-
-  const handleScan = useCallback(() => {
-    if (!bluetoothSupported) {
-      Alert.alert(
-        'Bluetooth unavailable',
-        'Install react-native-ble-plx and rebuild the app to enable Bluetooth discovery.',
-      );
-      return;
-    }
-
-    if (!bluetoothEnabled) {
-      Alert.alert('Bluetooth disabled', 'Enable Bluetooth in Settings to scan for nearby robots.');
-      return;
-    }
-
-    if (!bleManager) {
-      Alert.alert(
-        'Bluetooth unavailable',
-        'The Bluetooth module failed to load. Reinstall the optional dependency and try again.',
-      );
-      return;
-    }
-
-    if (bleState && bleState !== 'PoweredOn') {
-      Alert.alert('Bluetooth turned off', 'Power on Bluetooth to discover nearby robots.');
-      return;
-    }
-
-    console.log('Starting BLE device scan');
-    stopScan();
-    setDevices([]);
-    setIsScanning(true);
-    setScanError(null);
-
-    bleManager.startDeviceScan(null, null, (error, device) => {
-      if (error) {
-        stopScan();
-        setScanError(error.message);
-        console.warn('BLE scan error', error);
-        return;
-      }
-
-      if (!device) {
-        return;
-      }
-
-      setDevices((previous) => {
-        if (previous.some((existing) => existing.id === device.id)) {
-          return previous;
-        }
-
-        console.log('Discovered BLE device', {
-          id: device.id,
-          name: device.name,
-          rssi: device.rssi,
-        });
-        return [
-          ...previous,
-          {
-            id: device.id,
-            name: device.name ?? undefined,
-            rssi: device.rssi ?? undefined,
-          },
-        ];
-      });
-    });
-
-    scanTimeoutRef.current = setTimeout(() => {
-      stopScan();
-    }, 10_000);
-  }, [bleManager, bleState, bluetoothEnabled, bluetoothSupported, stopScan]);
-
-  const handleToggleBluetooth = useCallback(async () => {
-    console.log('Toggling Bluetooth discovery', {
-      bluetoothSupported,
-      bluetoothEnabled,
-      bleState,
-    });
-    if (!bluetoothSupported) {
-      Alert.alert(
-        'Bluetooth unavailable',
-        'Install react-native-ble-plx and rebuild the app to enable Bluetooth discovery.',
-      );
-      return;
-    }
-
-    if (!bluetoothEnabled) {
-      const granted = await requestBlePermissions();
-      if (!granted) {
-        Alert.alert(
-          'Permission required',
-          'Grant Bluetooth permissions in system settings to scan for nearby robots.',
-        );
-        return;
-      }
-
-      if (bleState === 'PoweredOff' && bleManager?.enable) {
-        try {
-          await bleManager.enable();
-          console.log('Requested Bluetooth enable from BleManager');
-        } catch (error) {
-          console.warn('Failed to enable Bluetooth', error);
-        }
-      }
-
-      setBluetoothEnabled(true);
-      console.log('Bluetooth discovery enabled');
-      return;
-    }
-
-    setBluetoothEnabled(false);
-    console.log('Bluetooth discovery disabled');
-  }, [
-    bleManager,
-    bleState,
-    bluetoothEnabled,
-    bluetoothSupported,
-    requestBlePermissions,
-    setBluetoothEnabled,
-  ]);
-
-  const bluetoothStatus = useMemo(() => {
-    if (!bluetoothSupported) {
-      return { color: '#fb923c', label: 'Unavailable' };
-    }
-
-    if (!bluetoothEnabled) {
-      return { color: '#f472b6', label: 'OFF' };
-    }
-
-    if (bleState && bleState !== 'PoweredOn') {
-      return { color: '#facc15', label: 'Starting…' };
-    }
-
-    return { color: '#22d3ee', label: 'ON' };
-  }, [bleState, bluetoothEnabled, bluetoothSupported]);
-
   const wifiStatus = useMemo(() => {
     if (connectionState === 'error') {
       return { color: '#f87171', label: 'Error' };
@@ -398,7 +196,7 @@ export default function ConnectionScreen() {
               <StatusPill color={wifiStatus.color} label={wifiStatus.label} />
             </View>
             <ThemedText style={styles.heroSubtitle}>
-              Pair the robot over Wi-Fi or Bluetooth with a crisp interface inspired by the reference mockup.
+              Configure the robot over Wi-Fi with a crisp interface inspired by the reference mockup.
             </ThemedText>
             <View style={styles.heroMeta}>
               <View style={styles.heroMetaItem}>
@@ -415,88 +213,6 @@ export default function ConnectionScreen() {
                 </ThemedText>
               </View>
             </View>
-          </View>
-
-          <View style={styles.card}>
-            <View style={styles.cardAccent} />
-            <View style={styles.cardHeader}>
-              <View>
-                <ThemedText style={styles.cardTitle} type="subtitle">
-                  Bluetooth Discovery
-                </ThemedText>
-                <ThemedText style={styles.cardSubtitle}>
-                  {bluetoothSupported
-                    ? 'Discover nearby robots broadcasting over BLE.'
-                    : 'Optional Bluetooth support is not installed.'}
-                </ThemedText>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Toggle Bluetooth discovery"
-                onPress={() => {
-                  void handleToggleBluetooth();
-                }}
-                style={({ pressed }) => [pressed && styles.pressablePressed]}
-              >
-                <StatusPill color={bluetoothStatus.color} label={`Bluetooth ${bluetoothStatus.label}`} />
-              </Pressable>
-            </View>
-
-            <View style={styles.sectionHeader}>
-              <ThemedText style={styles.sectionLabel}>Nearby devices</ThemedText>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.iconButton,
-                  (isScanning || !bluetoothSupported) && styles.iconButtonDisabled,
-                  pressed && styles.pressablePressed,
-                ]}
-                onPress={handleScan}
-                disabled={isScanning || !bluetoothSupported}
-              >
-                {isScanning ? (
-                  <ActivityIndicator size="small" color="#111111" />
-                ) : (
-                  <Ionicons
-                    name="refresh"
-                    size={18}
-                    color={bluetoothSupported ? '#111111' : 'rgba(17,17,17,0.4)'}
-                  />
-                )}
-              </Pressable>
-            </View>
-
-            <View style={styles.deviceList}>
-              {devices.length === 0 ? (
-                <ThemedText style={styles.placeholderText}>
-                  {bluetoothSupported
-                    ? 'Tap the refresh icon to look for nearby robots.'
-                    : 'Enable Bluetooth support to discover robots.'}
-                </ThemedText>
-              ) : (
-                devices.map((device) => {
-                  const signalStrength = getSignalStrength(device.rssi);
-                  return (
-                    <Pressable
-                      key={device.id}
-                      style={({ pressed }) => [styles.deviceItem, pressed && styles.pressablePressed]}
-                    >
-                      <View style={styles.deviceDetails}>
-                        <ThemedText style={styles.deviceName} type="defaultSemiBold">
-                          {device.name ?? 'Unnamed device'}
-                        </ThemedText>
-                        <ThemedText style={styles.deviceId}>{device.id}</ThemedText>
-                      </View>
-                      {signalStrength ? (
-                        <View style={styles.signalBadge}>
-                          <ThemedText style={styles.signalBadgeText}>{signalStrength}</ThemedText>
-                        </View>
-                      ) : null}
-                    </Pressable>
-                  );
-                })
-              )}
-            </View>
-            {scanError ? <ThemedText style={styles.errorText}>{scanError}</ThemedText> : null}
           </View>
 
           <View style={styles.card}>
@@ -929,43 +645,9 @@ const styles = StyleSheet.create({
   iconButtonDisabled: {
     opacity: 0.35,
   },
-  deviceList: {
-    gap: 12,
-  },
   placeholderText: {
     fontSize: 14,
     color: 'rgba(195,195,195,0.75)',
-  },
-  deviceItem: {
-    borderRadius: 0,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(170,170,170,0.12)',
-    backgroundColor: 'rgba(36,36,36,0.7)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  deviceDetails: {
-    gap: 4,
-  },
-  deviceName: {
-    fontSize: 15,
-  },
-  deviceId: {
-    fontSize: 12,
-    color: 'rgba(190,190,190,0.75)',
-  },
-  signalBadge: {
-    borderRadius: 0,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(160,160,160,0.28)',
-  },
-  signalBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(235,235,235,0.9)',
   },
   metaRow: {
     flexDirection: 'row',

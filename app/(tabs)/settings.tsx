@@ -1,19 +1,12 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useRobot } from '@/context/robot-provider';
 
 export default function SettingsScreen() {
-  const {
-    baseUrl,
-    setBaseUrl,
-    bluetoothEnabled,
-    setBluetoothEnabled,
-    refreshStatus,
-    bluetoothSupported,
-  } = useRobot();
+  const { baseUrl, setBaseUrl, refreshStatus } = useRobot();
   const [draftUrl, setDraftUrl] = useState(baseUrl);
 
   const handleSave = useCallback(() => {
@@ -49,25 +42,9 @@ export default function SettingsScreen() {
       </ThemedView>
 
       <ThemedView style={styles.card}>
-        <View style={styles.rowBetween}>
-          <ThemedText type="subtitle">Enable Bluetooth discovery</ThemedText>
-          <Switch
-            value={bluetoothEnabled}
-            onValueChange={setBluetoothEnabled}
-            disabled={!bluetoothSupported}
-          />
-        </View>
-        <ThemedText style={styles.description}>
-          {bluetoothSupported
-            ? 'Uses react-native-ble-plx to scan for nearby robots exposing BLE beacons.'
-            : 'Install react-native-ble-plx and rebuild the app to enable Bluetooth scanning.'}
-        </ThemedText>
-      </ThemedView>
-
-      <ThemedView style={styles.card}>
         <ThemedText type="subtitle">About this app</ThemedText>
         <ThemedText>
-          Robot companion dashboard with Wi-Fi setup, camera streaming, telemetry monitoring and BLE discovery.
+          Robot companion dashboard with Wi-Fi setup, camera streaming, and telemetry monitoring.
         </ThemedText>
         <ThemedText style={styles.meta}>Version 0.1.0</ThemedText>
       </ThemedView>
@@ -98,12 +75,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.2)',
     backgroundColor: 'rgba(0,0,0,0.1)',
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
   },
   primaryButton: {
     backgroundColor: '#10b981',
