@@ -60,7 +60,9 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [isPolling, setIsPolling] = useState<boolean>(true);
   const [bluetoothEnabled, setBluetoothEnabled] = useState<boolean>(false);
   const shouldAttemptBle =
-    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_ENABLE_BLE === 'true';
+    typeof process !== 'undefined'
+      ? process.env?.EXPO_PUBLIC_ENABLE_BLE !== 'false'
+      : true;
   const [bleManager, setBleManager] = useState<OptionalBleManager | null>(null);
   const [bleState, setBleState] = useState<BleState | null>(null);
 
