@@ -76,25 +76,16 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
     const loadBleManager = async () => {
       try {
-        // eslint-disable-next-line no-eval
-        const optionalRequire: ((moduleId: string) => unknown) | undefined = eval('require');
-        if (typeof optionalRequire !== 'function') {
-          return;
-        }
+        const { BleManager } = await import('react-native-ble-plx');
 
-        const moduleName = ['react-native-ble-plx'].join('');
-        const bleModule = optionalRequire(moduleName) as
-          | { BleManager: new () => OptionalBleManager }
-          | undefined;
-
-        if (!bleModule?.BleManager) {
+        if (!BleManager) {
           if (isMounted) {
             setBleManager(null);
           }
           return;
         }
 
-        activeManager = new bleModule.BleManager();
+        activeManager = new BleManager();
         console.log('BleManager loaded successfully');
         if (isMounted) {
           setBleManager(activeManager);
@@ -213,7 +204,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       return granted;
     };
 
-    const resolveAndroidApiLevel = () => {
+    const resolveAndroidApiLevel = async () => {
       const fallbackVersion =
         typeof Platform.Version === 'number'
           ? Platform.Version
@@ -224,17 +215,11 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       }
 
       try {
-        // eslint-disable-next-line no-eval
-        const optionalRequire: ((moduleId: string) => unknown) | undefined = eval('require');
-        if (typeof optionalRequire !== 'function') {
-          return fallbackVersion;
-        }
+        const expoDeviceModule = await import('expo-device');
+        const { platformApiLevel } = expoDeviceModule;
 
-        const moduleName = ['expo-device'].join('');
-        const expoDeviceModule = optionalRequire(moduleName) as { platformApiLevel?: number | null } | undefined;
-
-        if (typeof expoDeviceModule?.platformApiLevel === 'number') {
-          return expoDeviceModule.platformApiLevel;
+        if (typeof platformApiLevel === 'number') {
+          return platformApiLevel;
         }
       } catch (error) {
         console.log('ExpoDevice module unavailable, falling back to Platform.Version', error);
@@ -243,7 +228,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       return fallbackVersion;
     };
 
-    const androidApiLevel = resolveAndroidApiLevel();
+    const androidApiLevel = await resolveAndroidApiLevel();
 
     if (androidApiLevel < 0) {
       console.log('Unknown Android API level, assuming BLE permissions granted');
