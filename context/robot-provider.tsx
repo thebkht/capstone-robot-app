@@ -3,6 +3,198 @@ import { PermissionsAndroid, Platform } from 'react-native';
 
 import { RobotAPI, RobotStatus, createRobotApi } from '@/services/robot-api';
 
+type ExpoBluetoothModule = Record<string, unknown>;
+
+const pickFunction = (
+  source: ExpoBluetoothModule | null,
+  names: string[],
+): ((...args: unknown[]) => unknown) | undefined => {
+  if (!source) {
+    return undefined;
+  }
+
+  for (const name of names) {
+    const candidate = source[name];
+    if (typeof candidate === 'function') {
+      return candidate as (...args: unknown[]) => unknown;
+    }
+  }
+
+  return undefined;
+};
+
+const toError = (value: unknown): Error | null => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Error) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    return new Error(value);
+  }
+
+  if (typeof value === 'object' && 'message' in value) {
+    const message = String((value as { message: unknown }).message ?? 'Unknown Bluetooth error');
+    const error = new Error(message);
+    if ('code' in value) {
+      (error as { code?: unknown }).code = (value as { code?: unknown }).code;
+    }
+    return error;
+  }
+
+  return new Error('Bluetooth error');
+};
+
+const toBleDevice = (
+  payload: unknown,
+): { id: string; name: string | null; rssi: number | null } | null => {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  const idCandidate = candidate.id ?? candidate.identifier ?? candidate.deviceId;
+  const id =
+    typeof idCandidate === 'string'
+      ? idCandidate
+      : typeof idCandidate === 'number'
+        ? String(idCandidate)
+        : null;
+
+  if (!id) {
+    return null;
+  }
+
+  const nameCandidate = candidate.name ?? candidate.localName ?? candidate.displayName;
+  const rssiCandidate = candidate.rssi ?? candidate.RSSI ?? candidate.signalStrength;
+
+  return {
+    id,
+    name: typeof nameCandidate === 'string' ? nameCandidate : null,
+    rssi: typeof rssiCandidate === 'number' ? rssiCandidate : null,
+  };
+};
+
+const normalizeBleState = (value: unknown): BleState => {
+  if (typeof value !== 'string') {
+    return 'Unknown';
+  }
+
+  const normalized = value.toLowerCase();
+
+  if (normalized.includes('off')) {
+    return 'PoweredOff';
+  }
+
+  if (normalized.includes('unauth')) {
+    return 'Unauthorized';
+  }
+
+  if (normalized.includes('reset')) {
+    return 'Resetting';
+  }
+
+  if (normalized.includes('turning')) {
+    return 'Resetting';
+  }
+
+  if (normalized.includes('support') || normalized.includes('unavailable')) {
+    return 'Unsupported';
+  }
+
+  if ((normalized.includes('power') && normalized.includes('on')) || normalized === 'on') {
+    return 'PoweredOn';
+  }
+
+  return 'Unknown';
+};
+
+const createRemoval = (subscription: unknown): (() => void) => {
+  if (!subscription) {
+    return () => {};
+  }
+
+  if (typeof subscription === 'function') {
+    return subscription as () => void;
+  }
+
+  if (typeof subscription === 'object') {
+    const record = subscription as Record<string, unknown>;
+    if (typeof record.remove === 'function') {
+      return record.remove.bind(record);
+    }
+    if (typeof record.unsubscribe === 'function') {
+      return record.unsubscribe.bind(record);
+    }
+    if (typeof record.stop === 'function') {
+      return record.stop.bind(record);
+    }
+    if (typeof record.destroy === 'function') {
+      return record.destroy.bind(record);
+    }
+  }
+
+  return () => {};
+};
+
+const isPromise = (value: unknown): value is PromiseLike<unknown> =>
+  Boolean(value) && typeof (value as PromiseLike<unknown>).then === 'function';
+
+const buildScanOptions = (uuids: string[] | null, options: unknown) => {
+  const result: Record<string, unknown> = {};
+
+  if (Array.isArray(uuids) && uuids.length > 0) {
+    result.services = uuids;
+  }
+
+  if (options && typeof options === 'object') {
+    Object.assign(result, options as Record<string, unknown>);
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+};
+
+const parseScanArguments = (args: unknown[]): {
+  error: Error | null;
+  device: { id: string; name: string | null; rssi: number | null } | null;
+} => {
+  if (args.length >= 2) {
+    return {
+      error: toError(args[0]),
+      device: toBleDevice(args[1]),
+    };
+  }
+
+  if (args.length === 1) {
+    const [single] = args;
+
+    if (single && typeof single === 'object') {
+      const payload = single as Record<string, unknown>;
+      const errorCandidate = 'error' in payload ? payload.error : undefined;
+      const deviceCandidate =
+        'device' in payload
+          ? payload.device
+          : 'peripheral' in payload
+            ? payload.peripheral
+            : payload;
+      return {
+        error: toError(errorCandidate),
+        device: toBleDevice(deviceCandidate),
+      };
+    }
+
+    return {
+      error: null,
+      device: toBleDevice(single),
+    };
+  }
+
+  return { error: null, device: null };
+};
+
 interface OptionalBleManager {
   startDeviceScan: (
     uuids: string[] | null,
@@ -21,6 +213,250 @@ interface OptionalBleManager {
   state?: () => Promise<BleState>;
   enable?: () => Promise<void>;
 }
+
+class ExpoBleManager implements OptionalBleManager {
+  private readonly bluetooth: ExpoBluetoothModule;
+
+  private readonly startScanFn?: (...args: unknown[]) => unknown;
+
+  private readonly stopScanFn?: (...args: unknown[]) => unknown;
+
+  private readonly addStateListenerFn?: (...args: unknown[]) => unknown;
+
+  private readonly enableFn?: (...args: unknown[]) => unknown;
+
+  private readonly stateFn?: (...args: unknown[]) => unknown;
+
+  private removeScanSubscription: (() => void) | null = null;
+
+  constructor(bluetooth: ExpoBluetoothModule) {
+    this.bluetooth = bluetooth;
+    this.startScanFn = pickFunction(bluetooth, [
+      'startDeviceScan',
+      'startScanningAsync',
+      'startScanAsync',
+      'startScan',
+      'scanForPeripheralsAsync',
+    ]);
+    this.stopScanFn = pickFunction(bluetooth, [
+      'stopDeviceScan',
+      'stopScanningAsync',
+      'stopScanAsync',
+      'stopScan',
+    ]);
+    this.addStateListenerFn = pickFunction(bluetooth, [
+      'onStateChange',
+      'addStateListener',
+      'addStateChangeListener',
+      'addBluetoothStateListener',
+    ]);
+    this.enableFn = pickFunction(bluetooth, [
+      'requestEnableAsync',
+      'enableAsync',
+      'enable',
+      'setEnabledAsync',
+    ]);
+    this.stateFn = pickFunction(bluetooth, ['getStateAsync', 'state', 'getState']);
+  }
+
+  canScan() {
+    return Boolean(this.startScanFn);
+  }
+
+  startDeviceScan(
+    uuids: string[] | null,
+    options: unknown,
+    listener: (
+      error: Error | null,
+      device: { id: string; name: string | null; rssi: number | null } | null,
+    ) => void,
+  ) {
+    if (!this.startScanFn) {
+      listener(new Error('Bluetooth scanning is not supported on this device'), null);
+      return;
+    }
+
+    this.stopDeviceScan();
+
+    const callback = (...args: unknown[]) => {
+      const { error, device } = parseScanArguments(args);
+      listener(error, device);
+    };
+
+    try {
+      const result = this.startScanFn.call(this.bluetooth, buildScanOptions(uuids, options), callback);
+      this.storeScanSubscription(result);
+    } catch (error) {
+      listener(toError(error), null);
+    }
+  }
+
+  stopDeviceScan() {
+    if (this.removeScanSubscription) {
+      try {
+        this.removeScanSubscription();
+      } catch (error) {
+        console.warn('Failed to clear Bluetooth scan subscription', error);
+      }
+      this.removeScanSubscription = null;
+    }
+
+    if (!this.stopScanFn) {
+      return;
+    }
+
+    try {
+      const outcome = this.stopScanFn.call(this.bluetooth);
+      if (isPromise(outcome)) {
+        outcome.catch((error) => {
+          console.warn('Failed to stop Bluetooth scan', error);
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to stop Bluetooth scan', error);
+    }
+  }
+
+  destroy() {
+    this.stopDeviceScan();
+  }
+
+  onStateChange(
+    listener: (state: BleState) => void,
+    emitCurrentState?: boolean,
+  ): { remove: () => void } | undefined {
+    const handler = (value: unknown) => {
+      const stateValue =
+        value && typeof value === 'object' && 'state' in (value as Record<string, unknown>)
+          ? (value as Record<string, unknown>).state
+          : value;
+      listener(normalizeBleState(stateValue));
+    };
+
+    let removal: (() => void) | null = null;
+
+    if (this.addStateListenerFn) {
+      try {
+        const subscription = this.addStateListenerFn.call(this.bluetooth, handler);
+        removal = createRemoval(subscription);
+      } catch (error) {
+        console.warn('Failed to subscribe to Bluetooth state changes', error);
+      }
+    }
+
+    if (!removal) {
+      const addEventListener = pickFunction(this.bluetooth, ['addEventListener', 'addListener']);
+      if (addEventListener) {
+        const eventNames = ['stateChanged', 'stateChange', 'state', 'bluetoothStateChange'];
+        for (const eventName of eventNames) {
+          try {
+            const subscription = addEventListener.call(this.bluetooth, eventName, handler);
+            removal = createRemoval(subscription);
+            if (removal) {
+              break;
+            }
+          } catch (error) {
+            console.warn('Failed to subscribe to Bluetooth state event', error);
+          }
+        }
+      }
+    }
+
+    if (emitCurrentState) {
+      this.state()
+        .then((current) => listener(current))
+        .catch(() => {});
+    }
+
+    if (!removal) {
+      return undefined;
+    }
+
+    return { remove: removal };
+  }
+
+  async state(): Promise<BleState> {
+    try {
+      if (this.stateFn) {
+        const result = await Promise.resolve(this.stateFn.call(this.bluetooth));
+        const stateValue =
+          result && typeof result === 'object' && 'state' in (result as Record<string, unknown>)
+            ? (result as Record<string, unknown>).state
+            : result;
+        return normalizeBleState(stateValue);
+      }
+
+      const candidate =
+        (this.bluetooth.state ?? this.bluetooth.bluetoothState ?? this.bluetooth.currentState) as unknown;
+      if (typeof candidate === 'string') {
+        return normalizeBleState(candidate);
+      }
+    } catch (error) {
+      console.warn('Failed to resolve Bluetooth state', error);
+    }
+
+    return 'Unknown';
+  }
+
+  async enable(): Promise<void> {
+    const enableFunction = this.enableFn ?? pickFunction(this.bluetooth, ['openSettingsAsync']);
+    if (!enableFunction) {
+      return;
+    }
+
+    try {
+      const outcome = enableFunction.call(this.bluetooth);
+      if (isPromise(outcome)) {
+        await outcome;
+      }
+    } catch (error) {
+      console.warn('Failed to enable Bluetooth', error);
+    }
+  }
+
+  private storeScanSubscription(subscription: unknown) {
+    if (!subscription) {
+      return;
+    }
+
+    if (isPromise(subscription)) {
+      subscription
+        .then((value) => {
+          this.storeScanSubscription(value);
+        })
+        .catch((error) => {
+          console.warn('Bluetooth scan subscription rejected', error);
+        });
+      return;
+    }
+
+    this.removeScanSubscription = createRemoval(subscription);
+  }
+}
+
+const loadExpoBleManager = async () => {
+  try {
+    const module = (await import('expo-bluetooth')) as Record<string, unknown> | undefined;
+    if (!module) {
+      return null;
+    }
+
+    const bluetooth = (module.Bluetooth ?? module.default ?? module) as ExpoBluetoothModule | undefined;
+    if (!bluetooth || typeof bluetooth !== 'object') {
+      return null;
+    }
+
+    const manager = new ExpoBleManager(bluetooth);
+    if (!manager.canScan()) {
+      return null;
+    }
+
+    return { bluetooth, manager };
+  } catch (error) {
+    console.warn('Expo Bluetooth module unavailable', error);
+    return null;
+  }
+};
 
 type BleState =
   | 'Unknown'
@@ -65,11 +501,13 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       : true;
   const [bleManager, setBleManager] = useState<OptionalBleManager | null>(null);
   const [bleState, setBleState] = useState<BleState | null>(null);
+  const [bluetoothModule, setBluetoothModule] = useState<ExpoBluetoothModule | null>(null);
 
   useEffect(() => {
     console.log('RobotProvider BLE initialization', { shouldAttemptBle });
     if (!shouldAttemptBle) {
       setBleManager(null);
+      setBluetoothModule(null);
       return;
     }
 
@@ -77,6 +515,19 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     let activeManager: OptionalBleManager | null = null;
 
     const loadBleManager = async () => {
+      const expoResult = await loadExpoBleManager();
+      if (expoResult) {
+        activeManager = expoResult.manager;
+        console.log('Expo Bluetooth manager loaded successfully');
+        if (isMounted) {
+          setBluetoothModule(expoResult.bluetooth);
+          setBleManager(expoResult.manager);
+        } else {
+          expoResult.manager.destroy();
+        }
+        return;
+      }
+
       try {
         // eslint-disable-next-line no-eval
         const optionalRequire: ((moduleId: string) => unknown) | undefined = eval('require');
@@ -91,6 +542,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
         if (!bleModule?.BleManager) {
           if (isMounted) {
+            setBluetoothModule(null);
             setBleManager(null);
           }
           return;
@@ -99,6 +551,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         activeManager = new bleModule.BleManager();
         console.log('BleManager loaded successfully');
         if (isMounted) {
+          setBluetoothModule(null);
           setBleManager(activeManager);
         } else {
           activeManager.destroy();
@@ -106,6 +559,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       } catch (error) {
         console.warn('Bluetooth manager unavailable', error);
         if (isMounted) {
+          setBluetoothModule(null);
           setBleManager(null);
         }
       }
@@ -170,6 +624,34 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
   const requestBlePermissions = useCallback(async () => {
     console.log('Requesting BLE permissions');
+    const module = bluetoothModule;
+    const requestPermissionsFn = pickFunction(module, [
+      'requestPermissionsAsync',
+      'requestPermissions',
+    ]);
+    if (requestPermissionsFn && module) {
+      try {
+        const result = await Promise.resolve(requestPermissionsFn.call(module));
+        console.log('Expo Bluetooth permission response', result);
+        if (typeof result === 'boolean') {
+          return result;
+        }
+        if (result && typeof result === 'object') {
+          if ('granted' in (result as Record<string, unknown>)) {
+            return Boolean((result as Record<string, unknown>).granted);
+          }
+          if ('status' in (result as Record<string, unknown>)) {
+            const status = String((result as Record<string, unknown>).status);
+            if (status) {
+              return status.toLowerCase() === 'granted';
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Expo Bluetooth permission request failed', error);
+      }
+    }
+
     if (Platform.OS !== 'android') {
       console.log('BLE permissions granted by default on non-Android platform');
       return true;
@@ -233,7 +715,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
     console.log('Android version below 6, no BLE permissions required');
     return true;
-  }, []);
+  }, [bluetoothModule]);
 
   const refreshStatus = useCallback(async () => {
     try {
