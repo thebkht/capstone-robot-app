@@ -73,8 +73,10 @@ export default function ConnectionScreen() {
     statusError,
     bluetoothEnabled,
     bluetoothSupported,
-    setBluetoothEnabled,
     bleManager,
+    bleState,
+    requestBlePermissions,
+    setBluetoothEnabled,
   } = useRobot();
   const router = useRouter();
   const [ssid, setSsid] = useState('');
@@ -201,6 +203,11 @@ export default function ConnectionScreen() {
       return;
     }
 
+    if (bleState && bleState !== 'PoweredOn') {
+      Alert.alert('Bluetooth turned off', 'Power on Bluetooth to discover nearby robots.');
+      return;
+    }
+
     stopScan();
     setDevices([]);
     setIsScanning(true);
@@ -236,9 +243,9 @@ export default function ConnectionScreen() {
     scanTimeoutRef.current = setTimeout(() => {
       stopScan();
     }, 10_000);
-  }, [bleManager, bluetoothEnabled, bluetoothSupported, stopScan]);
+  }, [bleManager, bleState, bluetoothEnabled, bluetoothSupported, stopScan]);
 
-  const handleToggleBluetooth = useCallback(() => {
+  const handleToggleBluetooth = useCallback(async () => {
     if (!bluetoothSupported) {
       Alert.alert(
         'Bluetooth unavailable',
@@ -247,18 +254,53 @@ export default function ConnectionScreen() {
       return;
     }
 
-    setBluetoothEnabled(!bluetoothEnabled);
-  }, [bluetoothEnabled, bluetoothSupported, setBluetoothEnabled]);
+    if (!bluetoothEnabled) {
+      const granted = await requestBlePermissions();
+      if (!granted) {
+        Alert.alert(
+          'Permission required',
+          'Grant Bluetooth permissions in system settings to scan for nearby robots.',
+        );
+        return;
+      }
+
+      if (bleState === 'PoweredOff' && bleManager?.enable) {
+        try {
+          await bleManager.enable();
+        } catch (error) {
+          console.warn('Failed to enable Bluetooth', error);
+        }
+      }
+
+      setBluetoothEnabled(true);
+      return;
+    }
+
+    setBluetoothEnabled(false);
+  }, [
+    bleManager,
+    bleState,
+    bluetoothEnabled,
+    bluetoothSupported,
+    requestBlePermissions,
+    setBluetoothEnabled,
+  ]);
 
   const bluetoothStatus = useMemo(() => {
     if (!bluetoothSupported) {
       return { color: '#fb923c', label: 'Unavailable' };
     }
 
-    return bluetoothEnabled
-      ? { color: '#22d3ee', label: 'ON' }
-      : { color: '#f472b6', label: 'OFF' };
-  }, [bluetoothEnabled, bluetoothSupported]);
+    if (!bluetoothEnabled) {
+      return { color: '#f472b6', label: 'OFF' };
+    }
+
+    if (bleState && bleState !== 'PoweredOn') {
+      return { color: '#facc15', label: 'Starting…' };
+    }
+
+    return { color: '#22d3ee', label: 'ON' };
+  }, [bleState, bluetoothEnabled, bluetoothSupported]);
 
   const wifiStatus = useMemo(() => {
     if (connectionState === 'error') {
@@ -335,7 +377,9 @@ export default function ConnectionScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Toggle Bluetooth discovery"
-                onPress={handleToggleBluetooth}
+                onPress={() => {
+                  void handleToggleBluetooth();
+                }}
                 style={({ pressed }) => [pressed && styles.pressablePressed]}
               >
                 <StatusPill color={bluetoothStatus.color} label={`Bluetooth ${bluetoothStatus.label}`} />

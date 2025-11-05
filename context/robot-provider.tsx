@@ -1,4 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { PermissionsAndroid, Platform } from 'react-native';
+
 import { RobotAPI, RobotStatus, createRobotApi } from '@/services/robot-api';
 
 interface OptionalBleManager {
@@ -12,7 +14,21 @@ interface OptionalBleManager {
   ) => void;
   stopDeviceScan: () => void;
   destroy: () => void;
+  onStateChange?: (
+    listener: (state: BleState) => void,
+    emitCurrentState?: boolean,
+  ) => { remove: () => void } | undefined;
+  state?: () => Promise<BleState>;
+  enable?: () => Promise<void>;
 }
+
+type BleState =
+  | 'Unknown'
+  | 'Resetting'
+  | 'Unsupported'
+  | 'Unauthorized'
+  | 'PoweredOff'
+  | 'PoweredOn';
 
 interface RobotContextValue {
   api: RobotAPI;
@@ -28,6 +44,8 @@ interface RobotContextValue {
   bluetoothEnabled: boolean;
   bluetoothSupported: boolean;
   bleManager: OptionalBleManager | null;
+  bleState: BleState | null;
+  requestBlePermissions: () => Promise<boolean>;
 }
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
@@ -44,6 +62,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const shouldAttemptBle =
     typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_ENABLE_BLE === 'true';
   const [bleManager, setBleManager] = useState<OptionalBleManager | null>(null);
+  const [bleState, setBleState] = useState<BleState | null>(null);
 
   useEffect(() => {
     if (!shouldAttemptBle) {
@@ -101,12 +120,106 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const bluetoothSupported = shouldAttemptBle && Boolean(bleManager);
 
   useEffect(() => {
+    if (!bleManager) {
+      setBleState(null);
+      return;
+    }
+
+    let isMounted = true;
+    const subscription = bleManager.onStateChange?.((state) => {
+      if (isMounted) {
+        setBleState(state);
+      }
+    }, true);
+
+    if (bleManager.state) {
+      bleManager
+        .state()
+        .then((state) => {
+          if (isMounted) {
+            setBleState(state);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setBleState(null);
+          }
+        });
+    }
+
+    return () => {
+      isMounted = false;
+      subscription?.remove?.();
+    };
+  }, [bleManager]);
+
+  useEffect(() => {
     if (!bluetoothSupported && bluetoothEnabled) {
       setBluetoothEnabled(false);
     }
   }, [bluetoothEnabled, bluetoothSupported]);
 
   const api = useMemo(() => createRobotApi(baseUrl), [baseUrl]);
+
+  const requestBlePermissions = useCallback(async () => {
+    if (Platform.OS !== 'android') {
+      return true;
+    }
+
+    const androidVersion = typeof Platform.Version === 'number' ? Platform.Version : parseInt(Platform.Version, 10);
+
+    if (Number.isNaN(androidVersion)) {
+      return true;
+    }
+
+    if (androidVersion >= 31) {
+      const scanResult = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        {
+          title: 'Bluetooth scan permission',
+          message: 'Allow the app to scan for nearby robots over Bluetooth.',
+          buttonPositive: 'Allow',
+        },
+      );
+      const connectResult = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        {
+          title: 'Bluetooth connection permission',
+          message: 'Allow the app to connect to nearby robots over Bluetooth.',
+          buttonPositive: 'Allow',
+        },
+      );
+      const fineLocationResult = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: 'Location permission',
+          message: 'Allow the app to use location to discover nearby robots.',
+          buttonPositive: 'Allow',
+        },
+      );
+
+      return (
+        scanResult === PermissionsAndroid.RESULTS.GRANTED &&
+        connectResult === PermissionsAndroid.RESULTS.GRANTED &&
+        fineLocationResult === PermissionsAndroid.RESULTS.GRANTED
+      );
+    }
+
+    if (androidVersion >= 23) {
+      const fineLocationResult = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: 'Location permission',
+          message: 'Allow the app to use location to discover nearby robots.',
+          buttonPositive: 'Allow',
+        },
+      );
+
+      return fineLocationResult === PermissionsAndroid.RESULTS.GRANTED;
+    }
+
+    return true;
+  }, []);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -152,6 +265,8 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       setBluetoothEnabled,
       bluetoothSupported,
       bleManager,
+      bleState,
+      requestBlePermissions,
     }),
     [
       api,
@@ -163,6 +278,8 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       bluetoothEnabled,
       bluetoothSupported,
       bleManager,
+      bleState,
+      requestBlePermissions,
     ],
   );
 
