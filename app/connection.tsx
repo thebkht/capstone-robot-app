@@ -1,5 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
 import * as Network from "expo-network";
+import WifiManager from "react-native-wifi-reborn";
 import React, {
   useCallback,
   useEffect,
@@ -9,6 +10,8 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  PermissionsAndroid,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -50,6 +53,8 @@ export default function ConnectionScreen() {
     null
   );
   const [isLoadingDeviceNetwork, setIsLoadingDeviceNetwork] = useState(false);
+  const [ssidPermissionWarning, setSsidPermissionWarning] =
+    useState<string | null>(null);
   const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
   const [isScanningWifi, setIsScanningWifi] = useState(false);
   const [wifiScanError, setWifiScanError] = useState<string | null>(null);
@@ -59,9 +64,6 @@ export default function ConnectionScreen() {
   const [wifiConnectError, setWifiConnectError] = useState<string | null>(null);
   const [wifiConnectSuccess, setWifiConnectSuccess] = useState<string | null>(
     null
-  );
-  const [wifiCommandBase, setWifiCommandBase] = useState<string>(
-    canonicalizeUrl(baseUrl || DEFAULT_HOTSPOT_URL)
   );
 
   const refreshDeviceNetwork = useCallback(
@@ -78,31 +80,97 @@ export default function ConnectionScreen() {
         const normalizedIp =
           ipAddress && ipAddress !== "0.0.0.0" ? ipAddress : null;
 
-        // Try to get SSID using NetInfo
+        // Try to get SSID via WifiManager first, then fall back to NetInfo
         let ssid: string | null = null;
+        let permissionWarning: string | null = null;
         try {
-          const netInfoState = await NetInfo.fetch();
-          if (
-            netInfoState.type === "wifi" &&
-            netInfoState.details &&
-            "ssid" in netInfoState.details &&
-            netInfoState.details.ssid
-          ) {
-            ssid = netInfoState.details.ssid as string;
+          if (state.type === Network.NetworkStateType.WIFI) {
+            if (Platform.OS === "android") {
+              const fineLocationPermission =
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+
+              if (!fineLocationPermission) {
+                permissionWarning =
+                  "Wi-Fi SSID unavailable on this Android version.";
+              } else {
+                const hasPermission =
+                  await PermissionsAndroid.check(fineLocationPermission);
+
+                let granted = hasPermission;
+
+                if (!hasPermission) {
+                  const status = await PermissionsAndroid.request(
+                    fineLocationPermission,
+                    {
+                      title: "Location permission needed",
+                      message:
+                        "Allow location access to display the connected Wi-Fi network name.",
+                      buttonPositive: "Allow",
+                      buttonNegative: "Deny",
+                    }
+                  );
+
+                  granted = status === PermissionsAndroid.RESULTS.GRANTED;
+                }
+
+                if (!granted) {
+                  permissionWarning =
+                    "Grant location permission to display the Wi-Fi network name.";
+                } else {
+                  const wifiManagerSsid = await WifiManager.getCurrentWifiSSID();
+                  if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
+                    ssid = wifiManagerSsid;
+                  }
+                }
+              }
+            } else {
+              const wifiManagerSsid = await WifiManager.getCurrentWifiSSID();
+              if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
+                ssid = wifiManagerSsid;
+              } else if (Platform.OS === "ios") {
+                permissionWarning =
+                  "iOS may hide the Wi-Fi network name without additional entitlements.";
+              }
+            }
           }
-        } catch (ssidError) {
-          // SSID might not be available on all platforms or without permissions
-          console.log("Unable to fetch SSID", ssidError);
+        } catch (wifiManagerError) {
+          console.log("WifiManager failed to fetch SSID", wifiManagerError);
+          if (
+            state.type === Network.NetworkStateType.WIFI &&
+            Platform.OS === "ios"
+          ) {
+            permissionWarning =
+              "iOS may hide the Wi-Fi network name without additional entitlements.";
+          }
+        }
+
+        if (!ssid) {
+          try {
+            const netInfoState = await NetInfo.fetch();
+            if (
+              netInfoState.type === "wifi" &&
+              netInfoState.details &&
+              "ssid" in netInfoState.details &&
+              netInfoState.details.ssid
+            ) {
+              ssid = netInfoState.details.ssid as string;
+            }
+          } catch (netInfoError) {
+            console.log("NetInfo failed to fetch SSID", netInfoError);
+          }
         }
 
         if (!mountedRef.current) {
           return;
         }
 
+        setSsidPermissionWarning(permissionWarning);
         setDeviceNetwork({
           type: state.type,
           isConnected: Boolean(state.isConnected),
-          isWifi: state.type === "WIFI" && Boolean(state.isConnected),
+          isWifi:
+            state.type === Network.NetworkStateType.WIFI &&
+            Boolean(state.isConnected),
           ipAddress: normalizedIp,
           ssid,
         });
@@ -118,6 +186,7 @@ export default function ConnectionScreen() {
             : "Unable to determine device network status.";
         setDeviceNetwork(null);
         setDeviceNetworkError(message);
+        setSsidPermissionWarning(null);
       } finally {
         if (!mountedRef.current) {
           return;
@@ -150,12 +219,6 @@ export default function ConnectionScreen() {
   }, [setIsPolling]);
 
   useEffect(() => {
-    if (baseUrl) {
-      setWifiCommandBase(canonicalizeUrl(baseUrl));
-    }
-  }, [baseUrl]);
-
-  useEffect(() => {
     void refreshStatus();
   }, [refreshStatus]);
 
@@ -176,37 +239,40 @@ export default function ConnectionScreen() {
     }
   }, [selectedNetwork, status?.network?.availableNetworks]);
 
+  const statusNetwork = status?.network;
+
   const wifiStatusMeta = useMemo<WifiStatusMeta>(() => {
     if (isLoadingDeviceNetwork) {
       return {
         color: "#FBBF24",
-        label: "Checking network status",
-        details: ["Confirming the device Wi-Fi connection..."],
+        label: "Checking...",
+        details: ["Loading network name...", "Loading IP address..."],
         helper: null,
       };
     }
 
     if (deviceNetwork?.isWifi) {
-      const details = [
-        `Network type: ${deviceNetwork.type}`,
-        `Local IP: ${deviceNetwork.ipAddress ?? "Unavailable"}`,
-      ];
-      if (deviceNetwork.ssid) {
-        details.push(`SSID: ${deviceNetwork.ssid}`);
-      }
+      const networkName =
+        (deviceNetwork.ssid && deviceNetwork.ssid.trim()) ||
+        (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ||
+        "Unknown network";
+      const ipAddress =
+        (deviceNetwork.ipAddress && deviceNetwork.ipAddress.trim()) ||
+        (statusNetwork?.ip && statusNetwork.ip.trim()) ||
+        "Unavailable";
       return {
         color: "#1DD1A1",
-        label: "Connected to Wi-Fi",
-        details,
-        helper: null,
+        label: "Connected",
+        details: [networkName, ipAddress],
+        helper: ssidPermissionWarning,
       };
     }
 
     if (deviceNetwork) {
       return {
         color: "#F87171",
-        label: "Not connected to Wi-Fi",
-        details: [`Current network type: ${deviceNetwork.type}`],
+        label: "Offline",
+        details: ["Not connected", "Unavailable"],
         helper:
           "Join a Wi-Fi network on your phone to continue configuring the robot.",
       };
@@ -214,15 +280,24 @@ export default function ConnectionScreen() {
 
     return {
       color: "#FBBF24",
-      label: "Network status unavailable",
-      details: deviceNetworkError
-        ? [deviceNetworkError]
-        : ["Unable to read device network information."],
+      label: "Unknown",
+      details: [
+        deviceNetworkError ??
+          (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ??
+          "Network name unavailable",
+        (statusNetwork?.ip && statusNetwork.ip.trim()) || "IP address unavailable",
+      ],
       helper: deviceNetworkError
         ? null
-        : "Check network permissions and retry.",
+        : ssidPermissionWarning ?? "Check network permissions and retry.",
     };
-  }, [deviceNetwork, deviceNetworkError, isLoadingDeviceNetwork]);
+  }, [
+    deviceNetwork,
+    deviceNetworkError,
+    isLoadingDeviceNetwork,
+    ssidPermissionWarning,
+    statusNetwork,
+  ]);
 
   const handleScanPress = useCallback(async () => {
     setIsScanningWifi(true);
@@ -234,7 +309,6 @@ export default function ConnectionScreen() {
       const normalizedBase = baseUrl
         ? canonicalizeUrl(baseUrl)
         : canonicalizeUrl(DEFAULT_HOTSPOT_URL);
-      setWifiCommandBase(normalizedBase);
       console.log("Requesting Wi-Fi network scan", { baseUrl: normalizedBase });
       const { networks } = await api.listWifiNetworks();
       const validNetworks = Array.isArray(networks)
@@ -297,10 +371,13 @@ export default function ConnectionScreen() {
         password: wifiPassword.trim(),
       };
 
+      const normalizedBase = baseUrl
+        ? canonicalizeUrl(baseUrl)
+        : canonicalizeUrl(DEFAULT_HOTSPOT_URL);
       console.log("Submitting Wi-Fi credentials to robot", {
         ssid: selectedNetwork,
         hasPassword: payload.password.length > 0,
-        baseUrl: wifiCommandBase,
+        baseUrl: normalizedBase,
       });
 
       const result = await api.connectWifi(payload);
@@ -329,7 +406,7 @@ export default function ConnectionScreen() {
     } finally {
       setIsSubmittingWifi(false);
     }
-  }, [api, refreshStatus, selectedNetwork, wifiCommandBase, wifiPassword]);
+  }, [api, baseUrl, refreshStatus, selectedNetwork, wifiPassword]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
@@ -348,36 +425,44 @@ export default function ConnectionScreen() {
           </ThemedText>
 
           <ThemedView style={styles.statusCard}>
-            <ThemedText type="subtitle">Robot hotspot status</ThemedText>
-            <ThemedText style={styles.statusHint}>
-              Target address: {wifiCommandBase}
+            <ThemedText type="subtitle" style={styles.statusTitle}>
+              Connection Info
             </ThemedText>
-            <View style={styles.statusRow}>
-              <View
-                style={[
-                  styles.statusIndicator,
-                  { backgroundColor: wifiStatusMeta.color },
-                ]}
-              />
-              <View style={styles.statusText}>
-                <ThemedText style={styles.statusLabel}>
-                  {wifiStatusMeta.label}
+            <View style={styles.infoGroup}>
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>
+                  WiFi Connection:
                 </ThemedText>
-                {wifiStatusMeta.details.map((line, index) => (
-                  <ThemedText
-                    key={`${line}-${index}`}
-                    style={styles.statusMeta}
-                  >
-                    {line}
+                <View style={styles.infoValueContainer}>
+                  <ThemedText style={styles.infoValue}>
+                    {wifiStatusMeta.label}
                   </ThemedText>
-                ))}
-                {wifiStatusMeta.helper ? (
-                  <ThemedText style={styles.statusWarning}>
-                    {wifiStatusMeta.helper}
-                  </ThemedText>
-                ) : null}
+                  <View
+                    style={[
+                      styles.statusIndicator,
+                      { backgroundColor: wifiStatusMeta.color },
+                    ]}
+                  />
+                </View>
+              </View>
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Network Name:</ThemedText>
+                <ThemedText style={styles.infoValue}>
+                  {wifiStatusMeta.details[0]}
+                </ThemedText>
+              </View>
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>IP Address:</ThemedText>
+                <ThemedText style={styles.infoValue}>
+                  {wifiStatusMeta.details[1]}
+                </ThemedText>
               </View>
             </View>
+            {wifiStatusMeta.helper ? (
+              <ThemedText style={styles.statusWarning}>
+                {wifiStatusMeta.helper}
+              </ThemedText>
+            ) : null}
             {statusError ? (
               <ThemedText style={styles.statusError}>
                 Unable to reach the robot hotspot. Confirm that your phone is
@@ -540,33 +625,41 @@ const styles = StyleSheet.create({
     borderColor: "#1F2937",
     backgroundColor: "#0F0F10",
   },
-  statusHint: {
-    color: "#6B7280",
-    fontFamily: "JetBrainsMono-Regular",
-  },
-  statusRow: {
-    flexDirection: "row",
-    gap: 16,
+  statusTitle: {
+    color: "#F9FAFB",
+    fontFamily: "JetBrainsMono-Bold",
   },
   statusIndicator: {
-    width: 12,
-    height: 12,
-  },
-  statusText: {
-    flex: 1,
-    gap: 4,
-  },
-  statusLabel: {
-    color: "#E5E7EB",
-    fontFamily: "JetBrainsMono-Regular",
-  },
-  statusMeta: {
-    color: "#9CA3AF",
-    fontFamily: "JetBrainsMono-Regular",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   statusWarning: {
     color: "#FBBF24",
     fontFamily: "JetBrainsMono-Regular",
+  },
+  infoGroup: {
+    gap: 12,
+    paddingTop: 8,
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  infoLabel: {
+    color: "#9CA3AF",
+    fontFamily: "JetBrainsMono-Regular",
+  },
+  infoValue: {
+    color: "#F9FAFB",
+    fontFamily: "JetBrainsMono-Regular",
+  },
+  infoValueContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   statusError: {
     color: "#F87171",

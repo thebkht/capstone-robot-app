@@ -48,3 +48,9 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Wi-Fi SSID support
+
+- The connection screen reads the current Wi-Fi SSID with [`react-native-wifi-reborn`](https://github.com/JuanSeBestia/react-native-wifi-reborn). Android builds must declare and grant the `ACCESS_FINE_LOCATION` permission so the native API can return the SSID.
+- Apple restricts SSID visibility on iOS without enterprise entitlements. In those builds the UI falls back to other data and surfaces a helper message when the system withholds the network name.
+- Expo Go does not bundle the Wi-Fi module. Create a [custom development client](https://docs.expo.dev/development/create-development-builds/) or eject to the bare workflow to exercise SSID lookups on device.
