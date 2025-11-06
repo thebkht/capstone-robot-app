@@ -23,31 +23,91 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
-
-const DEFAULT_HOTSPOT_URL = "http://192.168.4.1:8000";
 const ROBOT_AP_SSID = "ROBOTSNAME_AP";
 
 const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, "");
 
-const deriveRobotLanBaseUrl = (ipAddress: string) => {
-  const segments = ipAddress.split(".").map((segment) => segment.trim());
-
-  if (segments.length !== 4 || segments.some((segment) => segment === "")) {
-    return null;
+const isValidIpv4 = (value: string | null | undefined) => {
+  if (!value) {
+    return false;
   }
 
-  const [first, second, third] = segments;
-  const prefixSegments = [first, second, third];
-  const hasInvalidSegment = prefixSegments.some((segment) => {
+  const segments = value.split(".");
+  if (segments.length !== 4) {
+    return false;
+  }
+
+  return segments.every((segment) => {
+    if (segment.trim() === "") {
+      return false;
+    }
     const numeric = Number(segment);
-    return Number.isNaN(numeric) || numeric < 0 || numeric > 255;
+    return Number.isInteger(numeric) && numeric >= 0 && numeric <= 255;
   });
+};
 
-  if (hasInvalidSegment) {
+const extractUrlParts = (value: string | null | undefined) => {
+  if (!value) {
     return null;
   }
 
-  return `http://${prefixSegments.join(".")}.10:8000`;
+  try {
+    const parsed = new URL(value.includes("://") ? value : `http://${value}`);
+    return {
+      protocol: parsed.protocol || "http:",
+      host: parsed.hostname,
+      port: parsed.port,
+    };
+  } catch (error) {
+    console.warn("Failed to parse robot base URL", value, error);
+    return null;
+  }
+};
+
+const deriveRobotLanBaseUrl = (
+  deviceIpAddress: string,
+  options: { currentBaseUrl: string; statusIp?: string | null }
+) => {
+  const ipSegments = deviceIpAddress
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment !== "");
+
+  if (ipSegments.length !== 4) {
+    return null;
+  }
+
+  const { currentBaseUrl, statusIp } = options;
+  const baseParts = extractUrlParts(currentBaseUrl);
+  const protocol = baseParts?.protocol ?? "http:";
+  const port = baseParts?.port ?? "8000";
+
+  const buildUrl = (ip: string) => {
+    const trimmedProtocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
+    const normalizedPort = port ? `:${port}` : "";
+    return `${trimmedProtocol}//${ip}${normalizedPort}`;
+  };
+
+  if (isValidIpv4(statusIp)) {
+    return buildUrl(statusIp as string);
+  }
+
+  if (baseParts?.host && isValidIpv4(baseParts.host)) {
+    const hostSegments = baseParts.host.split(".");
+    const candidateSegments = [
+      ipSegments[0],
+      ipSegments[1],
+      ipSegments[2],
+      hostSegments[3],
+    ];
+    const candidateIp = candidateSegments.join(".");
+
+    if (isValidIpv4(candidateIp)) {
+      return buildUrl(candidateIp);
+    }
+  }
+
+  return null;
 };
 
 type DeviceNetworkDetails = {
@@ -235,7 +295,10 @@ export default function ConnectionScreen() {
       return;
     }
 
-    const derivedUrl = deriveRobotLanBaseUrl(deviceNetwork.ipAddress);
+    const derivedUrl = deriveRobotLanBaseUrl(deviceNetwork.ipAddress, {
+      currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
+      statusIp: status?.network?.ip,
+    });
 
     if (!derivedUrl) {
       return;
@@ -243,15 +306,8 @@ export default function ConnectionScreen() {
 
     const normalizedDerived = canonicalizeUrl(derivedUrl);
     const normalizedBase = baseUrl ? canonicalizeUrl(baseUrl) : "";
-    const fallbackBaseUrls = [
-      canonicalizeUrl(DEFAULT_HOTSPOT_URL),
-      canonicalizeUrl(DEFAULT_ROBOT_BASE_URL),
-    ];
 
-    if (
-      normalizedBase !== normalizedDerived &&
-      (normalizedBase === "" || fallbackBaseUrls.includes(normalizedBase))
-    ) {
+    if (normalizedBase !== normalizedDerived) {
       setBaseUrl(normalizedDerived);
     }
   }, [
@@ -259,7 +315,30 @@ export default function ConnectionScreen() {
     deviceNetwork?.ipAddress,
     deviceNetwork?.isWifi,
     setBaseUrl,
+    status?.network?.ip,
   ]);
+
+  useEffect(() => {
+    if (!status?.network?.ip) {
+      return;
+    }
+
+    const nextUrl = deriveRobotLanBaseUrl(status.network.ip, {
+      currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
+      statusIp: status.network.ip,
+    });
+
+    if (!nextUrl) {
+      return;
+    }
+
+    const normalizedNext = canonicalizeUrl(nextUrl);
+    const normalizedBase = baseUrl ? canonicalizeUrl(baseUrl) : "";
+
+    if (normalizedNext !== normalizedBase) {
+      setBaseUrl(normalizedNext);
+    }
+  }, [baseUrl, setBaseUrl, status?.network?.ip]);
 
   const handleStatusRefresh = useCallback(() => {
     void refreshDeviceNetwork();
@@ -359,9 +438,9 @@ export default function ConnectionScreen() {
     setWifiConnectSuccess(null);
 
     try {
-      const normalizedBase = baseUrl
-        ? canonicalizeUrl(baseUrl)
-        : canonicalizeUrl(DEFAULT_HOTSPOT_URL);
+      const normalizedBase = canonicalizeUrl(
+        baseUrl || DEFAULT_ROBOT_BASE_URL
+      );
       console.log("Requesting Wi-Fi network scan", { baseUrl: normalizedBase });
       const { networks } = await api.listWifiNetworks();
       const validNetworks = Array.isArray(networks)
@@ -424,9 +503,9 @@ export default function ConnectionScreen() {
         password: wifiPassword.trim(),
       };
 
-      const normalizedBase = baseUrl
-        ? canonicalizeUrl(baseUrl)
-        : canonicalizeUrl(DEFAULT_HOTSPOT_URL);
+      const normalizedBase = canonicalizeUrl(
+        baseUrl || DEFAULT_ROBOT_BASE_URL
+      );
       console.log("Submitting Wi-Fi credentials to robot", {
         ssid: selectedNetwork,
         hasPassword: payload.password.length > 0,
