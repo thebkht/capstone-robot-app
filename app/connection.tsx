@@ -26,6 +26,7 @@ type ConnectionPhase = 'idle' | 'connecting' | 'connected' | 'error';
 type NetworkScanOptions = {
   statusMessage?: string;
   presetSubnets?: string[];
+  shouldScanWifi?: boolean;
 };
 
 const normalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
@@ -57,12 +58,15 @@ const STATUS_META: Record<ConnectionPhase, { label: string; color: string }> = {
 };
 
 export default function ConnectionScreen() {
-  const { baseUrl, setBaseUrl, refreshStatus } = useRobot();
+  const { api, baseUrl, setBaseUrl, refreshStatus, status } = useRobot();
   const [phase, setPhase] = useState<ConnectionPhase>('idle');
   const [statusMessage, setStatusMessage] = useState(
     'Looking for the robot automatically. We will try saved addresses and common defaults.',
   );
   const [recentUrls, setRecentUrls] = useState<string[]>([]);
+  const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
+  const [isScanningWifi, setIsScanningWifi] = useState(false);
+  const [wifiScanError, setWifiScanError] = useState<string | null>(null);
   const hasAutoAttemptedRef = useRef(false);
   const isMountedRef = useRef(true);
   const lastAttemptedUrlRef = useRef<string | null>(null);
@@ -89,6 +93,54 @@ export default function ConnectionScreen() {
     },
     [persistRecentUrls],
   );
+
+  const wifiStatusMeta = useMemo(() => {
+    const connectedSsid = status?.network?.wifiSsid;
+    const isConnected = Boolean(connectedSsid);
+
+    return {
+      color: isConnected ? '#1DD1A1' : '#F87171',
+      label: isConnected ? 'Connected' : 'Not connected',
+      ssid: connectedSsid ?? 'Unknown',
+      ip: status?.network?.ip ?? 'Unknown',
+    };
+  }, [status]);
+
+  const scanWifiNetworks = useCallback(async () => {
+    if (!baseUrl) {
+      setWifiNetworks([]);
+      setWifiScanError('Connect to the robot to request a Wi-Fi scan.');
+      return false;
+    }
+
+    setIsScanningWifi(true);
+    setWifiScanError(null);
+
+    try {
+      console.log('Requesting Wi-Fi network scan');
+      const response = await api.listWifiNetworks();
+      const networks = Array.isArray(response.networks)
+        ? response.networks.filter((item): item is string => typeof item === 'string')
+        : [];
+
+      setWifiNetworks(networks);
+
+      if (!networks.length) {
+        setWifiScanError('No Wi-Fi networks detected. Try rescanning closer to the router.');
+      }
+
+      console.log('Wi-Fi network scan completed', { count: networks.length });
+      return networks.length > 0;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to scan for Wi-Fi networks.';
+      setWifiScanError(message);
+      console.warn('Wi-Fi network scan failed', error);
+      return false;
+    } finally {
+      setIsScanningWifi(false);
+    }
+  }, [api, baseUrl]);
 
   type ProbeResult = { success: boolean; robotName?: string; reason?: string };
 
@@ -130,6 +182,7 @@ export default function ConnectionScreen() {
   interface AttemptOptions {
     statusMessage?: string;
     skipRecent?: boolean;
+    shouldScanWifi?: boolean;
   }
 
   interface AttemptResult {
@@ -190,6 +243,10 @@ export default function ConnectionScreen() {
           console.warn('Failed to refresh robot status after connecting', error);
         });
 
+        if (options.shouldScanWifi) {
+          await scanWifiNetworks();
+        }
+
         return { success: true, normalizedUrl: prepared };
       }
 
@@ -202,7 +259,7 @@ export default function ConnectionScreen() {
 
       return { success: false, normalizedUrl: prepared };
     },
-    [probeRobotUrl, recordRecentUrl, refreshStatus, setBaseUrl],
+    [probeRobotUrl, recordRecentUrl, refreshStatus, scanWifiNetworks, setBaseUrl],
   );
 
   const runLocalNetworkScan = useCallback(
@@ -314,6 +371,10 @@ export default function ConnectionScreen() {
           console.warn('Failed to refresh robot status after network scan', error);
         });
 
+        if (options.shouldScanWifi) {
+          await scanWifiNetworks();
+        }
+
         return true;
       }
 
@@ -327,7 +388,15 @@ export default function ConnectionScreen() {
 
       return false;
     },
-    [baseUrl, probeRobotUrl, recentUrls, recordRecentUrl, refreshStatus, setBaseUrl],
+    [
+      baseUrl,
+      probeRobotUrl,
+      recentUrls,
+      recordRecentUrl,
+      refreshStatus,
+      scanWifiNetworks,
+      setBaseUrl,
+    ],
   );
 
   useEffect(() => {
@@ -407,6 +476,7 @@ export default function ConnectionScreen() {
       console.log('Manually attempting hotspot address', DEFAULT_HOTSPOT_URL);
       const result = await attemptConnection(DEFAULT_HOTSPOT_URL, {
         skipRecent: true,
+        shouldScanWifi: true,
       });
 
       if (result.normalizedUrl) {
@@ -417,12 +487,17 @@ export default function ConnectionScreen() {
         return;
       }
 
-      await runLocalNetworkScan(attempted, [DEFAULT_HOTSPOT_URL], {
+      const found = await runLocalNetworkScan(attempted, [DEFAULT_HOTSPOT_URL], {
         statusMessage: 'Scanning hotspot network for the robot…',
         presetSubnets: ['192.168.4'],
+        shouldScanWifi: true,
       });
+
+      if (!found) {
+        setWifiNetworks([]);
+      }
     })();
-  }, [attemptConnection, runLocalNetworkScan]);
+  }, [attemptConnection, runLocalNetworkScan, setWifiNetworks]);
 
   const handleRetrySavedPress = useCallback(() => {
     if (!baseUrl) {
@@ -493,6 +568,58 @@ export default function ConnectionScreen() {
             </View>
             <ThemedText style={styles.statusMessage}>{statusMessage}</ThemedText>
           </View>
+
+          <ThemedView style={styles.wifiCard}>
+            <ThemedText type="subtitle">Robot Wi-Fi status</ThemedText>
+            <View style={styles.wifiStatusRow}>
+              <View style={[styles.statusIndicator, { backgroundColor: wifiStatusMeta.color }]} />
+              <View style={styles.wifiStatusText}>
+                <ThemedText style={styles.wifiStatusLabel}>
+                  Wi-Fi connection: {wifiStatusMeta.label}
+                </ThemedText>
+                <ThemedText style={styles.wifiMeta}>
+                  Network name: {wifiStatusMeta.ssid}
+                </ThemedText>
+                <ThemedText style={styles.wifiMeta}>IP address: {wifiStatusMeta.ip}</ThemedText>
+              </View>
+            </View>
+
+            <ThemedText style={styles.wifiSectionLabel}>Available networks</ThemedText>
+            <View style={styles.networkList}>
+              {wifiNetworks.length ? (
+                wifiNetworks.map((network) => (
+                  <ThemedView key={network} style={styles.networkRow}>
+                    <ThemedText style={styles.networkName}>{network}</ThemedText>
+                  </ThemedView>
+                ))
+              ) : (
+                <ThemedText style={styles.wifiMeta}>
+                  {wifiScanError ??
+                    (isScanningWifi
+                      ? 'Scanning for Wi-Fi networks…'
+                      : 'No scan results yet. Connect to the robot hotspot and scan to continue.')}
+                </ThemedText>
+              )}
+            </View>
+
+            <Pressable
+              style={[
+                styles.scanButton,
+                (phase !== 'connected' || isScanningWifi) && styles.disabledSecondary,
+              ]}
+              disabled={phase !== 'connected' || isScanningWifi}
+              onPress={() => {
+                hasAutoAttemptedRef.current = true;
+                void scanWifiNetworks();
+              }}
+            >
+              {isScanningWifi ? (
+                <ActivityIndicator color="#E5E7EB" />
+              ) : (
+                <ThemedText style={styles.secondaryButtonText}>Scan robot Wi-Fi networks</ThemedText>
+              )}
+            </Pressable>
+          </ThemedView>
 
           {baseUrl ? (
             <Pressable
@@ -625,6 +752,51 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     lineHeight: 22,
     color: '#9CA3AF',
+  },
+  wifiCard: {
+    gap: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderRadius: 0,
+    borderColor: '#1F2937',
+    backgroundColor: '#0F0F10',
+  },
+  wifiStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  wifiStatusText: {
+    gap: 6,
+    flex: 1,
+  },
+  wifiStatusLabel: {
+    color: '#F3F4F6',
+  },
+  wifiMeta: {
+    color: '#9CA3AF',
+  },
+  wifiSectionLabel: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    color: '#6B7280',
+  },
+  networkList: {
+    gap: 8,
+  },
+  networkRow: {
+    borderWidth: 1,
+    borderRadius: 0,
+    borderColor: '#1F2937',
+    backgroundColor: '#0A0A0B',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  networkName: {
+    color: '#E5E7EB',
+    fontFamily: 'JetBrainsMono-Regular',
+    letterSpacing: 0.25,
   },
   primaryButton: {
     backgroundColor: '#1DD1A1',
