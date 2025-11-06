@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,6 +8,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+// eslint-disable-next-line import/no-unresolved
+import * as Network from 'expo-network';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -17,8 +19,26 @@ const DEFAULT_HOTSPOT_URL = 'http://192.168.4.1:8000';
 
 const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
 
+type DeviceNetworkDetails = {
+  type: Network.NetworkStateType;
+  isConnected: boolean;
+  isWifi: boolean;
+  ipAddress: string | null;
+};
+
+type WifiStatusMeta = {
+  color: string;
+  label: string;
+  details: string[];
+  helper: string | null;
+};
+
 export default function ConnectionScreen() {
   const { api, baseUrl, status, statusError, refreshStatus, setIsPolling } = useRobot();
+  const mountedRef = useRef(true);
+  const [deviceNetwork, setDeviceNetwork] = useState<DeviceNetworkDetails | null>(null);
+  const [deviceNetworkError, setDeviceNetworkError] = useState<string | null>(null);
+  const [isLoadingDeviceNetwork, setIsLoadingDeviceNetwork] = useState(false);
   const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
   const [isScanningWifi, setIsScanningWifi] = useState(false);
   const [wifiScanError, setWifiScanError] = useState<string | null>(null);
@@ -30,6 +50,69 @@ export default function ConnectionScreen() {
   const [wifiCommandBase, setWifiCommandBase] = useState<string>(
     canonicalizeUrl(baseUrl || DEFAULT_HOTSPOT_URL),
   );
+
+  const refreshDeviceNetwork = useCallback(
+    async (providedState?: Network.NetworkState) => {
+      if (!mountedRef.current) {
+        return;
+      }
+
+      setIsLoadingDeviceNetwork(true);
+
+      try {
+        const state = providedState ?? (await Network.getNetworkStateAsync());
+        const ipAddress = await Network.getIpAddressAsync();
+        const normalizedIp = ipAddress && ipAddress !== '0.0.0.0' ? ipAddress : null;
+
+        if (!mountedRef.current) {
+          return;
+        }
+
+        setDeviceNetwork({
+          type: state.type,
+          isConnected: Boolean(state.isConnected),
+          isWifi: state.type === Network.NetworkStateType.WIFI && Boolean(state.isConnected),
+          ipAddress: normalizedIp,
+        });
+        setDeviceNetworkError(null);
+      } catch (error) {
+        if (!mountedRef.current) {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : 'Unable to determine device network status.';
+        setDeviceNetwork(null);
+        setDeviceNetworkError(message);
+      } finally {
+        if (!mountedRef.current) {
+          return;
+        }
+
+        setIsLoadingDeviceNetwork(false);
+      }
+    },
+    [mountedRef],
+  );
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    void refreshDeviceNetwork();
+
+    const subscription = Network.addNetworkStateChangeListener((networkState) => {
+      void refreshDeviceNetwork(networkState);
+    });
+
+    return () => {
+      mountedRef.current = false;
+      subscription?.remove();
+    };
+  }, [refreshDeviceNetwork]);
+
+  const handleStatusRefresh = useCallback(() => {
+    void refreshDeviceNetwork();
+    void refreshStatus();
+  }, [refreshDeviceNetwork, refreshStatus]);
 
   useEffect(() => {
     setIsPolling(false);
@@ -61,17 +144,46 @@ export default function ConnectionScreen() {
     }
   }, [selectedNetwork, status?.network?.availableNetworks]);
 
-  const wifiStatusMeta = useMemo(() => {
-    const connectedSsid = status?.network?.wifiSsid;
-    const isConnected = Boolean(connectedSsid);
+  const wifiStatusMeta = useMemo<WifiStatusMeta>(() => {
+    if (isLoadingDeviceNetwork) {
+      return {
+        color: '#FBBF24',
+        label: 'Checking network status',
+        details: ['Confirming the device Wi-Fi connection...'],
+        helper: null,
+      };
+    }
+
+    if (deviceNetwork?.isWifi) {
+      return {
+        color: '#1DD1A1',
+        label: 'Connected to Wi-Fi',
+        details: [
+          `Network type: ${deviceNetwork.type}`,
+          `Local IP: ${deviceNetwork.ipAddress ?? 'Unavailable'}`,
+        ],
+        helper: null,
+      };
+    }
+
+    if (deviceNetwork) {
+      return {
+        color: '#F87171',
+        label: 'Not connected to Wi-Fi',
+        details: [`Current network type: ${deviceNetwork.type}`],
+        helper: 'Join a Wi-Fi network on your phone to continue configuring the robot.',
+      };
+    }
 
     return {
-      color: isConnected ? '#1DD1A1' : '#F87171',
-      label: isConnected ? 'Connected' : 'Not connected',
-      ssid: connectedSsid ?? 'Unavailable',
-      ip: status?.network?.ip ?? 'Unavailable',
+      color: '#FBBF24',
+      label: 'Network status unavailable',
+      details: deviceNetworkError
+        ? [deviceNetworkError]
+        : ['Unable to read device network information.'],
+      helper: deviceNetworkError ? null : 'Check network permissions and retry.',
     };
-  }, [status?.network?.ip, status?.network?.wifiSsid]);
+  }, [deviceNetwork, deviceNetworkError, isLoadingDeviceNetwork]);
 
   const handleScanPress = useCallback(async () => {
     setIsScanningWifi(true);
@@ -188,21 +300,15 @@ export default function ConnectionScreen() {
             <View style={styles.statusRow}>
               <View style={[styles.statusIndicator, { backgroundColor: wifiStatusMeta.color }]} />
               <View style={styles.statusText}>
-                <ThemedText style={styles.statusLabel}>
-                  Wi-Fi connection: {wifiStatusMeta.label}
-                </ThemedText>
-                {wifiStatusMeta.label === 'Connected' ? (
-                  <>
-                    <ThemedText style={styles.statusMeta}>
-                      Network name: {wifiStatusMeta.ssid}
-                    </ThemedText>
-                    <ThemedText style={styles.statusMeta}>IP address: {wifiStatusMeta.ip}</ThemedText>
-                  </>
-                ) : (
-                  <ThemedText style={styles.statusWarning}>
-                    Robot is not connected to Wi-Fi. Select a network below and send the credentials.
+                <ThemedText style={styles.statusLabel}>{wifiStatusMeta.label}</ThemedText>
+                {wifiStatusMeta.details.map((line, index) => (
+                  <ThemedText key={`${line}-${index}`} style={styles.statusMeta}>
+                    {line}
                   </ThemedText>
-                )}
+                ))}
+                {wifiStatusMeta.helper ? (
+                  <ThemedText style={styles.statusWarning}>{wifiStatusMeta.helper}</ThemedText>
+                ) : null}
               </View>
             </View>
             {statusError ? (
@@ -210,8 +316,8 @@ export default function ConnectionScreen() {
                 Unable to reach the robot hotspot. Confirm that your phone is joined to the robot Wi-Fi network.
               </ThemedText>
             ) : null}
-            <Pressable style={styles.secondaryButton} onPress={refreshStatus}>
-              <ThemedText style={styles.secondaryButtonText}>Refresh robot status</ThemedText>
+            <Pressable style={styles.secondaryButton} onPress={handleStatusRefresh}>
+              <ThemedText style={styles.secondaryButtonText}>Refresh network info</ThemedText>
             </Pressable>
           </ThemedView>
 
