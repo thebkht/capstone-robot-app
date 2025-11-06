@@ -1,7 +1,4 @@
-// eslint-disable-next-line import/no-unresolved
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Constants from 'expo-constants';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -14,68 +11,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import {
-  ROBOT_BASE_URL_STORAGE_KEY,
-  useRobot,
-} from '@/context/robot-provider';
+import { useRobot } from '@/context/robot-provider';
 
 const DEFAULT_HOTSPOT_URL = 'http://192.168.4.1:8000';
-const ROVER_LOCAL_URL = 'http://rover.local:8000';
-const RECENT_URLS_STORAGE_KEY = 'robot_recent_urls';
 
-type ConnectionPhase = 'idle' | 'connecting' | 'connected' | 'error';
-
-type NetworkScanOptions = {
-  statusMessage?: string;
-  presetSubnets?: string[];
-  shouldScanWifi?: boolean;
-  wifiScanBaseUrl?: string;
-};
-
-const normalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
-
-const ensureHttpScheme = (value: string) =>
-  /^https?:\/\//i.test(value) ? value : `http://${value}`;
-
-const canonicalizeUrl = (value: string) => ensureHttpScheme(normalizeUrl(value));
-
-const extractIpv4Subnet = (value: string) => {
-  try {
-    const parsed = new URL(canonicalizeUrl(value));
-    const match = parsed.hostname.match(/^(\d+)\.(\d+)\.(\d+)\.\d+$/);
-    if (match) {
-      return `${match[1]}.${match[2]}.${match[3]}`;
-    }
-  } catch {
-    // Ignore parsing failures – non-IP hosts cannot yield a subnet.
-  }
-
-  return null;
-};
-
-const extractSubnetFromIpAddress = (value: string) => {
-  const match = value.match(/^(\d+)\.(\d+)\.(\d+)\.\d+$/);
-  if (match) {
-    return `${match[1]}.${match[2]}.${match[3]}`;
-  }
-
-  return null;
-};
-
-const STATUS_META: Record<ConnectionPhase, { label: string; color: string }> = {
-  idle: { label: 'Not connected', color: '#F87171' },
-  connecting: { label: 'Trying to connect', color: '#FBBF24' },
-  connected: { label: 'Connected', color: '#2DD4BF' },
-  error: { label: 'Not connected', color: '#F87171' },
-};
+const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
 
 export default function ConnectionScreen() {
-  const { api, baseUrl, setBaseUrl, refreshStatus, status } = useRobot();
-  const [phase, setPhase] = useState<ConnectionPhase>('idle');
-  const [statusMessage, setStatusMessage] = useState(
-    'Looking for the robot automatically. We will try saved addresses and common defaults.',
-  );
-  const [recentUrls, setRecentUrls] = useState<string[]>([]);
+  const { api, baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling } = useRobot();
   const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
   const [isScanningWifi, setIsScanningWifi] = useState(false);
   const [wifiScanError, setWifiScanError] = useState<string | null>(null);
@@ -84,76 +27,46 @@ export default function ConnectionScreen() {
   const [isSubmittingWifi, setIsSubmittingWifi] = useState(false);
   const [wifiConnectError, setWifiConnectError] = useState<string | null>(null);
   const [wifiConnectSuccess, setWifiConnectSuccess] = useState<string | null>(null);
-  const hasAutoAttemptedRef = useRef(false);
-  const isMountedRef = useRef(true);
-  const lastAttemptedUrlRef = useRef<string | null>(null);
-  const deviceSubnetRef = useRef<string | null>(null);
-
-  const ensureDeviceSubnet = useCallback(async () => {
-    if (deviceSubnetRef.current) {
-      return deviceSubnetRef.current;
-    }
-
-    const hostCandidates: (string | null | undefined)[] = [
-      Constants.debuggerHost,
-      Constants.expoConfig?.hostUri,
-      // @ts-expect-error Expo SDK versions expose manifest/manifest2 differently; guard access.
-      Constants.manifest?.hostUri,
-      // @ts-expect-error Guard access to optional manifest fields for legacy runtimes.
-      Constants.manifest2?.extra?.expoClient?.hostUri,
-    ];
-
-    for (const candidate of hostCandidates) {
-      if (!candidate) {
-        continue;
-      }
-
-      let host = candidate;
-      try {
-        if (!candidate.includes('://')) {
-          const fauxUrl = `http://${candidate}`;
-          host = new URL(fauxUrl).hostname;
-        } else {
-          host = new URL(candidate).hostname;
-        }
-      } catch {
-        host = candidate.split(':')[0] ?? candidate;
-      }
-
-      const subnet = host ? extractSubnetFromIpAddress(host) : null;
-      if (subnet) {
-        deviceSubnetRef.current = subnet;
-        console.log('Detected device subnet', { source: candidate, subnet });
-        return subnet;
-      }
-    }
-
-    console.warn('Unable to infer device subnet from Expo constants');
-    return null;
-  }, []);
+  const [wifiCommandBase, setWifiCommandBase] = useState<string>(DEFAULT_HOTSPOT_URL);
 
   useEffect(() => {
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+    setIsPolling(false);
+    return () => setIsPolling(true);
+  }, [setIsPolling]);
 
-  const persistRecentUrls = useCallback((urls: string[]) => {
-    void AsyncStorage.setItem(RECENT_URLS_STORAGE_KEY, JSON.stringify(urls)).catch((error) => {
-      console.warn('Failed to persist recent robot URLs', error);
-    });
-  }, []);
+  useEffect(() => {
+    const normalizedHotspot = canonicalizeUrl(DEFAULT_HOTSPOT_URL);
+    if (baseUrl !== normalizedHotspot) {
+      setBaseUrl(normalizedHotspot);
+    } else {
+      setWifiCommandBase(normalizedHotspot);
+    }
+  }, [baseUrl, setBaseUrl]);
 
-  const recordRecentUrl = useCallback(
-    (url: string) => {
-      setRecentUrls((prev) => {
-        const next = [url, ...prev.filter((item) => item !== url)].slice(0, 5);
-        persistRecentUrls(next);
-        return next;
-      });
-    },
-    [persistRecentUrls],
-  );
+  useEffect(() => {
+    if (baseUrl) {
+      setWifiCommandBase(canonicalizeUrl(baseUrl));
+    }
+  }, [baseUrl]);
+
+  useEffect(() => {
+    void refreshStatus();
+  }, [refreshStatus]);
+
+  useEffect(() => {
+    const available = status?.network?.availableNetworks;
+    if (Array.isArray(available) && available.length) {
+      const nextNetworks = available.filter((item): item is string => typeof item === 'string');
+      setWifiNetworks(nextNetworks);
+      setWifiScanError(null);
+      if (selectedNetwork && !nextNetworks.includes(selectedNetwork)) {
+        setSelectedNetwork(null);
+        setWifiPassword('');
+        setWifiConnectError(null);
+        setWifiConnectSuccess(null);
+      }
+    }
+  }, [selectedNetwork, status?.network?.availableNetworks]);
 
   const wifiStatusMeta = useMemo(() => {
     const connectedSsid = status?.network?.wifiSsid;
@@ -162,106 +75,60 @@ export default function ConnectionScreen() {
     return {
       color: isConnected ? '#1DD1A1' : '#F87171',
       label: isConnected ? 'Connected' : 'Not connected',
-      ssid: connectedSsid ?? 'Unknown',
-      ip: status?.network?.ip ?? 'Unknown',
+      ssid: connectedSsid ?? 'Unavailable',
+      ip: status?.network?.ip ?? 'Unavailable',
     };
-  }, [status]);
+  }, [status?.network?.ip, status?.network?.wifiSsid]);
 
-  const performWifiScanRequest = useCallback(async (targetBaseUrl: string) => {
-    const normalizedBase = canonicalizeUrl(targetBaseUrl);
-    const response = await fetch(`${normalizedBase}/wifi/networks`, {
-      headers: { Accept: 'application/json' },
-    });
+  const handleScanPress = useCallback(async () => {
+    setIsScanningWifi(true);
+    setWifiScanError(null);
+    setWifiConnectError(null);
+    setWifiConnectSuccess(null);
 
-    if (!response.ok) {
-      throw new Error(`Robot Wi-Fi scan failed with status ${response.status}`);
-    }
+    try {
+      const normalizedBase = baseUrl ? canonicalizeUrl(baseUrl) : canonicalizeUrl(DEFAULT_HOTSPOT_URL);
+      setWifiCommandBase(normalizedBase);
+      console.log('Requesting Wi-Fi network scan', { baseUrl: normalizedBase });
+      const { networks } = await api.listWifiNetworks();
+      const validNetworks = Array.isArray(networks)
+        ? networks.filter((item): item is string => typeof item === 'string')
+        : [];
 
-    const payload = (await response.json()) as { networks?: unknown };
-    const networks = Array.isArray(payload.networks)
-      ? payload.networks.filter((item): item is string => typeof item === 'string')
-      : [];
+      setWifiNetworks(validNetworks);
 
-    return networks;
-  }, []);
-
-  const scanWifiNetworks = useCallback(
-    async (wifiBaseOverride?: string) => {
-      const targetBase = wifiBaseOverride ?? baseUrl;
-      if (!targetBase) {
-        setWifiNetworks([]);
-        setWifiScanError('Connect to the robot to request a Wi-Fi scan.');
-        return false;
-      }
-
-      const normalizedTarget = canonicalizeUrl(targetBase);
-
-      setIsScanningWifi(true);
-      setWifiScanError(null);
-      setWifiConnectError(null);
-      setWifiConnectSuccess(null);
-
-      try {
-        console.log('Requesting Wi-Fi network scan', { baseUrl: normalizedTarget });
-        const networks = await performWifiScanRequest(normalizedTarget);
-
-        setWifiNetworks(networks);
-
-        if (!networks.length) {
-          setWifiScanError('No Wi-Fi networks detected. Try rescanning closer to the router.');
-          setSelectedNetwork(null);
-          setWifiPassword('');
-          setWifiConnectError(null);
-          setWifiConnectSuccess(null);
-        } else if (selectedNetwork && !networks.includes(selectedNetwork)) {
-          setSelectedNetwork(null);
-          setWifiPassword('');
-          setWifiConnectError(null);
-          setWifiConnectSuccess(null);
-        }
-
-        console.log('Wi-Fi network scan completed', { count: networks.length });
-        return networks.length > 0;
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'Failed to scan for Wi-Fi networks.';
-        setWifiScanError(message);
-        setWifiNetworks([]);
+      if (!validNetworks.length) {
+        setWifiScanError('No Wi-Fi networks detected. Try again closer to the router.');
         setSelectedNetwork(null);
         setWifiPassword('');
-        setWifiConnectError(null);
-        setWifiConnectSuccess(null);
-        console.warn('Wi-Fi network scan failed', error);
-        return false;
-      } finally {
-        setIsScanningWifi(false);
-      }
-    },
-    [
-      baseUrl,
-      performWifiScanRequest,
-      selectedNetwork,
-      setWifiConnectError,
-      setWifiConnectSuccess,
-      setWifiPassword,
-    ],
-  );
-
-  const handleNetworkSelect = useCallback(
-    (network: string) => {
-      setSelectedNetwork((previous) => {
-        if (previous === network) {
-          return previous;
-        }
-
+      } else if (selectedNetwork && !validNetworks.includes(selectedNetwork)) {
+        setSelectedNetwork(null);
         setWifiPassword('');
-        setWifiConnectError(null);
-        setWifiConnectSuccess(null);
-        return network;
-      });
-    },
-    [setWifiConnectError, setWifiConnectSuccess, setWifiPassword],
-  );
+      }
+
+      console.log('Wi-Fi network scan completed', { count: validNetworks.length });
+    } catch (error) {
+      console.warn('Wi-Fi network scan failed', error);
+      setWifiNetworks([]);
+      setSelectedNetwork(null);
+      setWifiPassword('');
+      setWifiScanError('Unable to reach the robot hotspot. Connect to the hotspot and retry.');
+    } finally {
+      setIsScanningWifi(false);
+    }
+  }, [api, baseUrl, selectedNetwork]);
+
+  const handleNetworkSelect = useCallback((network: string) => {
+    setSelectedNetwork((previous) => {
+      if (previous === network) {
+        return previous;
+      }
+      setWifiPassword('');
+      setWifiConnectError(null);
+      setWifiConnectSuccess(null);
+      return network;
+    });
+  }, []);
 
   const handleWifiCredentialSubmit = useCallback(async () => {
     if (!selectedNetwork) {
@@ -273,13 +140,18 @@ export default function ConnectionScreen() {
     setWifiConnectSuccess(null);
 
     try {
-      const trimmedPassword = wifiPassword.trim();
+      const payload = {
+        ssid: selectedNetwork,
+        password: wifiPassword.trim(),
+      };
+
       console.log('Submitting Wi-Fi credentials to robot', {
         ssid: selectedNetwork,
-        hasPassword: trimmedPassword.length > 0,
+        hasPassword: payload.password.length > 0,
+        baseUrl: wifiCommandBase,
       });
 
-      const result = await api.connectWifi({ ssid: selectedNetwork, password: trimmedPassword });
+      const result = await api.connectWifi(payload);
 
       if (!result.success) {
         setWifiConnectError('The robot rejected the Wi-Fi credentials. Try again.');
@@ -287,17 +159,12 @@ export default function ConnectionScreen() {
       }
 
       setWifiConnectSuccess(
-        trimmedPassword.length
+        payload.password.length
           ? `Credentials sent. The robot is joining ${selectedNetwork}.`
           : `Connecting to ${selectedNetwork}.`,
       );
 
-      setPhase('connecting');
-      setStatusMessage('Credentials accepted. Waiting for the robot to appear on the network…');
-
-      await refreshStatus().catch((error) => {
-        console.warn('Failed to refresh status after sending Wi-Fi credentials', error);
-      });
+      await refreshStatus();
     } catch (error) {
       console.warn('Failed to submit Wi-Fi credentials', error);
       const message = error instanceof Error ? error.message : 'Failed to submit Wi-Fi credentials.';
@@ -305,498 +172,7 @@ export default function ConnectionScreen() {
     } finally {
       setIsSubmittingWifi(false);
     }
-  }, [api, refreshStatus, selectedNetwork, wifiPassword]);
-
-  type ProbeResult = { success: boolean; robotName?: string; reason?: string };
-
-  const probeRobotUrl = useCallback(async (normalizedUrl: string, timeoutMs = 5000) => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const response = await fetch(`${normalizedUrl}/health`, {
-        signal: controller.signal,
-        headers: { Accept: 'application/json' },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Robot responded with status ${response.status}`);
-      }
-
-      let payload: unknown;
-      try {
-        payload = await response.json();
-      } catch (error) {
-        console.warn('Robot health response was not JSON', error);
-      }
-
-      const robotName =
-        payload && typeof payload === 'object' && 'name' in payload && typeof payload.name === 'string'
-          ? payload.name
-          : undefined;
-
-      return { success: true, robotName } satisfies ProbeResult;
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : 'Unknown error';
-      return { success: false, reason } satisfies ProbeResult;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }, []);
-
-  interface AttemptOptions {
-    statusMessage?: string;
-    skipRecent?: boolean;
-    shouldScanWifi?: boolean;
-    wifiScanBaseUrl?: string;
-  }
-
-  interface AttemptResult {
-    success: boolean;
-    normalizedUrl?: string;
-  }
-
-  const attemptConnection = useCallback(
-    async (rawUrl: string, options: AttemptOptions = {}): Promise<AttemptResult> => {
-      const trimmed = rawUrl.trim();
-      if (!trimmed) {
-        if (isMountedRef.current) {
-          setPhase('error');
-          setStatusMessage('No robot address was provided for the connection attempt.');
-        }
-        return { success: false };
-      }
-
-      const prepared = canonicalizeUrl(trimmed);
-      lastAttemptedUrlRef.current = prepared;
-      try {
-        // Validate the URL before attempting to fetch so we can surface immediate feedback.
-        // Assign to a throwaway variable to avoid lint complaints about unused expressions.
-        const _validated = new URL(prepared);
-        void _validated;
-      } catch {
-        if (isMountedRef.current) {
-          setPhase('error');
-          setStatusMessage('Please provide a valid URL including host and protocol.');
-        }
-        return { success: false };
-      }
-
-      if (isMountedRef.current) {
-        setPhase('connecting');
-        setStatusMessage(options.statusMessage ?? 'Attempting to reach the robot…');
-      }
-
-      console.log('Attempting robot connection', { url: prepared });
-
-      const { success, robotName, reason } = await probeRobotUrl(prepared);
-
-      if (success) {
-        if (isMountedRef.current) {
-          setPhase('connected');
-          setStatusMessage(
-            robotName ? `Connected to ${robotName} at ${prepared}` : `Connected to ${prepared}`,
-          );
-        }
-
-        console.log('Robot connection succeeded', { url: prepared, robotName });
-
-        setBaseUrl(prepared);
-        if (!options.skipRecent) {
-          recordRecentUrl(prepared);
-        }
-        await refreshStatus().catch((error) => {
-          console.warn('Failed to refresh robot status after connecting', error);
-        });
-
-        if (options.shouldScanWifi) {
-          const wifiBase = options.wifiScanBaseUrl ?? prepared;
-          await scanWifiNetworks(wifiBase);
-        }
-
-        return { success: true, normalizedUrl: prepared };
-      }
-
-      if (isMountedRef.current) {
-        setPhase('error');
-        setStatusMessage('Unable to connect. Try scanning or use the hotspot options below.');
-      }
-
-      console.warn('Robot connection failed', { url: prepared, reason });
-
-      return { success: false, normalizedUrl: prepared };
-    },
-    [probeRobotUrl, recordRecentUrl, refreshStatus, scanWifiNetworks, setBaseUrl],
-  );
-
-  const runLocalNetworkScan = useCallback(
-    async (
-      attempted: Set<string>,
-      additionalSeeds: string[] = [],
-      options: NetworkScanOptions = {},
-    ) => {
-      await ensureDeviceSubnet();
-
-      if (isMountedRef.current) {
-        setPhase('connecting');
-        setStatusMessage(options.statusMessage ?? 'Scanning local network for the robot…');
-      }
-
-      const candidateSubnets = new Set<string>(options.presetSubnets ?? []);
-
-      if (deviceSubnetRef.current) {
-        candidateSubnets.add(deviceSubnetRef.current);
-      }
-
-      const seedUrls: (string | null | undefined)[] = [
-        baseUrl,
-        lastAttemptedUrlRef.current,
-        ...recentUrls,
-        ...additionalSeeds,
-      ];
-      seedUrls.forEach((value) => {
-        if (!value) {
-          return;
-        }
-        const subnet = extractIpv4Subnet(value);
-        if (subnet) {
-          candidateSubnets.add(subnet);
-        }
-      });
-
-      if (candidateSubnets.size === 0) {
-        candidateSubnets.add('192.168.0');
-        candidateSubnets.add('192.168.1');
-        candidateSubnets.add('10.0.0');
-      }
-
-      const candidates: string[] = [];
-      candidateSubnets.forEach((subnet) => {
-        for (let host = 1; host <= 254; host += 1) {
-          const candidate = `http://${subnet}.${host}:8000`;
-          if (!attempted.has(candidate)) {
-            candidates.push(candidate);
-          }
-        }
-      });
-
-      console.log('Starting local network scan', {
-        subnets: Array.from(candidateSubnets),
-        totalCandidates: candidates.length,
-      });
-
-      if (candidates.length === 0) {
-        if (isMountedRef.current) {
-          setPhase('error');
-          setStatusMessage(
-            'Robot not found. Connect to the robot hotspot and use “Try hotspot (http://192.168.4.1:8000)”.',
-          );
-        }
-        return false;
-      }
-
-      const queue = [...candidates];
-      const concurrency = Math.min(20, queue.length);
-      let resolvedUrl: string | null = null;
-      let resolvedName: string | undefined;
-
-      const worker = async () => {
-        while (isMountedRef.current) {
-          if (resolvedUrl) {
-            return;
-          }
-
-          const candidate = queue.shift();
-          if (!candidate) {
-            return;
-          }
-
-          attempted.add(candidate);
-          console.log('Scanning robot candidate', candidate);
-
-          const { success, robotName } = await probeRobotUrl(candidate, 2000);
-
-          if (success && !resolvedUrl) {
-            resolvedUrl = candidate;
-            resolvedName = robotName;
-            return;
-          }
-        }
-      };
-
-      await Promise.all(Array.from({ length: concurrency }, () => worker()));
-
-      if (resolvedUrl) {
-        if (isMountedRef.current) {
-          setPhase('connected');
-          setStatusMessage(
-            resolvedName
-              ? `Connected to ${resolvedName} at ${resolvedUrl}`
-              : `Connected to ${resolvedUrl}`,
-          );
-        }
-
-        console.log('Network scan connected to robot', { url: resolvedUrl, name: resolvedName });
-
-        setBaseUrl(resolvedUrl);
-        recordRecentUrl(resolvedUrl);
-        await refreshStatus().catch((error) => {
-          console.warn('Failed to refresh robot status after network scan', error);
-        });
-
-        if (options.shouldScanWifi) {
-          const wifiBase = options.wifiScanBaseUrl ?? resolvedUrl;
-          await scanWifiNetworks(wifiBase);
-        }
-
-        return true;
-      }
-
-      console.warn('Network scan did not locate the robot');
-      if (isMountedRef.current) {
-        setPhase('error');
-        setStatusMessage(
-          'Robot not found. Connect to the robot hotspot and use “Try hotspot (http://192.168.4.1:8000)”.',
-        );
-      }
-
-      return false;
-    },
-    [
-      baseUrl,
-      ensureDeviceSubnet,
-      probeRobotUrl,
-      recentUrls,
-      recordRecentUrl,
-      refreshStatus,
-      scanWifiNetworks,
-      setBaseUrl,
-    ],
-  );
-
-  useEffect(() => {
-    let isActive = true;
-    (async () => {
-      try {
-        const [storedUrl, storedRecentUrls] = await Promise.all([
-          AsyncStorage.getItem(ROBOT_BASE_URL_STORAGE_KEY),
-          AsyncStorage.getItem(RECENT_URLS_STORAGE_KEY),
-        ]);
-
-        if (!isActive) {
-          return;
-        }
-
-        let hydratedRecentUrls: string[] = [];
-
-        if (storedRecentUrls) {
-          try {
-            const parsed = JSON.parse(storedRecentUrls);
-            if (Array.isArray(parsed)) {
-              hydratedRecentUrls = parsed.filter((item): item is string => typeof item === 'string');
-              setRecentUrls(hydratedRecentUrls);
-            }
-          } catch (error) {
-            console.warn('Failed to parse stored recent URLs', error);
-          }
-        }
-
-        if (!hasAutoAttemptedRef.current) {
-          hasAutoAttemptedRef.current = true;
-
-          const attempted = new Set<string>();
-
-          if (storedUrl) {
-            console.log('Auto-attempting stored robot address', storedUrl);
-            const result = await attemptConnection(storedUrl);
-            if (result.normalizedUrl) {
-              attempted.add(result.normalizedUrl);
-            }
-            if (result.success) {
-              return;
-            }
-          }
-
-          if (!storedUrl) {
-            await ensureDeviceSubnet();
-          }
-
-          console.log('Auto-attempting rover.local fallback', ROVER_LOCAL_URL);
-          const fallbackResult = await attemptConnection(ROVER_LOCAL_URL, {
-            skipRecent: true,
-          });
-          if (fallbackResult.normalizedUrl) {
-            attempted.add(fallbackResult.normalizedUrl);
-          }
-          if (fallbackResult.success) {
-            return;
-          }
-
-          await runLocalNetworkScan(attempted, hydratedRecentUrls);
-        }
-      } catch (error) {
-        console.warn('Failed to hydrate connection screen state', error);
-      }
-    })();
-
-    return () => {
-      isActive = false;
-    };
-  }, [attemptConnection, ensureDeviceSubnet, runLocalNetworkScan]);
-
-  const statusMeta = useMemo(() => {
-    return STATUS_META[phase];
-  }, [phase]);
-
-  const handleHotspotPress = useCallback(() => {
-    hasAutoAttemptedRef.current = true;
-    void (async () => {
-      const attempted = new Set<string>();
-      console.log('Manually attempting hotspot address', DEFAULT_HOTSPOT_URL);
-      const result = await attemptConnection(DEFAULT_HOTSPOT_URL, {
-        skipRecent: true,
-        shouldScanWifi: true,
-        wifiScanBaseUrl: DEFAULT_HOTSPOT_URL,
-      });
-
-      if (result.normalizedUrl) {
-        attempted.add(result.normalizedUrl);
-      }
-
-      if (result.success) {
-        return;
-      }
-
-      const found = await runLocalNetworkScan(attempted, [DEFAULT_HOTSPOT_URL], {
-        statusMessage: 'Scanning hotspot network for the robot…',
-        presetSubnets: ['192.168.4'],
-        shouldScanWifi: true,
-        wifiScanBaseUrl: DEFAULT_HOTSPOT_URL,
-      });
-
-      if (!found) {
-        setWifiNetworks([]);
-      }
-    })();
-  }, [attemptConnection, runLocalNetworkScan, setWifiNetworks]);
-
-  const handleRetrySavedPress = useCallback(() => {
-    if (!baseUrl) {
-      return;
-    }
-    hasAutoAttemptedRef.current = true;
-    console.log('Retrying saved robot address', baseUrl);
-    void attemptConnection(baseUrl);
-  }, [attemptConnection, baseUrl]);
-
-  const handleRoverLocalPress = useCallback(() => {
-    hasAutoAttemptedRef.current = true;
-    console.log('Manually attempting rover.local fallback', ROVER_LOCAL_URL);
-    void attemptConnection(ROVER_LOCAL_URL, { skipRecent: true });
-  }, [attemptConnection]);
-
-  const handleScanPress = useCallback(() => {
-    hasAutoAttemptedRef.current = true;
-    void (async () => {
-      const attempted = new Set<string>();
-      const seeds: (string | null | undefined)[] = [
-        baseUrl,
-        lastAttemptedUrlRef.current,
-        ...recentUrls,
-      ];
-      seeds.forEach((value) => {
-        if (!value) {
-          return;
-        }
-        try {
-          attempted.add(canonicalizeUrl(value));
-        } catch {
-          // Ignore invalid URLs in the attempted set.
-        }
-      });
-
-      const initialTarget = baseUrl ?? lastAttemptedUrlRef.current ?? DEFAULT_HOTSPOT_URL;
-
-      if (phase !== 'connected') {
-        if (initialTarget) {
-          const attempt = await attemptConnection(initialTarget, {
-            shouldScanWifi: true,
-            wifiScanBaseUrl: initialTarget,
-            skipRecent: initialTarget === DEFAULT_HOTSPOT_URL,
-            statusMessage: 'Attempting to reach the robot before scanning…',
-          });
-
-          if (attempt.normalizedUrl) {
-            attempted.add(attempt.normalizedUrl);
-          }
-
-          if (attempt.success) {
-            return;
-          }
-        }
-
-        if (initialTarget !== DEFAULT_HOTSPOT_URL) {
-          const hotspotAttempt = await attemptConnection(DEFAULT_HOTSPOT_URL, {
-            skipRecent: true,
-            shouldScanWifi: true,
-            wifiScanBaseUrl: DEFAULT_HOTSPOT_URL,
-            statusMessage: 'Attempting hotspot before scanning…',
-          });
-
-          if (hotspotAttempt.normalizedUrl) {
-            attempted.add(hotspotAttempt.normalizedUrl);
-          }
-
-          if (hotspotAttempt.success) {
-            return;
-          }
-        }
-
-        const found = await runLocalNetworkScan(attempted, [DEFAULT_HOTSPOT_URL], {
-          statusMessage: 'Scanning hotspot network for the robot…',
-          presetSubnets: ['192.168.4'],
-          shouldScanWifi: true,
-          wifiScanBaseUrl: DEFAULT_HOTSPOT_URL,
-        });
-
-        if (!found) {
-          setWifiNetworks([]);
-        }
-
-        return;
-      }
-
-      if (initialTarget) {
-        try {
-          const normalized = canonicalizeUrl(initialTarget);
-          attempted.add(normalized);
-          await scanWifiNetworks(normalized);
-        } catch (error) {
-          console.warn('Failed to normalize scan target URL', error);
-          await scanWifiNetworks();
-        }
-      } else {
-        await scanWifiNetworks();
-      }
-    })();
-  }, [
-    attemptConnection,
-    baseUrl,
-    phase,
-    recentUrls,
-    runLocalNetworkScan,
-    scanWifiNetworks,
-    setWifiNetworks,
-  ]);
-
-  const handleRecentPress = useCallback(
-    (url: string) => {
-      hasAutoAttemptedRef.current = true;
-      console.log('Attempting recent robot address', url);
-      void attemptConnection(url);
-    },
-    [attemptConnection],
-  );
+  }, [api, refreshStatus, selectedNetwork, wifiCommandBase, wifiPassword]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -810,38 +186,62 @@ export default function ConnectionScreen() {
             Connect to Robot
           </ThemedText>
           <ThemedText style={styles.subheading}>
-            We automatically try your last working address and the rover.local fallback. Use the options
-            below if the robot is not detected right away.
+            Connect your phone to the robot hotspot, then choose which Wi-Fi network the robot should join.
           </ThemedText>
 
-          <View style={[styles.statusCard, { borderColor: statusMeta.color }]}>
-            <View style={styles.statusHeader}>
-              <View style={[styles.statusIndicator, { backgroundColor: statusMeta.color }]} />
-              <ThemedText style={styles.statusLabel}>{statusMeta.label}</ThemedText>
-            </View>
-            <ThemedText style={styles.statusMessage}>{statusMessage}</ThemedText>
-          </View>
-
-          <ThemedView style={styles.wifiCard}>
-            <ThemedText type="subtitle">Robot Wi-Fi status</ThemedText>
-            <ThemedText style={styles.wifiHint}>
-              Press “Scan for Wi-Fi networks” to fetch the SSIDs broadcast by the robot. We will
-              automatically connect to the hotspot first if needed.
+          <ThemedView style={styles.statusCard}>
+            <ThemedText type="subtitle">Robot hotspot status</ThemedText>
+            <ThemedText style={styles.statusHint}>
+              Target address: {canonicalizeUrl(DEFAULT_HOTSPOT_URL)}
             </ThemedText>
-            <View style={styles.wifiStatusRow}>
+            <View style={styles.statusRow}>
               <View style={[styles.statusIndicator, { backgroundColor: wifiStatusMeta.color }]} />
-              <View style={styles.wifiStatusText}>
-                <ThemedText style={styles.wifiStatusLabel}>
+              <View style={styles.statusText}>
+                <ThemedText style={styles.statusLabel}>
                   Wi-Fi connection: {wifiStatusMeta.label}
                 </ThemedText>
-                <ThemedText style={styles.wifiMeta}>
-                  Network name: {wifiStatusMeta.ssid}
-                </ThemedText>
-                <ThemedText style={styles.wifiMeta}>IP address: {wifiStatusMeta.ip}</ThemedText>
+                {wifiStatusMeta.label === 'Connected' ? (
+                  <>
+                    <ThemedText style={styles.statusMeta}>
+                      Network name: {wifiStatusMeta.ssid}
+                    </ThemedText>
+                    <ThemedText style={styles.statusMeta}>IP address: {wifiStatusMeta.ip}</ThemedText>
+                  </>
+                ) : (
+                  <ThemedText style={styles.statusWarning}>
+                    Robot is not connected to Wi-Fi. Select a network below and send the credentials.
+                  </ThemedText>
+                )}
               </View>
             </View>
+            {statusError ? (
+              <ThemedText style={styles.statusError}>
+                Unable to reach the robot hotspot. Confirm that your phone is joined to the robot Wi-Fi network.
+              </ThemedText>
+            ) : null}
+            <Pressable style={styles.secondaryButton} onPress={refreshStatus}>
+              <ThemedText style={styles.secondaryButtonText}>Refresh robot status</ThemedText>
+            </Pressable>
+          </ThemedView>
 
-            <ThemedText style={styles.wifiSectionLabel}>Available networks</ThemedText>
+          <ThemedView style={styles.wifiCard}>
+            <ThemedText type="subtitle">Available networks</ThemedText>
+            <ThemedText style={styles.wifiHint}>
+              Scan to fetch the Wi-Fi networks the robot can see. Choose one and send credentials to bring the robot online.
+            </ThemedText>
+
+            <Pressable
+              style={[styles.scanButton, isScanningWifi && styles.disabledButton]}
+              disabled={isScanningWifi}
+              onPress={handleScanPress}
+            >
+              {isScanningWifi ? (
+                <ActivityIndicator color="#E5E7EB" />
+              ) : (
+                <ThemedText style={styles.secondaryButtonText}>Scan for Wi-Fi networks</ThemedText>
+              )}
+            </Pressable>
+
             <View style={styles.networkList}>
               {wifiNetworks.length ? (
                 wifiNetworks.map((network) => (
@@ -862,10 +262,7 @@ export default function ConnectionScreen() {
                 ))
               ) : (
                 <ThemedText style={styles.wifiMeta}>
-                  {wifiScanError ??
-                    (isScanningWifi
-                      ? 'Scanning for Wi-Fi networks…'
-                      : 'No scan results yet. Connect to the robot hotspot and scan to continue.')}
+                  {wifiScanError ?? 'No scan results yet. Connect to the robot hotspot and scan to continue.'}
                 </ThemedText>
               )}
             </View>
@@ -912,98 +309,7 @@ export default function ConnectionScreen() {
                 </Pressable>
               </View>
             ) : null}
-
-            <Pressable
-              style={[styles.scanButton, isScanningWifi && styles.disabledSecondary]}
-              disabled={isScanningWifi}
-              onPress={handleScanPress}
-            >
-              {isScanningWifi ? (
-                <ActivityIndicator color="#E5E7EB" />
-              ) : (
-                <ThemedText style={styles.secondaryButtonText}>Scan for Wi-Fi networks</ThemedText>
-              )}
-            </Pressable>
           </ThemedView>
-
-          {baseUrl ? (
-            <Pressable
-              style={[styles.primaryButton, phase === 'connecting' && styles.disabledPrimary]}
-              onPress={handleRetrySavedPress}
-              disabled={phase === 'connecting'}
-            >
-              {phase === 'connecting' ? (
-                <ActivityIndicator color="#04110B" />
-              ) : (
-                <ThemedText style={styles.primaryButtonText}>
-                  Retry saved address ({baseUrl})
-                </ThemedText>
-              )}
-            </Pressable>
-          ) : null}
-
-          <Pressable
-            style={[styles.secondaryButton, phase === 'connecting' && styles.disabledSecondary]}
-            onPress={handleRoverLocalPress}
-            disabled={phase === 'connecting'}
-          >
-            <ThemedText style={styles.secondaryButtonText}>
-              Try rover.local ({ROVER_LOCAL_URL})
-            </ThemedText>
-          </Pressable>
-
-          <Pressable
-            style={[styles.scanButton, phase === 'connecting' && styles.disabledSecondary]}
-            onPress={handleScanPress}
-            disabled={phase === 'connecting'}
-          >
-            <ThemedText style={styles.secondaryButtonText}>
-              Scan local network for robot
-            </ThemedText>
-          </Pressable>
-
-          <View style={styles.dividerContainer}>
-            <View style={styles.divider} />
-            <ThemedText style={styles.dividerText}>Or connect to robot hotspot</ThemedText>
-            <View style={styles.divider} />
-          </View>
-
-          <Pressable
-            style={[styles.secondaryButton, phase === 'connecting' && styles.disabledSecondary]}
-            onPress={handleHotspotPress}
-            disabled={phase === 'connecting'}
-          >
-            <ThemedText style={styles.secondaryButtonText}>
-              Try hotspot ({DEFAULT_HOTSPOT_URL})
-            </ThemedText>
-          </Pressable>
-
-          {recentUrls.length > 0 ? (
-            <View style={styles.recentsContainer}>
-              <ThemedText style={styles.recentsLabel}>Recent addresses</ThemedText>
-              <View style={styles.recentsList}>
-                {recentUrls.map((url) => (
-                  <Pressable
-                    key={url}
-                    style={({ pressed }) => [
-                      styles.recentChip,
-                      pressed && { opacity: 0.75 },
-                      phase === 'connecting' && styles.disabledChip,
-                    ]}
-                    onPress={() => handleRecentPress(url)}
-                    disabled={phase === 'connecting'}
-                  >
-                    <ThemedText style={styles.recentChipText}>{url}</ThemedText>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          ) : null}
-
-          <View style={styles.currentConfig}>
-            <ThemedText style={styles.currentConfigLabel}>Current base URL</ThemedText>
-            <ThemedText style={styles.currentConfigValue}>{baseUrl}</ThemedText>
-          </View>
         </ThemedView>
       </ScrollView>
     </SafeAreaView>
@@ -1017,144 +323,169 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#050505',
   },
   scrollContent: {
-    padding: 24,
+    paddingBottom: 48,
   },
   container: {
+    flex: 1,
+    padding: 24,
     gap: 24,
     backgroundColor: '#050505',
   },
   heading: {
-    marginBottom: 8,
-    color: '#F3F4F6',
+    fontFamily: 'Times New Roman',
   },
   subheading: {
-    opacity: 0.75,
-    lineHeight: 22,
     color: '#D1D5DB',
+    fontFamily: 'JetBrainsMono-Regular',
   },
   statusCard: {
-    borderWidth: 1,
-    borderRadius: 0,
+    gap: 16,
     padding: 20,
-    gap: 10,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#1F2937',
     backgroundColor: '#0F0F10',
   },
-  statusHeader: {
+  statusHint: {
+    color: '#6B7280',
+    fontFamily: 'JetBrainsMono-Regular',
+  },
+  statusRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    gap: 16,
   },
   statusIndicator: {
-    width: 14,
-    height: 14,
-    borderRadius: 0,
+    width: 12,
+    height: 12,
+  },
+  statusText: {
+    flex: 1,
+    gap: 4,
   },
   statusLabel: {
     color: '#E5E7EB',
+    fontFamily: 'JetBrainsMono-Regular',
   },
-  statusMessage: {
-    opacity: 0.9,
-    lineHeight: 22,
+  statusMeta: {
     color: '#9CA3AF',
+    fontFamily: 'JetBrainsMono-Regular',
+  },
+  statusWarning: {
+    color: '#FBBF24',
+    fontFamily: 'JetBrainsMono-Regular',
+  },
+  statusError: {
+    color: '#F87171',
+    fontFamily: 'JetBrainsMono-Regular',
   },
   wifiCard: {
     gap: 16,
     padding: 20,
-    borderWidth: 1,
     borderRadius: 0,
+    borderWidth: 1,
     borderColor: '#1F2937',
     backgroundColor: '#0F0F10',
   },
   wifiHint: {
-    color: '#9CA3AF',
-    lineHeight: 20,
+    color: '#D1D5DB',
+    fontFamily: 'JetBrainsMono-Regular',
   },
-  wifiStatusRow: {
+  scanButton: {
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderRadius: 0,
+    backgroundColor: '#0A0A0B',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderRadius: 0,
+    backgroundColor: '#0A0A0B',
+  },
+  secondaryButtonText: {
+    color: '#E5E7EB',
+    fontFamily: 'JetBrainsMono-Regular',
+  },
+  networkList: {
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    borderRadius: 0,
+  },
+  networkRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F2937',
+    backgroundColor: '#0A0A0B',
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  wifiStatusText: {
-    gap: 6,
-    flex: 1,
+  networkRowActive: {
+    backgroundColor: '#111827',
   },
-  wifiStatusLabel: {
-    color: '#F3F4F6',
+  networkRowPressed: {
+    backgroundColor: '#1F2937',
+  },
+  networkName: {
+    color: '#F9FAFB',
+    fontFamily: 'JetBrainsMono-Regular',
+  },
+  networkSelectedHint: {
+    color: '#1DD1A1',
+    fontFamily: 'JetBrainsMono-Regular',
   },
   wifiMeta: {
     color: '#9CA3AF',
-  },
-  wifiSectionLabel: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    color: '#6B7280',
-  },
-  networkList: {
-    gap: 8,
-  },
-  networkRow: {
-    borderWidth: 1,
-    borderRadius: 0,
-    borderColor: '#1F2937',
-    backgroundColor: '#0A0A0B',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 4,
-  },
-  networkName: {
-    color: '#E5E7EB',
     fontFamily: 'JetBrainsMono-Regular',
-    letterSpacing: 0.25,
-  },
-  networkRowPressed: {
-    backgroundColor: '#111112',
-  },
-  networkRowActive: {
-    borderColor: '#1DD1A1',
-    backgroundColor: '#0E1512',
-  },
-  networkSelectedHint: {
-    fontSize: 12,
-    color: '#34D399',
+    paddingVertical: 12,
   },
   selectNetworkHint: {
-    color: '#9CA3AF',
+    color: '#FBBF24',
+    fontFamily: 'JetBrainsMono-Regular',
   },
   wifiCredentials: {
     gap: 12,
     borderWidth: 1,
-    borderRadius: 0,
     borderColor: '#1F2937',
     padding: 16,
-    backgroundColor: '#050607',
+    borderRadius: 0,
+    backgroundColor: '#0A0A0B',
   },
   credentialsHeading: {
-    color: '#F3F4F6',
-    fontFamily: 'JetBrainsMono-SemiBold',
+    color: '#E5E7EB',
+    fontFamily: 'JetBrainsMono-Regular',
   },
   credentialsHint: {
     color: '#9CA3AF',
-    lineHeight: 20,
+    fontFamily: 'JetBrainsMono-Regular',
   },
   passwordInput: {
-    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderRadius: 0,
+    borderWidth: 1,
     borderColor: '#1F2937',
-    backgroundColor: '#060708',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#E5E7EB',
+    backgroundColor: '#0A0A0B',
+    color: '#F9FAFB',
     fontFamily: 'JetBrainsMono-Regular',
   },
   credentialsError: {
     color: '#F87171',
+    fontFamily: 'JetBrainsMono-Regular',
   },
   credentialsSuccess: {
-    color: '#34D399',
+    color: '#1DD1A1',
+    fontFamily: 'JetBrainsMono-Regular',
   },
   primaryButton: {
     backgroundColor: '#1DD1A1',
@@ -1162,94 +493,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
+  disabledPrimary: {
+    opacity: 0.5,
+  },
   primaryButtonText: {
     color: '#04110B',
-    textAlign: 'center',
-  },
-  disabledPrimary: {
-    opacity: 0.6,
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  divider: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#1F2937',
-  },
-  dividerText: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    opacity: 0.65,
-    color: '#6B7280',
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderRadius: 0,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderColor: '#1F2937',
-    backgroundColor: '#0A0A0B',
-  },
-  scanButton: {
-    borderWidth: 1,
-    borderRadius: 0,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderColor: '#1F2937',
-    backgroundColor: '#111112',
-  },
-  secondaryButtonText: {
-    color: '#E5E7EB',
-  },
-  disabledSecondary: {
-    opacity: 0.6,
-  },
-  recentsContainer: {
-    gap: 12,
-  },
-  recentsLabel: {
-    color: '#E5E7EB',
-  },
-  recentsList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  recentChip: {
-    borderWidth: 1,
-    borderColor: '#1F2937',
-    borderRadius: 0,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#0A0A0B',
-  },
-  disabledChip: {
-    opacity: 0.6,
-  },
-  recentChipText: {
-    color: '#E5E7EB',
-  },
-  currentConfig: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: '#1F2937',
-    backgroundColor: '#0F0F10',
-    gap: 6,
-  },
-  currentConfigLabel: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    opacity: 0.65,
-    color: '#6B7280',
-  },
-  currentConfigValue: {
-    color: '#F3F4F6',
+    fontFamily: 'JetBrainsMono-Regular',
   },
 });
