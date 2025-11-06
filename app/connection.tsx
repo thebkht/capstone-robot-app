@@ -116,6 +116,15 @@ const deriveRobotLanBaseUrl = (
     return null;
   }
 
+  const isRobotHotspotSubnet =
+    ipSegments[0] === "192" &&
+    ipSegments[1] === "168" &&
+    ipSegments[2] === "4";
+
+  if (isRobotHotspotSubnet) {
+    return buildUrl("192.168.4.1");
+  }
+
   const candidateSources = [baseParts?.host, defaultParts?.host];
 
   for (const source of candidateSources) {
