@@ -19,6 +19,7 @@ import {
 } from '@/context/robot-provider';
 
 const DEFAULT_HOTSPOT_URL = 'http://192.168.4.1:8000';
+const ROVER_LOCAL_URL = 'http://rover.local:8000';
 const RECENT_URLS_STORAGE_KEY = 'robot_recent_urls';
 
 type ConnectionPhase = 'idle' | 'connecting' | 'connected' | 'error';
@@ -27,6 +28,22 @@ const normalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
 
 const ensureHttpScheme = (value: string) =>
   /^https?:\/\//i.test(value) ? value : `http://${value}`;
+
+const canonicalizeUrl = (value: string) => ensureHttpScheme(normalizeUrl(value));
+
+const extractIpv4Subnet = (value: string) => {
+  try {
+    const parsed = new URL(canonicalizeUrl(value));
+    const match = parsed.hostname.match(/^(\d+)\.(\d+)\.(\d+)\.\d+$/);
+    if (match) {
+      return `${match[1]}.${match[2]}.${match[3]}`;
+    }
+  } catch {
+    // Ignore parsing failures – non-IP hosts cannot yield a subnet.
+  }
+
+  return null;
+};
 
 const STATUS_META: Record<ConnectionPhase, { label: string; color: string }> = {
   idle: { label: 'Not connected', color: '#F87171' },
@@ -71,18 +88,66 @@ export default function ConnectionScreen() {
     [persistRecentUrls],
   );
 
+  type ProbeResult = { success: boolean; robotName?: string; reason?: string };
+
+  const probeRobotUrl = useCallback(async (normalizedUrl: string, timeoutMs = 5000) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(`${normalizedUrl}/health`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Robot responded with status ${response.status}`);
+      }
+
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        console.warn('Robot health response was not JSON', error);
+      }
+
+      const robotName =
+        payload && typeof payload === 'object' && 'name' in payload && typeof payload.name === 'string'
+          ? payload.name
+          : undefined;
+
+      return { success: true, robotName } satisfies ProbeResult;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, reason } satisfies ProbeResult;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }, []);
+
+  interface AttemptOptions {
+    statusMessage?: string;
+    skipRecent?: boolean;
+    preserveInput?: boolean;
+  }
+
+  interface AttemptResult {
+    success: boolean;
+    normalizedUrl?: string;
+  }
+
   const attemptConnection = useCallback(
-    async (rawUrl: string) => {
+    async (rawUrl: string, options: AttemptOptions = {}): Promise<AttemptResult> => {
       const trimmed = rawUrl.trim();
       if (!trimmed) {
         if (isMountedRef.current) {
           setPhase('error');
           setStatusMessage('Please enter a robot URL (including http:// or https://).');
         }
-        return false;
+        return { success: false };
       }
 
-      const prepared = ensureHttpScheme(normalizeUrl(trimmed));
+      const prepared = canonicalizeUrl(trimmed);
       try {
         // Validate the URL before attempting to fetch so we can surface immediate feedback.
         // Assign to a throwaway variable to avoid lint complaints about unused expressions.
@@ -93,39 +158,20 @@ export default function ConnectionScreen() {
           setPhase('error');
           setStatusMessage('Please provide a valid URL including host and protocol.');
         }
-        return false;
+        return { success: false };
       }
+
       if (isMountedRef.current) {
         setPhase('connecting');
-        setStatusMessage(`Trying ${prepared} …`);
-        setInputUrl(prepared);
+        setStatusMessage(options.statusMessage ?? `Trying ${prepared} …`);
+        if (!options.preserveInput) {
+          setInputUrl(prepared);
+        }
       }
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const { success, robotName, reason } = await probeRobotUrl(prepared);
 
-      try {
-        const response = await fetch(`${prepared}/health`, {
-          signal: controller.signal,
-          headers: { Accept: 'application/json' },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Robot responded with status ${response.status}`);
-        }
-
-        let payload: unknown;
-        try {
-          payload = await response.json();
-        } catch (error) {
-          console.warn('Robot health response was not JSON', error);
-        }
-
-        const robotName =
-          payload && typeof payload === 'object' && 'name' in payload && typeof payload.name === 'string'
-            ? payload.name
-            : undefined;
-
+      if (success) {
         if (isMountedRef.current) {
           setPhase('connected');
           setStatusMessage(
@@ -134,24 +180,120 @@ export default function ConnectionScreen() {
         }
 
         setBaseUrl(prepared);
-        recordRecentUrl(prepared);
+        if (!options.skipRecent) {
+          recordRecentUrl(prepared);
+        }
         await refreshStatus().catch((error) => {
           console.warn('Failed to refresh robot status after connecting', error);
         });
 
-        return true;
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : 'Unknown error';
+        return { success: true, normalizedUrl: prepared };
+      }
+
+      if (isMountedRef.current) {
+        const reasonSuffix = reason ? `: ${reason}` : '';
+        setPhase('error');
+        setStatusMessage(`Could not connect to ${prepared}${reasonSuffix}`);
+      }
+
+      return { success: false, normalizedUrl: prepared };
+    },
+    [probeRobotUrl, recordRecentUrl, refreshStatus, setBaseUrl],
+  );
+
+  const runLocalNetworkScan = useCallback(
+    async (attempted: Set<string>, additionalSeeds: string[] = []) => {
+      if (isMountedRef.current) {
+        setPhase('connecting');
+        setStatusMessage('Scanning local network for the robot…');
+      }
+
+      const candidateSubnets = new Set<string>();
+
+      const seedUrls: string[] = [baseUrl, inputUrl, ...recentUrls, ...additionalSeeds];
+      seedUrls.forEach((value) => {
+        if (!value) {
+          return;
+        }
+        const subnet = extractIpv4Subnet(value);
+        if (subnet) {
+          candidateSubnets.add(subnet);
+        }
+      });
+
+      if (candidateSubnets.size === 0) {
+        candidateSubnets.add('192.168.0');
+        candidateSubnets.add('192.168.1');
+        candidateSubnets.add('10.0.0');
+      }
+
+      const candidates: string[] = [];
+      candidateSubnets.forEach((subnet) => {
+        for (let host = 1; host <= 254; host += 1) {
+          const candidate = `http://${subnet}.${host}:8000`;
+          if (!attempted.has(candidate)) {
+            candidates.push(candidate);
+          }
+        }
+      });
+
+      if (candidates.length === 0) {
         if (isMountedRef.current) {
           setPhase('error');
-          setStatusMessage(`Could not connect to ${prepared}: ${reason}`);
+          setStatusMessage(
+            'Robot not found. Connect to the robot hotspot and use “Try hotspot (http://192.168.4.1:8000)”.',
+          );
         }
         return false;
-      } finally {
-        clearTimeout(timeout);
       }
+
+      for (let index = 0; index < candidates.length; index += 1) {
+        if (!isMountedRef.current) {
+          return false;
+        }
+
+        const candidate = candidates[index];
+        attempted.add(candidate);
+
+        if (isMountedRef.current) {
+          setStatusMessage(
+            `Scanning ${candidate} (${index + 1} of ${candidates.length}) for a healthy response…`,
+          );
+        }
+
+        const { success, robotName } = await probeRobotUrl(candidate, 2000);
+
+        if (success) {
+          if (isMountedRef.current) {
+            setPhase('connected');
+            setStatusMessage(
+              robotName
+                ? `Connected to ${robotName} at ${candidate}`
+                : `Connected to ${candidate}`,
+            );
+            setInputUrl(candidate);
+          }
+
+          setBaseUrl(candidate);
+          recordRecentUrl(candidate);
+          await refreshStatus().catch((error) => {
+            console.warn('Failed to refresh robot status after network scan', error);
+          });
+
+          return true;
+        }
+      }
+
+      if (isMountedRef.current) {
+        setPhase('error');
+        setStatusMessage(
+          'Robot not found. Connect to the robot hotspot and use “Try hotspot (http://192.168.4.1:8000)”.',
+        );
+      }
+
+      return false;
     },
-    [recordRecentUrl, refreshStatus, setBaseUrl],
+    [baseUrl, inputUrl, probeRobotUrl, recentUrls, recordRecentUrl, refreshStatus, setBaseUrl],
   );
 
   useEffect(() => {
@@ -167,20 +309,49 @@ export default function ConnectionScreen() {
           return;
         }
 
+        let hydratedRecentUrls: string[] = [];
+
         if (storedRecentUrls) {
           try {
             const parsed = JSON.parse(storedRecentUrls);
             if (Array.isArray(parsed)) {
-              setRecentUrls(parsed.filter((item): item is string => typeof item === 'string'));
+              hydratedRecentUrls = parsed.filter((item): item is string => typeof item === 'string');
+              setRecentUrls(hydratedRecentUrls);
             }
           } catch (error) {
             console.warn('Failed to parse stored recent URLs', error);
           }
         }
 
-        if (storedUrl && !hasAutoAttemptedRef.current) {
+        if (!hasAutoAttemptedRef.current) {
           hasAutoAttemptedRef.current = true;
-          await attemptConnection(storedUrl);
+
+          const attempted = new Set<string>();
+
+          if (storedUrl) {
+            const result = await attemptConnection(storedUrl, {
+              statusMessage: `Trying last saved address (${canonicalizeUrl(storedUrl)}) …`,
+            });
+            if (result.normalizedUrl) {
+              attempted.add(result.normalizedUrl);
+            }
+            if (result.success) {
+              return;
+            }
+          }
+
+          const fallbackResult = await attemptConnection(ROVER_LOCAL_URL, {
+            statusMessage: `Trying fallback address (${ROVER_LOCAL_URL}) …`,
+            skipRecent: true,
+          });
+          if (fallbackResult.normalizedUrl) {
+            attempted.add(fallbackResult.normalizedUrl);
+          }
+          if (fallbackResult.success) {
+            return;
+          }
+
+          await runLocalNetworkScan(attempted, hydratedRecentUrls);
         }
       } catch (error) {
         console.warn('Failed to hydrate connection screen state', error);
@@ -190,7 +361,7 @@ export default function ConnectionScreen() {
     return () => {
       isActive = false;
     };
-  }, [attemptConnection]);
+  }, [attemptConnection, runLocalNetworkScan]);
 
   const statusMeta = useMemo(() => {
     return STATUS_META[phase];
@@ -205,6 +376,16 @@ export default function ConnectionScreen() {
     hasAutoAttemptedRef.current = true;
     void attemptConnection(DEFAULT_HOTSPOT_URL);
   }, [attemptConnection]);
+
+  const handleScanPress = useCallback(() => {
+    hasAutoAttemptedRef.current = true;
+    const attempted = new Set<string>();
+    const normalizedInput = inputUrl ? canonicalizeUrl(inputUrl) : null;
+    if (normalizedInput) {
+      attempted.add(normalizedInput);
+    }
+    void runLocalNetworkScan(attempted);
+  }, [inputUrl, runLocalNetworkScan]);
 
   const handleRecentPress = useCallback(
     (url: string) => {
@@ -262,6 +443,14 @@ export default function ConnectionScreen() {
               )}
             </Pressable>
           </View>
+
+          <Pressable
+            style={[styles.scanButton, phase === 'connecting' && styles.disabledSecondary]}
+            onPress={handleScanPress}
+            disabled={phase === 'connecting'}
+          >
+            <ThemedText style={styles.secondaryButtonText}>Scan local network</ThemedText>
+          </Pressable>
 
           <View style={styles.dividerContainer}>
             <View style={styles.divider} />
@@ -414,6 +603,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderColor: '#1F2937',
     backgroundColor: '#0A0A0B',
+  },
+  scanButton: {
+    borderWidth: 1,
+    borderRadius: 0,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderColor: '#1F2937',
+    backgroundColor: '#111112',
   },
   secondaryButtonText: {
     color: '#E5E7EB',
