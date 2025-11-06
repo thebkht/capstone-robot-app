@@ -10,6 +10,8 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  PermissionsAndroid,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -51,6 +53,8 @@ export default function ConnectionScreen() {
     null
   );
   const [isLoadingDeviceNetwork, setIsLoadingDeviceNetwork] = useState(false);
+  const [ssidPermissionWarning, setSsidPermissionWarning] =
+    useState<string | null>(null);
   const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
   const [isScanningWifi, setIsScanningWifi] = useState(false);
   const [wifiScanError, setWifiScanError] = useState<string | null>(null);
@@ -78,13 +82,66 @@ export default function ConnectionScreen() {
 
         // Try to get SSID via WifiManager first, then fall back to NetInfo
         let ssid: string | null = null;
+        let permissionWarning: string | null = null;
         try {
-          const wifiManagerSsid = await WifiManager.getCurrentWifiSSID();
-          if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
-            ssid = wifiManagerSsid;
+          if (state.type === Network.NetworkStateType.WIFI) {
+            if (Platform.OS === "android") {
+              const fineLocationPermission =
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+
+              if (!fineLocationPermission) {
+                permissionWarning =
+                  "Wi-Fi SSID unavailable on this Android version.";
+              } else {
+                const hasPermission =
+                  await PermissionsAndroid.check(fineLocationPermission);
+
+                let granted = hasPermission;
+
+                if (!hasPermission) {
+                  const status = await PermissionsAndroid.request(
+                    fineLocationPermission,
+                    {
+                      title: "Location permission needed",
+                      message:
+                        "Allow location access to display the connected Wi-Fi network name.",
+                      buttonPositive: "Allow",
+                      buttonNegative: "Deny",
+                    }
+                  );
+
+                  granted = status === PermissionsAndroid.RESULTS.GRANTED;
+                }
+
+                if (!granted) {
+                  permissionWarning =
+                    "Grant location permission to display the Wi-Fi network name.";
+                } else {
+                  const wifiManagerSsid = await WifiManager.getCurrentWifiSSID();
+                  if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
+                    ssid = wifiManagerSsid;
+                  }
+                }
+              }
+            } else {
+              const wifiManagerSsid = await WifiManager.getCurrentWifiSSID();
+              if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
+                ssid = wifiManagerSsid;
+              } else if (Platform.OS === "ios") {
+                permissionWarning =
+                  "iOS may hide the Wi-Fi network name without additional entitlements.";
+              }
+            }
           }
         } catch (wifiManagerError) {
           console.log("WifiManager failed to fetch SSID", wifiManagerError);
+          if (
+            state.type === Network.NetworkStateType.WIFI &&
+            Platform.OS === "ios"
+          ) {
+            permissionWarning =
+              "iOS may hide the Wi-Fi network name without additional entitlements.";
+          }
         }
 
         if (!ssid) {
@@ -107,6 +164,7 @@ export default function ConnectionScreen() {
           return;
         }
 
+        setSsidPermissionWarning(permissionWarning);
         setDeviceNetwork({
           type: state.type,
           isConnected: Boolean(state.isConnected),
@@ -128,6 +186,7 @@ export default function ConnectionScreen() {
             : "Unable to determine device network status.";
         setDeviceNetwork(null);
         setDeviceNetworkError(message);
+        setSsidPermissionWarning(null);
       } finally {
         if (!mountedRef.current) {
           return;
@@ -205,7 +264,7 @@ export default function ConnectionScreen() {
         color: "#1DD1A1",
         label: "Connected",
         details: [networkName, ipAddress],
-        helper: null,
+        helper: ssidPermissionWarning,
       };
     }
 
@@ -230,9 +289,15 @@ export default function ConnectionScreen() {
       ],
       helper: deviceNetworkError
         ? null
-        : "Check network permissions and retry.",
+        : ssidPermissionWarning ?? "Check network permissions and retry.",
     };
-  }, [deviceNetwork, deviceNetworkError, isLoadingDeviceNetwork, statusNetwork]);
+  }, [
+    deviceNetwork,
+    deviceNetworkError,
+    isLoadingDeviceNetwork,
+    ssidPermissionWarning,
+    statusNetwork,
+  ]);
 
   const handleScanPress = useCallback(async () => {
     setIsScanningWifi(true);
