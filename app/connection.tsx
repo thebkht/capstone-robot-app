@@ -6,7 +6,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -54,22 +53,20 @@ const STATUS_META: Record<ConnectionPhase, { label: string; color: string }> = {
 
 export default function ConnectionScreen() {
   const { baseUrl, setBaseUrl, refreshStatus } = useRobot();
-  const [inputUrl, setInputUrl] = useState(baseUrl);
   const [phase, setPhase] = useState<ConnectionPhase>('idle');
-  const [statusMessage, setStatusMessage] = useState('Enter the robot address to connect.');
+  const [statusMessage, setStatusMessage] = useState(
+    'Looking for the robot automatically. We will try saved addresses and common defaults.',
+  );
   const [recentUrls, setRecentUrls] = useState<string[]>([]);
   const hasAutoAttemptedRef = useRef(false);
   const isMountedRef = useRef(true);
+  const lastAttemptedUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
     };
   }, []);
-
-  useEffect(() => {
-    setInputUrl(baseUrl);
-  }, [baseUrl]);
 
   const persistRecentUrls = useCallback((urls: string[]) => {
     void AsyncStorage.setItem(RECENT_URLS_STORAGE_KEY, JSON.stringify(urls)).catch((error) => {
@@ -128,7 +125,6 @@ export default function ConnectionScreen() {
   interface AttemptOptions {
     statusMessage?: string;
     skipRecent?: boolean;
-    preserveInput?: boolean;
   }
 
   interface AttemptResult {
@@ -142,12 +138,13 @@ export default function ConnectionScreen() {
       if (!trimmed) {
         if (isMountedRef.current) {
           setPhase('error');
-          setStatusMessage('Please enter a robot URL (including http:// or https://).');
+          setStatusMessage('No robot address was provided for the connection attempt.');
         }
         return { success: false };
       }
 
       const prepared = canonicalizeUrl(trimmed);
+      lastAttemptedUrlRef.current = prepared;
       try {
         // Validate the URL before attempting to fetch so we can surface immediate feedback.
         // Assign to a throwaway variable to avoid lint complaints about unused expressions.
@@ -164,9 +161,6 @@ export default function ConnectionScreen() {
       if (isMountedRef.current) {
         setPhase('connecting');
         setStatusMessage(options.statusMessage ?? `Trying ${prepared} …`);
-        if (!options.preserveInput) {
-          setInputUrl(prepared);
-        }
       }
 
       const { success, robotName, reason } = await probeRobotUrl(prepared);
@@ -210,7 +204,12 @@ export default function ConnectionScreen() {
 
       const candidateSubnets = new Set<string>();
 
-      const seedUrls: string[] = [baseUrl, inputUrl, ...recentUrls, ...additionalSeeds];
+      const seedUrls: (string | null | undefined)[] = [
+        baseUrl,
+        lastAttemptedUrlRef.current,
+        ...recentUrls,
+        ...additionalSeeds,
+      ];
       seedUrls.forEach((value) => {
         if (!value) {
           return;
@@ -271,7 +270,6 @@ export default function ConnectionScreen() {
                 ? `Connected to ${robotName} at ${candidate}`
                 : `Connected to ${candidate}`,
             );
-            setInputUrl(candidate);
           }
 
           setBaseUrl(candidate);
@@ -293,7 +291,7 @@ export default function ConnectionScreen() {
 
       return false;
     },
-    [baseUrl, inputUrl, probeRobotUrl, recentUrls, recordRecentUrl, refreshStatus, setBaseUrl],
+    [baseUrl, probeRobotUrl, recentUrls, recordRecentUrl, refreshStatus, setBaseUrl],
   );
 
   useEffect(() => {
@@ -367,25 +365,44 @@ export default function ConnectionScreen() {
     return STATUS_META[phase];
   }, [phase]);
 
-  const handleConnectPress = useCallback(() => {
-    hasAutoAttemptedRef.current = true;
-    void attemptConnection(inputUrl);
-  }, [attemptConnection, inputUrl]);
-
   const handleHotspotPress = useCallback(() => {
     hasAutoAttemptedRef.current = true;
     void attemptConnection(DEFAULT_HOTSPOT_URL);
   }, [attemptConnection]);
 
+  const handleRetrySavedPress = useCallback(() => {
+    if (!baseUrl) {
+      return;
+    }
+    hasAutoAttemptedRef.current = true;
+    void attemptConnection(baseUrl);
+  }, [attemptConnection, baseUrl]);
+
+  const handleRoverLocalPress = useCallback(() => {
+    hasAutoAttemptedRef.current = true;
+    void attemptConnection(ROVER_LOCAL_URL, { skipRecent: true });
+  }, [attemptConnection]);
+
   const handleScanPress = useCallback(() => {
     hasAutoAttemptedRef.current = true;
     const attempted = new Set<string>();
-    const normalizedInput = inputUrl ? canonicalizeUrl(inputUrl) : null;
-    if (normalizedInput) {
-      attempted.add(normalizedInput);
-    }
+    const seeds: (string | null | undefined)[] = [
+      baseUrl,
+      lastAttemptedUrlRef.current,
+      ...recentUrls,
+    ];
+    seeds.forEach((value) => {
+      if (!value) {
+        return;
+      }
+      try {
+        attempted.add(canonicalizeUrl(value));
+      } catch {
+        // Ignore invalid URLs in the attempted set.
+      }
+    });
     void runLocalNetworkScan(attempted);
-  }, [inputUrl, runLocalNetworkScan]);
+  }, [baseUrl, recentUrls, runLocalNetworkScan]);
 
   const handleRecentPress = useCallback(
     (url: string) => {
@@ -407,8 +424,8 @@ export default function ConnectionScreen() {
             Connect to Robot
           </ThemedText>
           <ThemedText style={styles.subheading}>
-            Tell the app where the rover is hosted. We will try your last working address automatically
-            and remember any IPs you confirm.
+            We automatically try your last working address and the rover.local fallback. Use the options
+            below if the robot is not detected right away.
           </ThemedText>
 
           <View style={[styles.statusCard, { borderColor: statusMeta.color }]}>
@@ -419,30 +436,31 @@ export default function ConnectionScreen() {
             <ThemedText style={styles.statusMessage}>{statusMessage}</ThemedText>
           </View>
 
-          <View style={styles.section}>
-            <ThemedText style={styles.fieldLabel}>Robot IP / Host</ThemedText>
-            <TextInput
-              value={inputUrl}
-              onChangeText={setInputUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder="http://192.168.0.52:8000"
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              style={styles.input}
-            />
+          {baseUrl ? (
             <Pressable
-              style={[styles.primaryButton, phase === 'connecting' && styles.disabledButton]}
-              onPress={handleConnectPress}
+              style={[styles.primaryButton, phase === 'connecting' && styles.disabledPrimary]}
+              onPress={handleRetrySavedPress}
               disabled={phase === 'connecting'}
             >
               {phase === 'connecting' ? (
                 <ActivityIndicator color="#04110B" />
               ) : (
-                <ThemedText style={styles.primaryButtonText}>Connect</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>
+                  Retry saved address ({baseUrl})
+                </ThemedText>
               )}
             </Pressable>
-          </View>
+          ) : null}
+
+          <Pressable
+            style={[styles.secondaryButton, phase === 'connecting' && styles.disabledSecondary]}
+            onPress={handleRoverLocalPress}
+            disabled={phase === 'connecting'}
+          >
+            <ThemedText style={styles.secondaryButtonText}>
+              Try rover.local ({ROVER_LOCAL_URL})
+            </ThemedText>
+          </Pressable>
 
           <Pressable
             style={[styles.scanButton, phase === 'connecting' && styles.disabledSecondary]}
@@ -468,7 +486,7 @@ export default function ConnectionScreen() {
             </ThemedText>
           </Pressable>
 
-          {recentUrls.length > 1 ? (
+          {recentUrls.length > 0 ? (
             <View style={styles.recentsContainer}>
               <ThemedText style={styles.recentsLabel}>Recent addresses</ThemedText>
               <View style={styles.recentsList}>
@@ -550,23 +568,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#9CA3AF',
   },
-  section: {
-    gap: 14,
-  },
-  fieldLabel: {
-    color: '#F9FAFB',
-  },
-  input: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: '#1F2937',
-    backgroundColor: '#0A0A0B',
-    color: '#F9FAFB',
-    fontFamily: 'JetBrainsMono-Regular',
-    letterSpacing: 0.25,
-  },
   primaryButton: {
     backgroundColor: '#1DD1A1',
     borderRadius: 0,
@@ -575,8 +576,9 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#04110B',
+    textAlign: 'center',
   },
-  disabledButton: {
+  disabledPrimary: {
     opacity: 0.6,
   },
   dividerContainer: {
