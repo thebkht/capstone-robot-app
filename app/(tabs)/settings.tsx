@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { Alert, Pressable, StyleSheet, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -20,39 +21,45 @@ export default function SettingsScreen() {
   }, [draftUrl, refreshStatus, setBaseUrl]);
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title">Configuration</ThemedText>
-      <ThemedText style={styles.description}>
-        Set the robot address and communication preferences.
-      </ThemedText>
-
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">Robot IP / host</ThemedText>
-        <TextInput
-          value={draftUrl}
-          onChangeText={setDraftUrl}
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-        />
-        <Pressable style={styles.primaryButton} onPress={handleSave}>
-          <ThemedText style={styles.primaryText}>Save</ThemedText>
-        </Pressable>
-      </ThemedView>
-
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">About this app</ThemedText>
-        <ThemedText>
-          Robot companion dashboard with Wi-Fi setup, camera streaming, and telemetry monitoring.
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <ThemedView style={styles.container}>
+        <ThemedText type="title">Configuration</ThemedText>
+        <ThemedText style={styles.description}>
+          Set the robot address and communication preferences.
         </ThemedText>
-        <ThemedText style={styles.meta}>Version 0.1.0</ThemedText>
+
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle">Robot IP / host</ThemedText>
+          <TextInput
+            value={draftUrl}
+            onChangeText={setDraftUrl}
+            style={styles.input}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+          />
+          <Pressable style={styles.primaryButton} onPress={handleSave}>
+            <ThemedText style={styles.primaryText}>Save</ThemedText>
+          </Pressable>
+        </ThemedView>
+
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle">About this app</ThemedText>
+          <ThemedText>
+            Robot companion dashboard with Wi-Fi setup, camera streaming, and telemetry monitoring.
+          </ThemedText>
+          <ThemedText style={styles.meta}>Version 0.1.0</ThemedText>
+        </ThemedView>
       </ThemedView>
-    </ThemedView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#050505',
+  },
   container: {
     flex: 1,
     padding: 24,
@@ -78,7 +85,7 @@ const styles = StyleSheet.create({
     borderColor: '#1F2937',
     backgroundColor: '#0A0A0B',
     color: '#F9FAFB',
-    fontFamily: 'JetBrainsMono-Regular',
+    fontFamily: 'JetBrainsMono_400Regular',
     letterSpacing: 0.25,
   },
   primaryButton: {

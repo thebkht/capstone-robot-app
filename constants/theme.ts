@@ -30,24 +30,24 @@ export const Colors = {
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
+    sans: 'Lato_400Regular',
     /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
+    serif: 'Lato_700Bold',
     /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
     /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+    mono: 'JetBrainsMono_400Regular',
   },
   default: {
-    sans: 'normal',
-    serif: 'serif',
+    sans: 'Lato_400Regular',
+    serif: 'Lato_700Bold',
     rounded: 'normal',
-    mono: 'monospace',
+    mono: 'JetBrainsMono_400Regular',
   },
   web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
+    sans: "'Lato', 'Helvetica Neue', Arial, sans-serif",
+    serif: "'Lato', 'Times New Roman', serif",
     rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    mono: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
