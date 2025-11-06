@@ -23,6 +23,11 @@ const RECENT_URLS_STORAGE_KEY = 'robot_recent_urls';
 
 type ConnectionPhase = 'idle' | 'connecting' | 'connected' | 'error';
 
+type NetworkScanOptions = {
+  statusMessage?: string;
+  presetSubnets?: string[];
+};
+
 const normalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
 
 const ensureHttpScheme = (value: string) =>
@@ -196,13 +201,17 @@ export default function ConnectionScreen() {
   );
 
   const runLocalNetworkScan = useCallback(
-    async (attempted: Set<string>, additionalSeeds: string[] = []) => {
+    async (
+      attempted: Set<string>,
+      additionalSeeds: string[] = [],
+      options: NetworkScanOptions = {},
+    ) => {
       if (isMountedRef.current) {
         setPhase('connecting');
-        setStatusMessage('Scanning local network for the robot…');
+        setStatusMessage(options.statusMessage ?? 'Scanning local network for the robot…');
       }
 
-      const candidateSubnets = new Set<string>();
+      const candidateSubnets = new Set<string>(options.presetSubnets ?? []);
 
       const seedUrls: (string | null | undefined)[] = [
         baseUrl,
@@ -281,7 +290,6 @@ export default function ConnectionScreen() {
           return true;
         }
       }
-
       if (isMountedRef.current) {
         setPhase('error');
         setStatusMessage(
@@ -367,8 +375,27 @@ export default function ConnectionScreen() {
 
   const handleHotspotPress = useCallback(() => {
     hasAutoAttemptedRef.current = true;
-    void attemptConnection(DEFAULT_HOTSPOT_URL);
-  }, [attemptConnection]);
+    void (async () => {
+      const attempted = new Set<string>();
+      const result = await attemptConnection(DEFAULT_HOTSPOT_URL, {
+        statusMessage: `Trying hotspot address (${DEFAULT_HOTSPOT_URL}) …`,
+        skipRecent: true,
+      });
+
+      if (result.normalizedUrl) {
+        attempted.add(result.normalizedUrl);
+      }
+
+      if (result.success) {
+        return;
+      }
+
+      await runLocalNetworkScan(attempted, [DEFAULT_HOTSPOT_URL], {
+        statusMessage: 'Scanning hotspot network for the robot…',
+        presetSubnets: ['192.168.4'],
+      });
+    })();
+  }, [attemptConnection, runLocalNetworkScan]);
 
   const handleRetrySavedPress = useCallback(() => {
     if (!baseUrl) {
