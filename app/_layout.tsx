@@ -22,6 +22,12 @@ import {
   JetBrainsMono_400Regular,
   JetBrainsMono_600SemiBold,
 } from '@expo-google-fonts/jetbrains-mono';
+import {
+  Lora_400Regular,
+  Lora_500Medium,
+  Lora_600SemiBold,
+  Lora_700Bold,
+} from '@expo-google-fonts/lora';
 
 import { RobotProvider } from '@/context/robot-provider';
 
@@ -43,6 +49,10 @@ export default function RootLayout() {
     Lato_900Black_Italic,
     JetBrainsMono_400Regular,
     JetBrainsMono_600SemiBold,
+    Lora_400Regular,
+    Lora_500Medium,
+    Lora_600SemiBold,
+    Lora_700Bold,
   });
 
   useEffect(() => {

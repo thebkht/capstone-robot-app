@@ -1,6 +1,7 @@
 import { StyleSheet, Text, type TextProps } from 'react-native';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { SerifFonts } from '@/constants/theme';
 
 export type ThemedTextProps = TextProps & {
   lightColor?: string;
@@ -37,9 +38,9 @@ const monoRegular = 'JetBrainsMono_400Regular';
 
 const monoSemiBold = 'JetBrainsMono_600SemiBold';
 
-const titleHeading = 'Lato_900Black';
+const titleHeading = SerifFonts.bold;
 
-const subtitleHeading = 'Lato_400Regular';
+const subtitleHeading = SerifFonts.semiBold;
 
 const styles = StyleSheet.create({
   default: {

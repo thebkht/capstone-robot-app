@@ -27,12 +27,21 @@ export const Colors = {
   },
 };
 
+export const SerifFonts = {
+  regular: 'Lora_400Regular',
+  medium: 'Lora_500Medium',
+  semiBold: 'Lora_600SemiBold',
+  bold: 'Lora_700Bold',
+} as const;
+
+const serifFontFamily = SerifFonts.regular;
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'Lato_400Regular',
     /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'Lato_700Bold',
+    serif: serifFontFamily,
     /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
     /** iOS `UIFontDescriptorSystemDesignMonospaced` */
@@ -40,14 +49,16 @@ export const Fonts = Platform.select({
   },
   default: {
     sans: 'Lato_400Regular',
-    serif: 'Lato_700Bold',
+    serif: serifFontFamily,
     rounded: 'normal',
     mono: 'JetBrainsMono_400Regular',
   },
   web: {
     sans: "'Lato', 'Helvetica Neue', Arial, sans-serif",
-    serif: "'Lato', 'Times New Roman', serif",
+    serif: serifFontFamily,
     rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
     mono: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
+
+export const SerifFontFamily = serifFontFamily;
