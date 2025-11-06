@@ -22,13 +22,14 @@ import WifiManager from "react-native-wifi-reborn";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { SerifFonts } from "@/constants/theme";
 import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 
 const ROBOT_AP_SSID = "ROBOTSNAME_AP";
 
-const TITLE_FONT_FAMILY = "Lato_900Black";
+const TITLE_FONT_FAMILY = SerifFonts.bold;
 
-const SUBTITLE_FONT_FAMILY = "Lato_400Regular";
+const SUBTITLE_FONT_FAMILY = SerifFonts.semiBold;
 
 const MONO_REGULAR_FONT_FAMILY = "JetBrainsMono_400Regular";
 
