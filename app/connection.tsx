@@ -23,7 +23,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
+
 const ROBOT_AP_SSID = "ROBOTSNAME_AP";
+
+const SERIF_FONT_FAMILY = Platform.select({
+  ios: "Times New Roman",
+  android: "serif",
+  default: "Times New Roman",
+});
+
+const MONO_REGULAR_FONT_FAMILY = Platform.select({
+  ios: "JetBrainsMono-Regular",
+  android: "JetBrainsMono-Regular",
+  default: "JetBrainsMono-Regular",
+});
 
 const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, "");
 
@@ -65,9 +78,39 @@ const extractUrlParts = (value: string | null | undefined) => {
 };
 
 const deriveRobotLanBaseUrl = (
-  deviceIpAddress: string,
+  deviceIpAddress: string | null | undefined,
   options: { currentBaseUrl: string; statusIp?: string | null }
 ) => {
+  const { currentBaseUrl, statusIp } = options;
+  const baseParts = extractUrlParts(currentBaseUrl);
+  const defaultParts = extractUrlParts(DEFAULT_ROBOT_BASE_URL);
+  const statusParts = extractUrlParts(statusIp);
+
+  const protocol =
+    baseParts?.protocol ??
+    statusParts?.protocol ??
+    defaultParts?.protocol ??
+    "http:";
+  const port =
+    statusParts?.port ??
+    baseParts?.port ??
+    defaultParts?.port ??
+    "8000";
+
+  const buildUrl = (ip: string) => {
+    const trimmedProtocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
+    const normalizedPort = port ? `:${port}` : "";
+    return `${trimmedProtocol}//${ip}${normalizedPort}`;
+  };
+
+  if (statusParts?.host && isValidIpv4(statusParts.host)) {
+    return buildUrl(statusParts.host);
+  }
+
+  if (!deviceIpAddress || !isValidIpv4(deviceIpAddress)) {
+    return null;
+  }
+
   const ipSegments = deviceIpAddress
     .split(".")
     .map((segment) => segment.trim())
@@ -77,23 +120,18 @@ const deriveRobotLanBaseUrl = (
     return null;
   }
 
-  const { currentBaseUrl, statusIp } = options;
-  const baseParts = extractUrlParts(currentBaseUrl);
-  const protocol = baseParts?.protocol ?? "http:";
-  const port = baseParts?.port ?? "8000";
+  const candidateSources = [baseParts?.host, defaultParts?.host];
 
-  const buildUrl = (ip: string) => {
-    const trimmedProtocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
-    const normalizedPort = port ? `:${port}` : "";
-    return `${trimmedProtocol}//${ip}${normalizedPort}`;
-  };
+  for (const source of candidateSources) {
+    if (!source || !isValidIpv4(source)) {
+      continue;
+    }
 
-  if (isValidIpv4(statusIp)) {
-    return buildUrl(statusIp as string);
-  }
+    const hostSegments = source.split(".");
+    if (hostSegments.length !== 4) {
+      continue;
+    }
 
-  if (baseParts?.host && isValidIpv4(baseParts.host)) {
-    const hostSegments = baseParts.host.split(".");
     const candidateSegments = [
       ipSegments[0],
       ipSegments[1],
@@ -323,7 +361,7 @@ export default function ConnectionScreen() {
       return;
     }
 
-    const nextUrl = deriveRobotLanBaseUrl(status.network.ip, {
+    const nextUrl = deriveRobotLanBaseUrl(deviceNetwork?.ipAddress, {
       currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
       statusIp: status.network.ip,
     });
@@ -338,7 +376,12 @@ export default function ConnectionScreen() {
     if (normalizedNext !== normalizedBase) {
       setBaseUrl(normalizedNext);
     }
-  }, [baseUrl, setBaseUrl, status?.network?.ip]);
+  }, [
+    baseUrl,
+    deviceNetwork?.ipAddress,
+    setBaseUrl,
+    status?.network?.ip,
+  ]);
 
   const handleStatusRefresh = useCallback(() => {
     void refreshDeviceNetwork();
@@ -746,11 +789,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#050505",
   },
   heading: {
-    fontFamily: "Times New Roman",
+    fontFamily: SERIF_FONT_FAMILY,
   },
   subheading: {
     color: "#D1D5DB",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   statusCard: {
     gap: 16,
@@ -762,7 +805,8 @@ const styles = StyleSheet.create({
   },
   statusTitle: {
     color: "#F9FAFB",
-    fontFamily: "JetBrainsMono-Bold",
+    fontFamily: SERIF_FONT_FAMILY,
+    fontWeight: "600",
   },
   statusIndicator: {
     width: 10,
@@ -771,7 +815,7 @@ const styles = StyleSheet.create({
   },
   statusWarning: {
     color: "#FBBF24",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   infoGroup: {
     gap: 12,
@@ -785,11 +829,11 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     color: "#9CA3AF",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   infoValue: {
     color: "#F9FAFB",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   infoValueContainer: {
     flexDirection: "row",
@@ -798,7 +842,7 @@ const styles = StyleSheet.create({
   },
   statusError: {
     color: "#F87171",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   wifiCard: {
     gap: 16,
@@ -810,7 +854,7 @@ const styles = StyleSheet.create({
   },
   wifiHint: {
     color: "#D1D5DB",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   scanButton: {
     borderWidth: 1,
@@ -833,7 +877,7 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: "#E5E7EB",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   networkList: {
     borderWidth: 1,
@@ -858,20 +902,20 @@ const styles = StyleSheet.create({
   },
   networkName: {
     color: "#F9FAFB",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   networkSelectedHint: {
     color: "#1DD1A1",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   wifiMeta: {
     color: "#9CA3AF",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
     paddingVertical: 12,
   },
   selectNetworkHint: {
     color: "#FBBF24",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   wifiCredentials: {
     gap: 12,
@@ -883,11 +927,12 @@ const styles = StyleSheet.create({
   },
   credentialsHeading: {
     color: "#E5E7EB",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: SERIF_FONT_FAMILY,
+    fontWeight: "600",
   },
   credentialsHint: {
     color: "#9CA3AF",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   passwordInput: {
     paddingHorizontal: 16,
@@ -897,15 +942,15 @@ const styles = StyleSheet.create({
     borderColor: "#1F2937",
     backgroundColor: "#0A0A0B",
     color: "#F9FAFB",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   credentialsError: {
     color: "#F87171",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   credentialsSuccess: {
     color: "#1DD1A1",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   primaryButton: {
     backgroundColor: "#1DD1A1",
@@ -918,6 +963,6 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#04110B",
-    fontFamily: "JetBrainsMono-Regular",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
 });
