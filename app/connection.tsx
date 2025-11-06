@@ -26,9 +26,9 @@ import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 
 const ROBOT_AP_SSID = "ROBOTSNAME_AP";
 
-const TITLE_FONT_FAMILY = "Lato_700Bold";
+const TITLE_FONT_FAMILY = "Lato_900Black";
 
-const SUBTITLE_FONT_FAMILY = "Lato_600SemiBold";
+const SUBTITLE_FONT_FAMILY = "Lato_400Regular";
 
 const MONO_REGULAR_FONT_FAMILY = "JetBrainsMono_400Regular";
 

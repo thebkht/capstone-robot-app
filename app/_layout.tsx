@@ -7,9 +7,16 @@ import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import {
+  Lato_100Thin,
+  Lato_100Thin_Italic,
+  Lato_300Light,
+  Lato_300Light_Italic,
   Lato_400Regular,
-  Lato_600SemiBold,
+  Lato_400Regular_Italic,
   Lato_700Bold,
+  Lato_700Bold_Italic,
+  Lato_900Black,
+  Lato_900Black_Italic,
 } from '@expo-google-fonts/lato';
 import {
   JetBrainsMono_400Regular,
@@ -23,10 +30,17 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
+  let [fontsLoaded, fontError] = useFonts({
+    Lato_100Thin,
+    Lato_100Thin_Italic,
+    Lato_300Light,
+    Lato_300Light_Italic,
     Lato_400Regular,
-    Lato_600SemiBold,
+    Lato_400Regular_Italic,
     Lato_700Bold,
+    Lato_700Bold_Italic,
+    Lato_900Black,
+    Lato_900Black_Italic,
     JetBrainsMono_400Regular,
     JetBrainsMono_600SemiBold,
   });

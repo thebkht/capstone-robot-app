@@ -37,9 +37,9 @@ const monoRegular = 'JetBrainsMono_400Regular';
 
 const monoSemiBold = 'JetBrainsMono_600SemiBold';
 
-const titleHeading = 'Lato_700Bold';
+const titleHeading = 'Lato_900Black';
 
-const subtitleHeading = 'Lato_600SemiBold';
+const subtitleHeading = 'Lato_400Regular';
 
 const styles = StyleSheet.create({
   default: {
