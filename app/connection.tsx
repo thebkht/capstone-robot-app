@@ -26,17 +26,13 @@ import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 
 const ROBOT_AP_SSID = "ROBOTSNAME_AP";
 
-const SERIF_FONT_FAMILY = Platform.select({
-  ios: "Lora",
-  android: "Algebra",
-  default: "Lora",
-});
+const TITLE_FONT_FAMILY = "Lato_700Bold";
 
-const MONO_REGULAR_FONT_FAMILY = Platform.select({
-  ios: "mdio",
-  android: "mdio",
-  default: "mdio",
-});
+const SUBTITLE_FONT_FAMILY = "Lato_600SemiBold";
+
+const MONO_REGULAR_FONT_FAMILY = "JetBrainsMono_400Regular";
+
+const MONO_SEMIBOLD_FONT_FAMILY = "JetBrainsMono_600SemiBold";
 
 const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, "");
 
@@ -789,7 +785,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#050505",
   },
   heading: {
-    fontFamily: SERIF_FONT_FAMILY,
+    fontFamily: TITLE_FONT_FAMILY,
   },
   subheading: {
     color: "#D1D5DB",
@@ -805,8 +801,7 @@ const styles = StyleSheet.create({
   },
   statusTitle: {
     color: "#F9FAFB",
-    fontFamily: SERIF_FONT_FAMILY,
-    fontWeight: "600",
+    fontFamily: SUBTITLE_FONT_FAMILY,
   },
   statusIndicator: {
     width: 10,
@@ -927,8 +922,7 @@ const styles = StyleSheet.create({
   },
   credentialsHeading: {
     color: "#E5E7EB",
-    fontFamily: SERIF_FONT_FAMILY,
-    fontWeight: "600",
+    fontFamily: SUBTITLE_FONT_FAMILY,
   },
   credentialsHint: {
     color: "#9CA3AF",
@@ -963,6 +957,6 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#04110B",
-    fontFamily: MONO_REGULAR_FONT_FAMILY,
+    fontFamily: MONO_SEMIBOLD_FONT_FAMILY,
   },
 });

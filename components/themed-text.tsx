@@ -1,4 +1,4 @@
-import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
+import { StyleSheet, Text, type TextProps } from 'react-native';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
 
@@ -33,23 +33,13 @@ export function ThemedText({
   );
 }
 
-const monoRegular = Platform.select({
-  ios: 'mdio',
-  android: 'mdio',
-  default: 'mdio',
-});
+const monoRegular = 'JetBrainsMono_400Regular';
 
-const monoSemiBold = Platform.select({
-  ios: 'mdio',
-  android: 'mdio',
-  default: 'mdio',
-});
+const monoSemiBold = 'JetBrainsMono_600SemiBold';
 
-const serifHeading = Platform.select({
-  ios: 'Lora',
-  android: 'Algebra',
-  default: 'Lora',
-});
+const titleHeading = 'Lato_700Bold';
+
+const subtitleHeading = 'Lato_600SemiBold';
 
 const styles = StyleSheet.create({
   default: {
@@ -65,17 +55,15 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   title: {
-    fontFamily: serifHeading,
+    fontFamily: titleHeading,
     fontSize: 32,
     lineHeight: 36,
-    fontWeight: '600',
     includeFontPadding: false,
   },
   subtitle: {
-    fontFamily: serifHeading,
+    fontFamily: subtitleHeading,
     fontSize: 20,
     lineHeight: 26,
-    fontWeight: '600',
     includeFontPadding: false,
   },
   link: {
