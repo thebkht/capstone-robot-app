@@ -1,4 +1,4 @@
-import { StyleSheet, Text, type TextProps } from 'react-native';
+import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
 
@@ -33,28 +33,56 @@ export function ThemedText({
   );
 }
 
+const monoRegular = Platform.select({
+  ios: 'JetBrainsMono-Regular',
+  android: 'JetBrainsMono-Regular',
+  default: 'JetBrainsMono-Regular',
+});
+
+const monoSemiBold = Platform.select({
+  ios: 'JetBrainsMono-SemiBold',
+  android: 'JetBrainsMono-SemiBold',
+  default: 'JetBrainsMono-SemiBold',
+});
+
+const serifHeading = Platform.select({
+  ios: 'Times New Roman',
+  android: 'serif',
+  default: 'Times New Roman',
+});
+
 const styles = StyleSheet.create({
   default: {
+    fontFamily: monoRegular,
     fontSize: 16,
     lineHeight: 24,
+    includeFontPadding: false,
   },
   defaultSemiBold: {
+    fontFamily: monoSemiBold,
     fontSize: 16,
     lineHeight: 24,
-    fontWeight: '600',
+    includeFontPadding: false,
   },
   title: {
+    fontFamily: serifHeading,
     fontSize: 32,
-    fontWeight: 'bold',
-    lineHeight: 32,
+    lineHeight: 36,
+    fontWeight: '600',
+    includeFontPadding: false,
   },
   subtitle: {
+    fontFamily: serifHeading,
     fontSize: 20,
-    fontWeight: 'bold',
+    lineHeight: 26,
+    fontWeight: '600',
+    includeFontPadding: false,
   },
   link: {
+    fontFamily: monoSemiBold,
     lineHeight: 30,
     fontSize: 16,
-    color: '#0a7ea4',
+    color: '#5CC8FF',
+    includeFontPadding: false,
   },
 });

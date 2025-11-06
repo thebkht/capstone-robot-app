@@ -29,10 +29,10 @@ const ensureHttpScheme = (value: string) =>
   /^https?:\/\//i.test(value) ? value : `http://${value}`;
 
 const STATUS_META: Record<ConnectionPhase, { label: string; color: string }> = {
-  idle: { label: 'Not connected', color: '#ef4444' },
-  connecting: { label: 'Trying to connect…', color: '#facc15' },
-  connected: { label: 'Connected', color: '#34d399' },
-  error: { label: 'Not connected', color: '#ef4444' },
+  idle: { label: 'Not connected', color: '#F87171' },
+  connecting: { label: 'Trying to connect…', color: '#FBBF24' },
+  connected: { label: 'Connected', color: '#2DD4BF' },
+  error: { label: 'Not connected', color: '#F87171' },
 };
 
 export default function ConnectionScreen() {
@@ -216,7 +216,11 @@ export default function ConnectionScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <ThemedView style={styles.container}>
           <ThemedText type="title" style={styles.heading}>
             Connect to Robot
@@ -252,7 +256,7 @@ export default function ConnectionScreen() {
               disabled={phase === 'connecting'}
             >
               {phase === 'connecting' ? (
-                <ActivityIndicator color="#111" />
+                <ActivityIndicator color="#04110B" />
               ) : (
                 <ThemedText style={styles.primaryButtonText}>Connect</ThemedText>
               )}
@@ -310,71 +314,81 @@ export default function ConnectionScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: '#050505',
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#050505',
   },
   scrollContent: {
-    padding: 20,
+    padding: 24,
   },
   container: {
-    gap: 20,
+    gap: 24,
+    backgroundColor: '#050505',
   },
   heading: {
-    marginBottom: 4,
+    marginBottom: 8,
+    color: '#F3F4F6',
   },
   subheading: {
     opacity: 0.75,
-    lineHeight: 20,
+    lineHeight: 22,
+    color: '#D1D5DB',
   },
   statusCard: {
     borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    gap: 8,
-    backgroundColor: 'rgba(17,17,17,0.85)',
+    borderRadius: 0,
+    padding: 20,
+    gap: 10,
+    backgroundColor: '#0F0F10',
   },
   statusHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 0,
   },
   statusLabel: {
-    fontWeight: '600',
+    color: '#E5E7EB',
   },
   statusMessage: {
-    opacity: 0.85,
-    lineHeight: 20,
+    opacity: 0.9,
+    lineHeight: 22,
+    color: '#9CA3AF',
   },
   section: {
-    gap: 12,
+    gap: 14,
   },
   fieldLabel: {
-    fontWeight: '600',
+    color: '#F9FAFB',
   },
   input: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.15)',
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    color: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    backgroundColor: '#0A0A0B',
+    color: '#F9FAFB',
+    fontFamily: 'JetBrainsMono-Regular',
+    letterSpacing: 0.25,
   },
   primaryButton: {
-    backgroundColor: '#34d399',
-    borderRadius: 12,
-    paddingVertical: 14,
+    backgroundColor: '#1DD1A1',
+    borderRadius: 0,
+    paddingVertical: 16,
     alignItems: 'center',
   },
   primaryButtonText: {
-    fontWeight: '600',
-    color: '#111',
+    color: '#04110B',
   },
   disabledButton: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   dividerContainer: {
     flexDirection: 'row',
@@ -384,67 +398,71 @@ const styles = StyleSheet.create({
   divider: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: '#1F2937',
   },
   dividerText: {
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    opacity: 0.7,
+    opacity: 0.65,
+    color: '#6B7280',
   },
   secondaryButton: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderWidth: 1,
+    borderRadius: 0,
+    paddingVertical: 16,
     alignItems: 'center',
-    borderColor: 'rgba(255,255,255,0.25)',
+    borderColor: '#1F2937',
+    backgroundColor: '#0A0A0B',
   },
   secondaryButtonText: {
-    fontWeight: '600',
+    color: '#E5E7EB',
   },
   disabledSecondary: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   recentsContainer: {
     gap: 12,
   },
   recentsLabel: {
-    fontWeight: '600',
+    color: '#E5E7EB',
   },
   recentsList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   recentChip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    borderRadius: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#0A0A0B',
   },
   disabledChip: {
     opacity: 0.6,
   },
   recentChipText: {
-    fontWeight: '500',
+    color: '#E5E7EB',
   },
   currentConfig: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    gap: 4,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    backgroundColor: '#0F0F10',
+    gap: 6,
   },
   currentConfigLabel: {
     fontSize: 12,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    opacity: 0.7,
+    letterSpacing: 1,
+    opacity: 0.65,
+    color: '#6B7280',
   },
   currentConfigValue: {
-    fontWeight: '600',
+    color: '#F3F4F6',
   },
 });
