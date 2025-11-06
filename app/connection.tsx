@@ -22,11 +22,33 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { useRobot } from "@/context/robot-provider";
+import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 
 const DEFAULT_HOTSPOT_URL = "http://192.168.4.1:8000";
+const ROBOT_AP_SSID = "ROBOTSNAME_AP";
 
 const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, "");
+
+const deriveRobotLanBaseUrl = (ipAddress: string) => {
+  const segments = ipAddress.split(".").map((segment) => segment.trim());
+
+  if (segments.length !== 4 || segments.some((segment) => segment === "")) {
+    return null;
+  }
+
+  const [first, second, third] = segments;
+  const prefixSegments = [first, second, third];
+  const hasInvalidSegment = prefixSegments.some((segment) => {
+    const numeric = Number(segment);
+    return Number.isNaN(numeric) || numeric < 0 || numeric > 255;
+  });
+
+  if (hasInvalidSegment) {
+    return null;
+  }
+
+  return `http://${prefixSegments.join(".")}.10:8000`;
+};
 
 type DeviceNetworkDetails = {
   type: Network.NetworkStateType;
@@ -44,7 +66,7 @@ type WifiStatusMeta = {
 };
 
 export default function ConnectionScreen() {
-  const { api, baseUrl, status, statusError, refreshStatus, setIsPolling } =
+  const { api, baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling } =
     useRobot();
   const mountedRef = useRef(true);
   const [deviceNetwork, setDeviceNetwork] =
@@ -208,6 +230,37 @@ export default function ConnectionScreen() {
     };
   }, [refreshDeviceNetwork]);
 
+  useEffect(() => {
+    if (!deviceNetwork?.isWifi || !deviceNetwork.ipAddress) {
+      return;
+    }
+
+    const derivedUrl = deriveRobotLanBaseUrl(deviceNetwork.ipAddress);
+
+    if (!derivedUrl) {
+      return;
+    }
+
+    const normalizedDerived = canonicalizeUrl(derivedUrl);
+    const normalizedBase = baseUrl ? canonicalizeUrl(baseUrl) : "";
+    const fallbackBaseUrls = [
+      canonicalizeUrl(DEFAULT_HOTSPOT_URL),
+      canonicalizeUrl(DEFAULT_ROBOT_BASE_URL),
+    ];
+
+    if (
+      normalizedBase !== normalizedDerived &&
+      (normalizedBase === "" || fallbackBaseUrls.includes(normalizedBase))
+    ) {
+      setBaseUrl(normalizedDerived);
+    }
+  }, [
+    baseUrl,
+    deviceNetwork?.ipAddress,
+    deviceNetwork?.isWifi,
+    setBaseUrl,
+  ]);
+
   const handleStatusRefresh = useCallback(() => {
     void refreshDeviceNetwork();
     void refreshStatus();
@@ -274,7 +327,7 @@ export default function ConnectionScreen() {
         label: "Offline",
         details: ["Not connected", "Unavailable"],
         helper:
-          "Join a Wi-Fi network on your phone to continue configuring the robot.",
+          `Connect this device to the same Wi-Fi network as the robot or join the ${ROBOT_AP_SSID} hotspot to continue.`,
       };
     }
 
@@ -337,7 +390,7 @@ export default function ConnectionScreen() {
       setSelectedNetwork(null);
       setWifiPassword("");
       setWifiScanError(
-        "Unable to reach the robot hotspot. Connect to the hotspot and retry."
+        `Unable to reach the robot. Connect this device to the same Wi-Fi network as the robot or join the ${ROBOT_AP_SSID} hotspot, then try again.`
       );
     } finally {
       setIsScanningWifi(false);
@@ -420,8 +473,9 @@ export default function ConnectionScreen() {
             Connect to Robot
           </ThemedText>
           <ThemedText style={styles.subheading}>
-            Connect your phone to the robot hotspot, then choose which Wi-Fi
-            network the robot should join.
+            If you are on Wi-Fi, the app will try to find the robot on your
+            network. Otherwise, connect this device to the same Wi-Fi as the
+            robot or join the {ROBOT_AP_SSID} hotspot to start setup.
           </ThemedText>
 
           <ThemedView style={styles.statusCard}>
@@ -465,8 +519,9 @@ export default function ConnectionScreen() {
             ) : null}
             {statusError ? (
               <ThemedText style={styles.statusError}>
-                Unable to reach the robot hotspot. Confirm that your phone is
-                joined to the robot Wi-Fi network.
+                Unable to reach the robot. Make sure your device and the robot
+                are on the same Wi-Fi network or join the {ROBOT_AP_SSID}
+                hotspot.
               </ThemedText>
             ) : null}
             <Pressable
@@ -482,8 +537,9 @@ export default function ConnectionScreen() {
           <ThemedView style={styles.wifiCard}>
             <ThemedText type="subtitle">Available networks</ThemedText>
             <ThemedText style={styles.wifiHint}>
-              Scan to fetch the Wi-Fi networks the robot can see. Choose one and
-              send credentials to bring the robot online.
+              Scan to view Wi-Fi networks the robot can detect. Pick the network
+              you share with the robot (or plan to) and send credentials to
+              bring it online.
             </ThemedText>
 
             <Pressable
@@ -528,7 +584,7 @@ export default function ConnectionScreen() {
               ) : (
                 <ThemedText style={styles.wifiMeta}>
                   {wifiScanError ??
-                    "No scan results yet. Connect to the robot hotspot and scan to continue."}
+                    `No scan results yet. Connect this device to the same Wi-Fi network as the robot or join the ${ROBOT_AP_SSID} hotspot, then scan again.`}
                 </ThemedText>
               )}
             </View>

@@ -25,10 +25,10 @@ interface RobotContextValue {
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
 export const ROBOT_BASE_URL_STORAGE_KEY = 'robot_base_url';
-const DEFAULT_URL = 'http://192.168.1.10:8000';
+export const DEFAULT_ROBOT_BASE_URL = 'http://192.168.1.10:8000';
 
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
-  const [baseUrl, setBaseUrlState] = useState<string>(DEFAULT_URL);
+  const [baseUrl, setBaseUrlState] = useState<string>(DEFAULT_ROBOT_BASE_URL);
   const [status, setStatus] = useState<RobotStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
