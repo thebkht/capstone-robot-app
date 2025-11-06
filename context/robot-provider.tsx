@@ -1,34 +1,14 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { PermissionsAndroid, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
 import { RobotAPI, RobotStatus, createRobotApi } from '@/services/robot-api';
-
-interface OptionalBleManager {
-  startDeviceScan: (
-    uuids: string[] | null,
-    options: unknown,
-    listener: (
-      error: Error | null,
-      device: { id: string; name: string | null; rssi: number | null } | null,
-    ) => void,
-  ) => void;
-  stopDeviceScan: () => void;
-  destroy: () => void;
-  onStateChange?: (
-    listener: (state: BleState) => void,
-    emitCurrentState?: boolean,
-  ) => { remove: () => void } | undefined;
-  state?: () => Promise<BleState>;
-  enable?: () => Promise<void>;
-}
-
-type BleState =
-  | 'Unknown'
-  | 'Resetting'
-  | 'Unsupported'
-  | 'Unauthorized'
-  | 'PoweredOff'
-  | 'PoweredOn';
 
 interface RobotContextValue {
   api: RobotAPI;
@@ -40,16 +20,11 @@ interface RobotContextValue {
   isPolling: boolean;
   setIsPolling: (value: boolean) => void;
   refreshStatus: () => Promise<void>;
-  setBluetoothEnabled: (enabled: boolean) => void;
-  bluetoothEnabled: boolean;
-  bluetoothSupported: boolean;
-  bleManager: OptionalBleManager | null;
-  bleState: BleState | null;
-  requestBlePermissions: () => Promise<boolean>;
 }
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
+export const ROBOT_BASE_URL_STORAGE_KEY = 'robot_base_url';
 const DEFAULT_URL = 'http://192.168.1.10:8000';
 
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
@@ -58,180 +33,8 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
-  const [bluetoothEnabled, setBluetoothEnabled] = useState<boolean>(false);
-  const shouldAttemptBle =
-    typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_ENABLE_BLE === 'true';
-  const [bleManager, setBleManager] = useState<OptionalBleManager | null>(null);
-  const [bleState, setBleState] = useState<BleState | null>(null);
-
-  useEffect(() => {
-    console.log('RobotProvider BLE initialization', { shouldAttemptBle });
-    if (!shouldAttemptBle) {
-      setBleManager(null);
-      return;
-    }
-
-    let isMounted = true;
-    let activeManager: OptionalBleManager | null = null;
-
-    const loadBleManager = async () => {
-      try {
-        // eslint-disable-next-line no-eval
-        const optionalRequire: ((moduleId: string) => unknown) | undefined = eval('require');
-        if (typeof optionalRequire !== 'function') {
-          return;
-        }
-
-        const moduleName = ['react-native-ble-plx'].join('');
-        const bleModule = optionalRequire(moduleName) as
-          | { BleManager: new () => OptionalBleManager }
-          | undefined;
-
-        if (!bleModule?.BleManager) {
-          if (isMounted) {
-            setBleManager(null);
-          }
-          return;
-        }
-
-        activeManager = new bleModule.BleManager();
-        console.log('BleManager loaded successfully');
-        if (isMounted) {
-          setBleManager(activeManager);
-        } else {
-          activeManager.destroy();
-        }
-      } catch (error) {
-        console.warn('Bluetooth manager unavailable', error);
-        if (isMounted) {
-          setBleManager(null);
-        }
-      }
-    };
-
-    loadBleManager();
-
-    return () => {
-      isMounted = false;
-      if (activeManager) {
-        activeManager.destroy();
-      }
-    };
-  }, [shouldAttemptBle]);
-
-  const bluetoothSupported = shouldAttemptBle && Boolean(bleManager);
-
-  useEffect(() => {
-    if (!bleManager) {
-      setBleState(null);
-      return;
-    }
-
-    let isMounted = true;
-    const subscription = bleManager.onStateChange?.((state) => {
-      console.log('BleManager state changed', state);
-      if (isMounted) {
-        setBleState(state);
-      }
-    }, true);
-
-    if (bleManager.state) {
-      bleManager
-        .state()
-        .then((state) => {
-          console.log('BleManager initial state resolved', state);
-          if (isMounted) {
-            setBleState(state);
-          }
-        })
-        .catch(() => {
-          console.log('BleManager initial state lookup failed');
-          if (isMounted) {
-            setBleState(null);
-          }
-        });
-    }
-
-    return () => {
-      isMounted = false;
-      subscription?.remove?.();
-    };
-  }, [bleManager]);
-
-  useEffect(() => {
-    if (!bluetoothSupported && bluetoothEnabled) {
-      setBluetoothEnabled(false);
-    }
-  }, [bluetoothEnabled, bluetoothSupported]);
 
   const api = useMemo(() => createRobotApi(baseUrl), [baseUrl]);
-
-  const requestBlePermissions = useCallback(async () => {
-    console.log('Requesting BLE permissions');
-    if (Platform.OS !== 'android') {
-      console.log('BLE permissions granted by default on non-Android platform');
-      return true;
-    }
-
-    const androidVersion = typeof Platform.Version === 'number' ? Platform.Version : parseInt(Platform.Version, 10);
-
-    if (Number.isNaN(androidVersion)) {
-      console.log('Unknown Android version, assuming BLE permissions granted');
-      return true;
-    }
-
-    if (androidVersion >= 31) {
-      const scanResult = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-        {
-          title: 'Bluetooth scan permission',
-          message: 'Allow the app to scan for nearby robots over Bluetooth.',
-          buttonPositive: 'Allow',
-        },
-      );
-      const connectResult = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        {
-          title: 'Bluetooth connection permission',
-          message: 'Allow the app to connect to nearby robots over Bluetooth.',
-          buttonPositive: 'Allow',
-        },
-      );
-      const fineLocationResult = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        {
-          title: 'Location permission',
-          message: 'Allow the app to use location to discover nearby robots.',
-          buttonPositive: 'Allow',
-        },
-      );
-
-      const granted =
-        scanResult === PermissionsAndroid.RESULTS.GRANTED &&
-        connectResult === PermissionsAndroid.RESULTS.GRANTED &&
-        fineLocationResult === PermissionsAndroid.RESULTS.GRANTED;
-      console.log('Android 12+ BLE permission results', { scanResult, connectResult, fineLocationResult });
-      return granted;
-    }
-
-    if (androidVersion >= 23) {
-      const fineLocationResult = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        {
-          title: 'Location permission',
-          message: 'Allow the app to use location to discover nearby robots.',
-          buttonPositive: 'Allow',
-        },
-      );
-
-      const granted = fineLocationResult === PermissionsAndroid.RESULTS.GRANTED;
-      console.log('Android 6-11 BLE permission result', { fineLocationResult });
-      return granted;
-    }
-
-    console.log('Android version below 6, no BLE permissions required');
-    return true;
-  }, []);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -249,6 +52,25 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   }, [api, baseUrl]);
 
   useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const storedUrl = await AsyncStorage.getItem(ROBOT_BASE_URL_STORAGE_KEY);
+        if (storedUrl && isMounted) {
+          console.log('Loaded stored robot base URL', storedUrl);
+          setBaseUrlState(storedUrl);
+        }
+      } catch (error) {
+        console.warn('Failed to load stored robot base URL', error);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isPolling) {
       return;
     }
@@ -258,12 +80,19 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     return () => clearInterval(interval);
   }, [isPolling, refreshStatus]);
 
-  const setBaseUrl = (url: string) => {
-    console.log('Updating robot base URL', { previous: baseUrl, next: url });
-    setBaseUrlState(url);
-    api.updateBaseUrl(url);
-    setStatusError(null);
-  };
+  const setBaseUrl = useCallback(
+    (url: string) => {
+      const normalized = url.replace(/\/$/, '');
+      console.log('Updating robot base URL', { previous: baseUrl, next: normalized });
+      api.updateBaseUrl(normalized);
+      setBaseUrlState(normalized);
+      setStatusError(null);
+      void AsyncStorage.setItem(ROBOT_BASE_URL_STORAGE_KEY, normalized).catch((error) => {
+        console.warn('Failed to persist robot base URL', error);
+      });
+    },
+    [api, baseUrl],
+  );
 
   const value = useMemo(
     () => ({
@@ -276,26 +105,8 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       isPolling,
       setIsPolling,
       refreshStatus,
-      bluetoothEnabled,
-      setBluetoothEnabled,
-      bluetoothSupported,
-      bleManager,
-      bleState,
-      requestBlePermissions,
     }),
-    [
-      api,
-      baseUrl,
-      status,
-      statusError,
-      lastUpdated,
-      isPolling,
-      bluetoothEnabled,
-      bluetoothSupported,
-      bleManager,
-      bleState,
-      requestBlePermissions,
-    ],
+    [api, baseUrl, isPolling, lastUpdated, refreshStatus, status, statusError],
   );
 
   return <RobotContext.Provider value={value}>{children}</RobotContext.Provider>;
