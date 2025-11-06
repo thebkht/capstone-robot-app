@@ -180,24 +180,19 @@ export default function ConnectionScreen() {
     if (isLoadingDeviceNetwork) {
       return {
         color: "#FBBF24",
-        label: "Checking network status",
-        details: ["Confirming the device Wi-Fi connection..."],
+        label: "Checking...",
+        details: ["Loading network name...", "Loading IP address..."],
         helper: null,
       };
     }
 
     if (deviceNetwork?.isWifi) {
-      const details = [
-        `Network type: ${deviceNetwork.type}`,
-        `Local IP: ${deviceNetwork.ipAddress ?? "Unavailable"}`,
-      ];
-      if (deviceNetwork.ssid) {
-        details.push(`SSID: ${deviceNetwork.ssid}`);
-      }
+      const networkName = deviceNetwork.ssid ?? "Unknown network";
+      const ipAddress = deviceNetwork.ipAddress ?? "Unavailable";
       return {
         color: "#1DD1A1",
-        label: "Connected to Wi-Fi",
-        details,
+        label: "Connected",
+        details: [networkName, ipAddress],
         helper: null,
       };
     }
@@ -205,8 +200,8 @@ export default function ConnectionScreen() {
     if (deviceNetwork) {
       return {
         color: "#F87171",
-        label: "Not connected to Wi-Fi",
-        details: [`Current network type: ${deviceNetwork.type}`],
+        label: "Offline",
+        details: ["Not connected", "Unavailable"],
         helper:
           "Join a Wi-Fi network on your phone to continue configuring the robot.",
       };
@@ -214,10 +209,11 @@ export default function ConnectionScreen() {
 
     return {
       color: "#FBBF24",
-      label: "Network status unavailable",
-      details: deviceNetworkError
-        ? [deviceNetworkError]
-        : ["Unable to read device network information."],
+      label: "Unknown",
+      details: [
+        deviceNetworkError ?? "Network name unavailable",
+        "IP address unavailable",
+      ],
       helper: deviceNetworkError
         ? null
         : "Check network permissions and retry.",
@@ -348,36 +344,47 @@ export default function ConnectionScreen() {
           </ThemedText>
 
           <ThemedView style={styles.statusCard}>
-            <ThemedText type="subtitle">Robot hotspot status</ThemedText>
+            <ThemedText type="subtitle" style={styles.statusTitle}>
+              Connection Info
+            </ThemedText>
             <ThemedText style={styles.statusHint}>
               Target address: {wifiCommandBase}
             </ThemedText>
-            <View style={styles.statusRow}>
-              <View
-                style={[
-                  styles.statusIndicator,
-                  { backgroundColor: wifiStatusMeta.color },
-                ]}
-              />
-              <View style={styles.statusText}>
-                <ThemedText style={styles.statusLabel}>
-                  {wifiStatusMeta.label}
+            <View style={styles.infoGroup}>
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>
+                  WiFi Connection:
                 </ThemedText>
-                {wifiStatusMeta.details.map((line, index) => (
-                  <ThemedText
-                    key={`${line}-${index}`}
-                    style={styles.statusMeta}
-                  >
-                    {line}
+                <View style={styles.infoValueContainer}>
+                  <ThemedText style={styles.infoValue}>
+                    {wifiStatusMeta.label}
                   </ThemedText>
-                ))}
-                {wifiStatusMeta.helper ? (
-                  <ThemedText style={styles.statusWarning}>
-                    {wifiStatusMeta.helper}
-                  </ThemedText>
-                ) : null}
+                  <View
+                    style={[
+                      styles.statusIndicator,
+                      { backgroundColor: wifiStatusMeta.color },
+                    ]}
+                  />
+                </View>
+              </View>
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Network Name:</ThemedText>
+                <ThemedText style={styles.infoValue}>
+                  {wifiStatusMeta.details[0]}
+                </ThemedText>
+              </View>
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>IP Address:</ThemedText>
+                <ThemedText style={styles.infoValue}>
+                  {wifiStatusMeta.details[1]}
+                </ThemedText>
               </View>
             </View>
+            {wifiStatusMeta.helper ? (
+              <ThemedText style={styles.statusWarning}>
+                {wifiStatusMeta.helper}
+              </ThemedText>
+            ) : null}
             {statusError ? (
               <ThemedText style={styles.statusError}>
                 Unable to reach the robot hotspot. Confirm that your phone is
@@ -540,33 +547,45 @@ const styles = StyleSheet.create({
     borderColor: "#1F2937",
     backgroundColor: "#0F0F10",
   },
+  statusTitle: {
+    color: "#F9FAFB",
+    fontFamily: "JetBrainsMono-Bold",
+  },
   statusHint: {
-    color: "#6B7280",
-    fontFamily: "JetBrainsMono-Regular",
-  },
-  statusRow: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  statusIndicator: {
-    width: 12,
-    height: 12,
-  },
-  statusText: {
-    flex: 1,
-    gap: 4,
-  },
-  statusLabel: {
-    color: "#E5E7EB",
-    fontFamily: "JetBrainsMono-Regular",
-  },
-  statusMeta: {
     color: "#9CA3AF",
     fontFamily: "JetBrainsMono-Regular",
+  },
+  statusIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   statusWarning: {
     color: "#FBBF24",
     fontFamily: "JetBrainsMono-Regular",
+  },
+  infoGroup: {
+    gap: 12,
+    paddingTop: 8,
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  infoLabel: {
+    color: "#9CA3AF",
+    fontFamily: "JetBrainsMono-Regular",
+  },
+  infoValue: {
+    color: "#F9FAFB",
+    fontFamily: "JetBrainsMono-Regular",
+  },
+  infoValueContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   statusError: {
     color: "#F87171",
