@@ -18,7 +18,7 @@ const DEFAULT_HOTSPOT_URL = 'http://192.168.4.1:8000';
 const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
 
 export default function ConnectionScreen() {
-  const { api, baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling } = useRobot();
+  const { api, baseUrl, status, statusError, refreshStatus, setIsPolling } = useRobot();
   const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
   const [isScanningWifi, setIsScanningWifi] = useState(false);
   const [wifiScanError, setWifiScanError] = useState<string | null>(null);
@@ -27,21 +27,14 @@ export default function ConnectionScreen() {
   const [isSubmittingWifi, setIsSubmittingWifi] = useState(false);
   const [wifiConnectError, setWifiConnectError] = useState<string | null>(null);
   const [wifiConnectSuccess, setWifiConnectSuccess] = useState<string | null>(null);
-  const [wifiCommandBase, setWifiCommandBase] = useState<string>(DEFAULT_HOTSPOT_URL);
+  const [wifiCommandBase, setWifiCommandBase] = useState<string>(
+    canonicalizeUrl(baseUrl || DEFAULT_HOTSPOT_URL),
+  );
 
   useEffect(() => {
     setIsPolling(false);
     return () => setIsPolling(true);
   }, [setIsPolling]);
-
-  useEffect(() => {
-    const normalizedHotspot = canonicalizeUrl(DEFAULT_HOTSPOT_URL);
-    if (baseUrl !== normalizedHotspot) {
-      setBaseUrl(normalizedHotspot);
-    } else {
-      setWifiCommandBase(normalizedHotspot);
-    }
-  }, [baseUrl, setBaseUrl]);
 
   useEffect(() => {
     if (baseUrl) {
@@ -191,9 +184,7 @@ export default function ConnectionScreen() {
 
           <ThemedView style={styles.statusCard}>
             <ThemedText type="subtitle">Robot hotspot status</ThemedText>
-            <ThemedText style={styles.statusHint}>
-              Target address: {canonicalizeUrl(DEFAULT_HOTSPOT_URL)}
-            </ThemedText>
+            <ThemedText style={styles.statusHint}>Target address: {wifiCommandBase}</ThemedText>
             <View style={styles.statusRow}>
               <View style={[styles.statusIndicator, { backgroundColor: wifiStatusMeta.color }]} />
               <View style={styles.statusText}>
