@@ -51,7 +51,7 @@ const extractIpv4Subnet = (value: string) => {
 
 const STATUS_META: Record<ConnectionPhase, { label: string; color: string }> = {
   idle: { label: 'Not connected', color: '#F87171' },
-  connecting: { label: 'Trying to connect…', color: '#FBBF24' },
+  connecting: { label: 'Trying to connect', color: '#FBBF24' },
   connected: { label: 'Connected', color: '#2DD4BF' },
   error: { label: 'Not connected', color: '#F87171' },
 };
@@ -165,8 +165,10 @@ export default function ConnectionScreen() {
 
       if (isMountedRef.current) {
         setPhase('connecting');
-        setStatusMessage(options.statusMessage ?? `Trying ${prepared} …`);
+        setStatusMessage(options.statusMessage ?? 'Attempting to reach the robot…');
       }
+
+      console.log('Attempting robot connection', { url: prepared });
 
       const { success, robotName, reason } = await probeRobotUrl(prepared);
 
@@ -177,6 +179,8 @@ export default function ConnectionScreen() {
             robotName ? `Connected to ${robotName} at ${prepared}` : `Connected to ${prepared}`,
           );
         }
+
+        console.log('Robot connection succeeded', { url: prepared, robotName });
 
         setBaseUrl(prepared);
         if (!options.skipRecent) {
@@ -190,10 +194,11 @@ export default function ConnectionScreen() {
       }
 
       if (isMountedRef.current) {
-        const reasonSuffix = reason ? `: ${reason}` : '';
         setPhase('error');
-        setStatusMessage(`Could not connect to ${prepared}${reasonSuffix}`);
+        setStatusMessage('Unable to connect. Try scanning or use the hotspot options below.');
       }
+
+      console.warn('Robot connection failed', { url: prepared, reason });
 
       return { success: false, normalizedUrl: prepared };
     },
@@ -245,6 +250,11 @@ export default function ConnectionScreen() {
         }
       });
 
+      console.log('Starting local network scan', {
+        subnets: Array.from(candidateSubnets),
+        totalCandidates: candidates.length,
+      });
+
       if (candidates.length === 0) {
         if (isMountedRef.current) {
           setPhase('error');
@@ -255,41 +265,59 @@ export default function ConnectionScreen() {
         return false;
       }
 
-      for (let index = 0; index < candidates.length; index += 1) {
-        if (!isMountedRef.current) {
-          return false;
+      const queue = [...candidates];
+      const concurrency = Math.min(20, queue.length);
+      let resolvedUrl: string | null = null;
+      let resolvedName: string | undefined;
+
+      const worker = async () => {
+        while (isMountedRef.current) {
+          if (resolvedUrl) {
+            return;
+          }
+
+          const candidate = queue.shift();
+          if (!candidate) {
+            return;
+          }
+
+          attempted.add(candidate);
+          console.log('Scanning robot candidate', candidate);
+
+          const { success, robotName } = await probeRobotUrl(candidate, 2000);
+
+          if (success && !resolvedUrl) {
+            resolvedUrl = candidate;
+            resolvedName = robotName;
+            return;
+          }
         }
+      };
 
-        const candidate = candidates[index];
-        attempted.add(candidate);
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
+      if (resolvedUrl) {
         if (isMountedRef.current) {
+          setPhase('connected');
           setStatusMessage(
-            `Scanning ${candidate} (${index + 1} of ${candidates.length}) for a healthy response…`,
+            resolvedName
+              ? `Connected to ${resolvedName} at ${resolvedUrl}`
+              : `Connected to ${resolvedUrl}`,
           );
         }
 
-        const { success, robotName } = await probeRobotUrl(candidate, 2000);
+        console.log('Network scan connected to robot', { url: resolvedUrl, name: resolvedName });
 
-        if (success) {
-          if (isMountedRef.current) {
-            setPhase('connected');
-            setStatusMessage(
-              robotName
-                ? `Connected to ${robotName} at ${candidate}`
-                : `Connected to ${candidate}`,
-            );
-          }
+        setBaseUrl(resolvedUrl);
+        recordRecentUrl(resolvedUrl);
+        await refreshStatus().catch((error) => {
+          console.warn('Failed to refresh robot status after network scan', error);
+        });
 
-          setBaseUrl(candidate);
-          recordRecentUrl(candidate);
-          await refreshStatus().catch((error) => {
-            console.warn('Failed to refresh robot status after network scan', error);
-          });
-
-          return true;
-        }
+        return true;
       }
+
+      console.warn('Network scan did not locate the robot');
       if (isMountedRef.current) {
         setPhase('error');
         setStatusMessage(
@@ -335,9 +363,8 @@ export default function ConnectionScreen() {
           const attempted = new Set<string>();
 
           if (storedUrl) {
-            const result = await attemptConnection(storedUrl, {
-              statusMessage: `Trying last saved address (${canonicalizeUrl(storedUrl)}) …`,
-            });
+            console.log('Auto-attempting stored robot address', storedUrl);
+            const result = await attemptConnection(storedUrl);
             if (result.normalizedUrl) {
               attempted.add(result.normalizedUrl);
             }
@@ -346,8 +373,8 @@ export default function ConnectionScreen() {
             }
           }
 
+          console.log('Auto-attempting rover.local fallback', ROVER_LOCAL_URL);
           const fallbackResult = await attemptConnection(ROVER_LOCAL_URL, {
-            statusMessage: `Trying fallback address (${ROVER_LOCAL_URL}) …`,
             skipRecent: true,
           });
           if (fallbackResult.normalizedUrl) {
@@ -377,8 +404,8 @@ export default function ConnectionScreen() {
     hasAutoAttemptedRef.current = true;
     void (async () => {
       const attempted = new Set<string>();
+      console.log('Manually attempting hotspot address', DEFAULT_HOTSPOT_URL);
       const result = await attemptConnection(DEFAULT_HOTSPOT_URL, {
-        statusMessage: `Trying hotspot address (${DEFAULT_HOTSPOT_URL}) …`,
         skipRecent: true,
       });
 
@@ -402,11 +429,13 @@ export default function ConnectionScreen() {
       return;
     }
     hasAutoAttemptedRef.current = true;
+    console.log('Retrying saved robot address', baseUrl);
     void attemptConnection(baseUrl);
   }, [attemptConnection, baseUrl]);
 
   const handleRoverLocalPress = useCallback(() => {
     hasAutoAttemptedRef.current = true;
+    console.log('Manually attempting rover.local fallback', ROVER_LOCAL_URL);
     void attemptConnection(ROVER_LOCAL_URL, { skipRecent: true });
   }, [attemptConnection]);
 
@@ -428,12 +457,14 @@ export default function ConnectionScreen() {
         // Ignore invalid URLs in the attempted set.
       }
     });
+    console.log('Manually starting local network scan');
     void runLocalNetworkScan(attempted);
   }, [baseUrl, recentUrls, runLocalNetworkScan]);
 
   const handleRecentPress = useCallback(
     (url: string) => {
       hasAutoAttemptedRef.current = true;
+      console.log('Attempting recent robot address', url);
       void attemptConnection(url);
     },
     [attemptConnection],
