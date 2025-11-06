@@ -1,5 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
 import * as Network from "expo-network";
+import WifiManager from "react-native-wifi-reborn";
 import React, {
   useCallback,
   useEffect,
@@ -60,9 +61,6 @@ export default function ConnectionScreen() {
   const [wifiConnectSuccess, setWifiConnectSuccess] = useState<string | null>(
     null
   );
-  const [wifiCommandBase, setWifiCommandBase] = useState<string>(
-    canonicalizeUrl(baseUrl || DEFAULT_HOTSPOT_URL)
-  );
 
   const refreshDeviceNetwork = useCallback(
     async (providedState?: Network.NetworkState) => {
@@ -78,21 +76,31 @@ export default function ConnectionScreen() {
         const normalizedIp =
           ipAddress && ipAddress !== "0.0.0.0" ? ipAddress : null;
 
-        // Try to get SSID using NetInfo
+        // Try to get SSID via WifiManager first, then fall back to NetInfo
         let ssid: string | null = null;
         try {
-          const netInfoState = await NetInfo.fetch();
-          if (
-            netInfoState.type === "wifi" &&
-            netInfoState.details &&
-            "ssid" in netInfoState.details &&
-            netInfoState.details.ssid
-          ) {
-            ssid = netInfoState.details.ssid as string;
+          const wifiManagerSsid = await WifiManager.getCurrentWifiSSID();
+          if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
+            ssid = wifiManagerSsid;
           }
-        } catch (ssidError) {
-          // SSID might not be available on all platforms or without permissions
-          console.log("Unable to fetch SSID", ssidError);
+        } catch (wifiManagerError) {
+          console.log("WifiManager failed to fetch SSID", wifiManagerError);
+        }
+
+        if (!ssid) {
+          try {
+            const netInfoState = await NetInfo.fetch();
+            if (
+              netInfoState.type === "wifi" &&
+              netInfoState.details &&
+              "ssid" in netInfoState.details &&
+              netInfoState.details.ssid
+            ) {
+              ssid = netInfoState.details.ssid as string;
+            }
+          } catch (netInfoError) {
+            console.log("NetInfo failed to fetch SSID", netInfoError);
+          }
         }
 
         if (!mountedRef.current) {
@@ -150,12 +158,6 @@ export default function ConnectionScreen() {
     setIsPolling(false);
     return () => setIsPolling(true);
   }, [setIsPolling]);
-
-  useEffect(() => {
-    if (baseUrl) {
-      setWifiCommandBase(canonicalizeUrl(baseUrl));
-    }
-  }, [baseUrl]);
 
   useEffect(() => {
     void refreshStatus();
@@ -242,7 +244,6 @@ export default function ConnectionScreen() {
       const normalizedBase = baseUrl
         ? canonicalizeUrl(baseUrl)
         : canonicalizeUrl(DEFAULT_HOTSPOT_URL);
-      setWifiCommandBase(normalizedBase);
       console.log("Requesting Wi-Fi network scan", { baseUrl: normalizedBase });
       const { networks } = await api.listWifiNetworks();
       const validNetworks = Array.isArray(networks)
@@ -305,10 +306,13 @@ export default function ConnectionScreen() {
         password: wifiPassword.trim(),
       };
 
+      const normalizedBase = baseUrl
+        ? canonicalizeUrl(baseUrl)
+        : canonicalizeUrl(DEFAULT_HOTSPOT_URL);
       console.log("Submitting Wi-Fi credentials to robot", {
         ssid: selectedNetwork,
         hasPassword: payload.password.length > 0,
-        baseUrl: wifiCommandBase,
+        baseUrl: normalizedBase,
       });
 
       const result = await api.connectWifi(payload);
@@ -337,7 +341,7 @@ export default function ConnectionScreen() {
     } finally {
       setIsSubmittingWifi(false);
     }
-  }, [api, refreshStatus, selectedNetwork, wifiCommandBase, wifiPassword]);
+  }, [api, baseUrl, refreshStatus, selectedNetwork, wifiPassword]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
@@ -358,9 +362,6 @@ export default function ConnectionScreen() {
           <ThemedView style={styles.statusCard}>
             <ThemedText type="subtitle" style={styles.statusTitle}>
               Connection Info
-            </ThemedText>
-            <ThemedText style={styles.statusHint}>
-              Target address: {wifiCommandBase}
             </ThemedText>
             <View style={styles.infoGroup}>
               <View style={styles.infoRow}>
@@ -562,10 +563,6 @@ const styles = StyleSheet.create({
   statusTitle: {
     color: "#F9FAFB",
     fontFamily: "JetBrainsMono-Bold",
-  },
-  statusHint: {
-    color: "#9CA3AF",
-    fontFamily: "JetBrainsMono-Regular",
   },
   statusIndicator: {
     width: 10,
