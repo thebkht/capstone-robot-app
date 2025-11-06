@@ -34,21 +34,21 @@ export function ThemedText({
 }
 
 const monoRegular = Platform.select({
-  ios: 'JetBrainsMono-Regular',
-  android: 'JetBrainsMono-Regular',
-  default: 'JetBrainsMono-Regular',
+  ios: 'mdio',
+  android: 'mdio',
+  default: 'mdio',
 });
 
 const monoSemiBold = Platform.select({
-  ios: 'JetBrainsMono-SemiBold',
-  android: 'JetBrainsMono-SemiBold',
-  default: 'JetBrainsMono-SemiBold',
+  ios: 'mdio',
+  android: 'mdio',
+  default: 'mdio',
 });
 
 const serifHeading = Platform.select({
-  ios: 'Times New Roman',
-  android: 'serif',
-  default: 'Times New Roman',
+  ios: 'Lora',
+  android: 'Algebra',
+  default: 'Lora',
 });
 
 const styles = StyleSheet.create({

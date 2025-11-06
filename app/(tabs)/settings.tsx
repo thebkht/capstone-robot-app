@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     borderColor: '#1F2937',
     backgroundColor: '#0A0A0B',
     color: '#F9FAFB',
-    fontFamily: 'JetBrainsMono-Regular',
+    fontFamily: 'mdio',
     letterSpacing: 0.25,
   },
   primaryButton: {

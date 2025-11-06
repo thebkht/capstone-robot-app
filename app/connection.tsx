@@ -27,15 +27,15 @@ import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 const ROBOT_AP_SSID = "ROBOTSNAME_AP";
 
 const SERIF_FONT_FAMILY = Platform.select({
-  ios: "Times New Roman",
-  android: "serif",
-  default: "Times New Roman",
+  ios: "Lora",
+  android: "Algebra",
+  default: "Lora",
 });
 
 const MONO_REGULAR_FONT_FAMILY = Platform.select({
-  ios: "JetBrainsMono-Regular",
-  android: "JetBrainsMono-Regular",
-  default: "JetBrainsMono-Regular",
+  ios: "mdio",
+  android: "mdio",
+  default: "mdio",
 });
 
 const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, "");
