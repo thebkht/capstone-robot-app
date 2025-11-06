@@ -28,6 +28,7 @@ type NetworkScanOptions = {
   statusMessage?: string;
   presetSubnets?: string[];
   shouldScanWifi?: boolean;
+  wifiScanBaseUrl?: string;
 };
 
 const normalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
@@ -68,7 +69,7 @@ const STATUS_META: Record<ConnectionPhase, { label: string; color: string }> = {
 };
 
 export default function ConnectionScreen() {
-  const { api, baseUrl, setBaseUrl, refreshStatus, status } = useRobot();
+  const { baseUrl, setBaseUrl, refreshStatus, status } = useRobot();
   const [phase, setPhase] = useState<ConnectionPhase>('idle');
   const [statusMessage, setStatusMessage] = useState(
     'Looking for the robot automatically. We will try saved addresses and common defaults.',
@@ -160,22 +161,41 @@ export default function ConnectionScreen() {
     };
   }, [status]);
 
-  const scanWifiNetworks = useCallback(async () => {
-    if (!baseUrl) {
-      setWifiNetworks([]);
-      setWifiScanError('Connect to the robot to request a Wi-Fi scan.');
-      return false;
+  const performWifiScanRequest = useCallback(async (targetBaseUrl: string) => {
+    const normalizedBase = canonicalizeUrl(targetBaseUrl);
+    const response = await fetch(`${normalizedBase}/wifi/networks`, {
+      headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Robot Wi-Fi scan failed with status ${response.status}`);
     }
+
+    const payload = (await response.json()) as { networks?: unknown };
+    const networks = Array.isArray(payload.networks)
+      ? payload.networks.filter((item): item is string => typeof item === 'string')
+      : [];
+
+    return networks;
+  }, []);
+
+  const scanWifiNetworks = useCallback(
+    async (wifiBaseOverride?: string) => {
+      const targetBase = wifiBaseOverride ?? baseUrl;
+      if (!targetBase) {
+        setWifiNetworks([]);
+        setWifiScanError('Connect to the robot to request a Wi-Fi scan.');
+        return false;
+      }
+
+      const normalizedTarget = canonicalizeUrl(targetBase);
 
     setIsScanningWifi(true);
     setWifiScanError(null);
 
     try {
-      console.log('Requesting Wi-Fi network scan');
-      const response = await api.listWifiNetworks();
-      const networks = Array.isArray(response.networks)
-        ? response.networks.filter((item): item is string => typeof item === 'string')
-        : [];
+      console.log('Requesting Wi-Fi network scan', { baseUrl: normalizedTarget });
+      const networks = await performWifiScanRequest(normalizedTarget);
 
       setWifiNetworks(networks);
 
@@ -194,7 +214,9 @@ export default function ConnectionScreen() {
     } finally {
       setIsScanningWifi(false);
     }
-  }, [api, baseUrl]);
+    },
+    [baseUrl, performWifiScanRequest],
+  );
 
   type ProbeResult = { success: boolean; robotName?: string; reason?: string };
 
@@ -237,6 +259,7 @@ export default function ConnectionScreen() {
     statusMessage?: string;
     skipRecent?: boolean;
     shouldScanWifi?: boolean;
+    wifiScanBaseUrl?: string;
   }
 
   interface AttemptResult {
@@ -298,7 +321,8 @@ export default function ConnectionScreen() {
         });
 
         if (options.shouldScanWifi) {
-          await scanWifiNetworks();
+          const wifiBase = options.wifiScanBaseUrl ?? prepared;
+          await scanWifiNetworks(wifiBase);
         }
 
         return { success: true, normalizedUrl: prepared };
@@ -432,7 +456,8 @@ export default function ConnectionScreen() {
         });
 
         if (options.shouldScanWifi) {
-          await scanWifiNetworks();
+          const wifiBase = options.wifiScanBaseUrl ?? resolvedUrl;
+          await scanWifiNetworks(wifiBase);
         }
 
         return true;
@@ -542,6 +567,7 @@ export default function ConnectionScreen() {
       const result = await attemptConnection(DEFAULT_HOTSPOT_URL, {
         skipRecent: true,
         shouldScanWifi: true,
+        wifiScanBaseUrl: DEFAULT_HOTSPOT_URL,
       });
 
       if (result.normalizedUrl) {
@@ -556,6 +582,7 @@ export default function ConnectionScreen() {
         statusMessage: 'Scanning hotspot network for the robot…',
         presetSubnets: ['192.168.4'],
         shouldScanWifi: true,
+        wifiScanBaseUrl: DEFAULT_HOTSPOT_URL,
       });
 
       if (!found) {
@@ -581,25 +608,97 @@ export default function ConnectionScreen() {
 
   const handleScanPress = useCallback(() => {
     hasAutoAttemptedRef.current = true;
-    const attempted = new Set<string>();
-    const seeds: (string | null | undefined)[] = [
-      baseUrl,
-      lastAttemptedUrlRef.current,
-      ...recentUrls,
-    ];
-    seeds.forEach((value) => {
-      if (!value) {
+    void (async () => {
+      const attempted = new Set<string>();
+      const seeds: (string | null | undefined)[] = [
+        baseUrl,
+        lastAttemptedUrlRef.current,
+        ...recentUrls,
+      ];
+      seeds.forEach((value) => {
+        if (!value) {
+          return;
+        }
+        try {
+          attempted.add(canonicalizeUrl(value));
+        } catch {
+          // Ignore invalid URLs in the attempted set.
+        }
+      });
+
+      const initialTarget = baseUrl ?? lastAttemptedUrlRef.current ?? DEFAULT_HOTSPOT_URL;
+
+      if (phase !== 'connected') {
+        if (initialTarget) {
+          const attempt = await attemptConnection(initialTarget, {
+            shouldScanWifi: true,
+            wifiScanBaseUrl: initialTarget,
+            skipRecent: initialTarget === DEFAULT_HOTSPOT_URL,
+            statusMessage: 'Attempting to reach the robot before scanning…',
+          });
+
+          if (attempt.normalizedUrl) {
+            attempted.add(attempt.normalizedUrl);
+          }
+
+          if (attempt.success) {
+            return;
+          }
+        }
+
+        if (initialTarget !== DEFAULT_HOTSPOT_URL) {
+          const hotspotAttempt = await attemptConnection(DEFAULT_HOTSPOT_URL, {
+            skipRecent: true,
+            shouldScanWifi: true,
+            wifiScanBaseUrl: DEFAULT_HOTSPOT_URL,
+            statusMessage: 'Attempting hotspot before scanning…',
+          });
+
+          if (hotspotAttempt.normalizedUrl) {
+            attempted.add(hotspotAttempt.normalizedUrl);
+          }
+
+          if (hotspotAttempt.success) {
+            return;
+          }
+        }
+
+        const found = await runLocalNetworkScan(attempted, [DEFAULT_HOTSPOT_URL], {
+          statusMessage: 'Scanning hotspot network for the robot…',
+          presetSubnets: ['192.168.4'],
+          shouldScanWifi: true,
+          wifiScanBaseUrl: DEFAULT_HOTSPOT_URL,
+        });
+
+        if (!found) {
+          setWifiNetworks([]);
+        }
+
         return;
       }
-      try {
-        attempted.add(canonicalizeUrl(value));
-      } catch {
-        // Ignore invalid URLs in the attempted set.
+
+      if (initialTarget) {
+        try {
+          const normalized = canonicalizeUrl(initialTarget);
+          attempted.add(normalized);
+          await scanWifiNetworks(normalized);
+        } catch (error) {
+          console.warn('Failed to normalize scan target URL', error);
+          await scanWifiNetworks();
+        }
+      } else {
+        await scanWifiNetworks();
       }
-    });
-    console.log('Manually starting local network scan');
-    void runLocalNetworkScan(attempted);
-  }, [baseUrl, recentUrls, runLocalNetworkScan]);
+    })();
+  }, [
+    attemptConnection,
+    baseUrl,
+    phase,
+    recentUrls,
+    runLocalNetworkScan,
+    scanWifiNetworks,
+    setWifiNetworks,
+  ]);
 
   const handleRecentPress = useCallback(
     (url: string) => {
@@ -668,15 +767,9 @@ export default function ConnectionScreen() {
             </View>
 
             <Pressable
-              style={[
-                styles.scanButton,
-                (phase !== 'connected' || isScanningWifi) && styles.disabledSecondary,
-              ]}
-              disabled={phase !== 'connected' || isScanningWifi}
-              onPress={() => {
-                hasAutoAttemptedRef.current = true;
-                void scanWifiNetworks();
-              }}
+              style={[styles.scanButton, isScanningWifi && styles.disabledSecondary]}
+              disabled={isScanningWifi}
+              onPress={handleScanPress}
             >
               {isScanningWifi ? (
                 <ActivityIndicator color="#E5E7EB" />
