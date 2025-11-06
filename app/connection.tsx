@@ -102,7 +102,9 @@ export default function ConnectionScreen() {
         setDeviceNetwork({
           type: state.type,
           isConnected: Boolean(state.isConnected),
-          isWifi: state.type === "WIFI" && Boolean(state.isConnected),
+          isWifi:
+            state.type === Network.NetworkStateType.WIFI &&
+            Boolean(state.isConnected),
           ipAddress: normalizedIp,
           ssid,
         });
@@ -176,6 +178,8 @@ export default function ConnectionScreen() {
     }
   }, [selectedNetwork, status?.network?.availableNetworks]);
 
+  const statusNetwork = status?.network;
+
   const wifiStatusMeta = useMemo<WifiStatusMeta>(() => {
     if (isLoadingDeviceNetwork) {
       return {
@@ -187,8 +191,14 @@ export default function ConnectionScreen() {
     }
 
     if (deviceNetwork?.isWifi) {
-      const networkName = deviceNetwork.ssid ?? "Unknown network";
-      const ipAddress = deviceNetwork.ipAddress ?? "Unavailable";
+      const networkName =
+        (deviceNetwork.ssid && deviceNetwork.ssid.trim()) ||
+        (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ||
+        "Unknown network";
+      const ipAddress =
+        (deviceNetwork.ipAddress && deviceNetwork.ipAddress.trim()) ||
+        (statusNetwork?.ip && statusNetwork.ip.trim()) ||
+        "Unavailable";
       return {
         color: "#1DD1A1",
         label: "Connected",
@@ -211,14 +221,16 @@ export default function ConnectionScreen() {
       color: "#FBBF24",
       label: "Unknown",
       details: [
-        deviceNetworkError ?? "Network name unavailable",
-        "IP address unavailable",
+        deviceNetworkError ??
+          (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ??
+          "Network name unavailable",
+        (statusNetwork?.ip && statusNetwork.ip.trim()) || "IP address unavailable",
       ],
       helper: deviceNetworkError
         ? null
         : "Check network permissions and retry.",
     };
-  }, [deviceNetwork, deviceNetworkError, isLoadingDeviceNetwork]);
+  }, [deviceNetwork, deviceNetworkError, isLoadingDeviceNetwork, statusNetwork]);
 
   const handleScanPress = useCallback(async () => {
     setIsScanningWifi(true);
