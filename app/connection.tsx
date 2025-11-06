@@ -735,6 +735,10 @@ export default function ConnectionScreen() {
 
           <ThemedView style={styles.wifiCard}>
             <ThemedText type="subtitle">Robot Wi-Fi status</ThemedText>
+            <ThemedText style={styles.wifiHint}>
+              Press “Scan for Wi-Fi networks” to fetch the SSIDs broadcast by the robot. We will
+              automatically connect to the hotspot first if needed.
+            </ThemedText>
             <View style={styles.wifiStatusRow}>
               <View style={[styles.statusIndicator, { backgroundColor: wifiStatusMeta.color }]} />
               <View style={styles.wifiStatusText}>
@@ -774,7 +778,7 @@ export default function ConnectionScreen() {
               {isScanningWifi ? (
                 <ActivityIndicator color="#E5E7EB" />
               ) : (
-                <ThemedText style={styles.secondaryButtonText}>Scan robot Wi-Fi networks</ThemedText>
+                <ThemedText style={styles.secondaryButtonText}>Scan for Wi-Fi networks</ThemedText>
               )}
             </Pressable>
           </ThemedView>
@@ -810,7 +814,9 @@ export default function ConnectionScreen() {
             onPress={handleScanPress}
             disabled={phase === 'connecting'}
           >
-            <ThemedText style={styles.secondaryButtonText}>Scan local network</ThemedText>
+            <ThemedText style={styles.secondaryButtonText}>
+              Scan local network for robot
+            </ThemedText>
           </Pressable>
 
           <View style={styles.dividerContainer}>
@@ -918,6 +924,10 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     borderColor: '#1F2937',
     backgroundColor: '#0F0F10',
+  },
+  wifiHint: {
+    color: '#9CA3AF',
+    lineHeight: 20,
   },
   wifiStatusRow: {
     flexDirection: 'row',
