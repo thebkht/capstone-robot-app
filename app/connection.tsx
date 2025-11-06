@@ -1,6 +1,7 @@
 // eslint-disable-next-line import/no-unresolved
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Constants from 'expo-constants';
 import {
   ActivityIndicator,
   Pressable,
@@ -50,6 +51,15 @@ const extractIpv4Subnet = (value: string) => {
   return null;
 };
 
+const extractSubnetFromIpAddress = (value: string) => {
+  const match = value.match(/^(\d+)\.(\d+)\.(\d+)\.\d+$/);
+  if (match) {
+    return `${match[1]}.${match[2]}.${match[3]}`;
+  }
+
+  return null;
+};
+
 const STATUS_META: Record<ConnectionPhase, { label: string; color: string }> = {
   idle: { label: 'Not connected', color: '#F87171' },
   connecting: { label: 'Trying to connect', color: '#FBBF24' },
@@ -70,6 +80,50 @@ export default function ConnectionScreen() {
   const hasAutoAttemptedRef = useRef(false);
   const isMountedRef = useRef(true);
   const lastAttemptedUrlRef = useRef<string | null>(null);
+  const deviceSubnetRef = useRef<string | null>(null);
+
+  const ensureDeviceSubnet = useCallback(async () => {
+    if (deviceSubnetRef.current) {
+      return deviceSubnetRef.current;
+    }
+
+    const hostCandidates: (string | null | undefined)[] = [
+      Constants.debuggerHost,
+      Constants.expoConfig?.hostUri,
+      // @ts-expect-error Expo SDK versions expose manifest/manifest2 differently; guard access.
+      Constants.manifest?.hostUri,
+      // @ts-expect-error Guard access to optional manifest fields for legacy runtimes.
+      Constants.manifest2?.extra?.expoClient?.hostUri,
+    ];
+
+    for (const candidate of hostCandidates) {
+      if (!candidate) {
+        continue;
+      }
+
+      let host = candidate;
+      try {
+        if (!candidate.includes('://')) {
+          const fauxUrl = `http://${candidate}`;
+          host = new URL(fauxUrl).hostname;
+        } else {
+          host = new URL(candidate).hostname;
+        }
+      } catch {
+        host = candidate.split(':')[0] ?? candidate;
+      }
+
+      const subnet = host ? extractSubnetFromIpAddress(host) : null;
+      if (subnet) {
+        deviceSubnetRef.current = subnet;
+        console.log('Detected device subnet', { source: candidate, subnet });
+        return subnet;
+      }
+    }
+
+    console.warn('Unable to infer device subnet from Expo constants');
+    return null;
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -268,12 +322,18 @@ export default function ConnectionScreen() {
       additionalSeeds: string[] = [],
       options: NetworkScanOptions = {},
     ) => {
+      await ensureDeviceSubnet();
+
       if (isMountedRef.current) {
         setPhase('connecting');
         setStatusMessage(options.statusMessage ?? 'Scanning local network for the robot…');
       }
 
       const candidateSubnets = new Set<string>(options.presetSubnets ?? []);
+
+      if (deviceSubnetRef.current) {
+        candidateSubnets.add(deviceSubnetRef.current);
+      }
 
       const seedUrls: (string | null | undefined)[] = [
         baseUrl,
@@ -390,6 +450,7 @@ export default function ConnectionScreen() {
     },
     [
       baseUrl,
+      ensureDeviceSubnet,
       probeRobotUrl,
       recentUrls,
       recordRecentUrl,
@@ -442,6 +503,10 @@ export default function ConnectionScreen() {
             }
           }
 
+          if (!storedUrl) {
+            await ensureDeviceSubnet();
+          }
+
           console.log('Auto-attempting rover.local fallback', ROVER_LOCAL_URL);
           const fallbackResult = await attemptConnection(ROVER_LOCAL_URL, {
             skipRecent: true,
@@ -463,7 +528,7 @@ export default function ConnectionScreen() {
     return () => {
       isActive = false;
     };
-  }, [attemptConnection, runLocalNetworkScan]);
+  }, [attemptConnection, ensureDeviceSubnet, runLocalNetworkScan]);
 
   const statusMeta = useMemo(() => {
     return STATUS_META[phase];
