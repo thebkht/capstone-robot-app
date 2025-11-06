@@ -1,4 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import NetInfo from "@react-native-community/netinfo";
+import * as Network from "expo-network";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -6,24 +14,23 @@ import {
   StyleSheet,
   TextInput,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-// eslint-disable-next-line import/no-unresolved
-import * as Network from 'expo-network';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { useRobot } from '@/context/robot-provider';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { useRobot } from "@/context/robot-provider";
 
-const DEFAULT_HOTSPOT_URL = 'http://192.168.4.1:8000';
+const DEFAULT_HOTSPOT_URL = "http://192.168.4.1:8000";
 
-const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, '');
+const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, "");
 
 type DeviceNetworkDetails = {
   type: Network.NetworkStateType;
   isConnected: boolean;
   isWifi: boolean;
   ipAddress: string | null;
+  ssid: string | null;
 };
 
 type WifiStatusMeta = {
@@ -34,21 +41,27 @@ type WifiStatusMeta = {
 };
 
 export default function ConnectionScreen() {
-  const { api, baseUrl, status, statusError, refreshStatus, setIsPolling } = useRobot();
+  const { api, baseUrl, status, statusError, refreshStatus, setIsPolling } =
+    useRobot();
   const mountedRef = useRef(true);
-  const [deviceNetwork, setDeviceNetwork] = useState<DeviceNetworkDetails | null>(null);
-  const [deviceNetworkError, setDeviceNetworkError] = useState<string | null>(null);
+  const [deviceNetwork, setDeviceNetwork] =
+    useState<DeviceNetworkDetails | null>(null);
+  const [deviceNetworkError, setDeviceNetworkError] = useState<string | null>(
+    null
+  );
   const [isLoadingDeviceNetwork, setIsLoadingDeviceNetwork] = useState(false);
   const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
   const [isScanningWifi, setIsScanningWifi] = useState(false);
   const [wifiScanError, setWifiScanError] = useState<string | null>(null);
   const [selectedNetwork, setSelectedNetwork] = useState<string | null>(null);
-  const [wifiPassword, setWifiPassword] = useState('');
+  const [wifiPassword, setWifiPassword] = useState("");
   const [isSubmittingWifi, setIsSubmittingWifi] = useState(false);
   const [wifiConnectError, setWifiConnectError] = useState<string | null>(null);
-  const [wifiConnectSuccess, setWifiConnectSuccess] = useState<string | null>(null);
+  const [wifiConnectSuccess, setWifiConnectSuccess] = useState<string | null>(
+    null
+  );
   const [wifiCommandBase, setWifiCommandBase] = useState<string>(
-    canonicalizeUrl(baseUrl || DEFAULT_HOTSPOT_URL),
+    canonicalizeUrl(baseUrl || DEFAULT_HOTSPOT_URL)
   );
 
   const refreshDeviceNetwork = useCallback(
@@ -62,7 +75,25 @@ export default function ConnectionScreen() {
       try {
         const state = providedState ?? (await Network.getNetworkStateAsync());
         const ipAddress = await Network.getIpAddressAsync();
-        const normalizedIp = ipAddress && ipAddress !== '0.0.0.0' ? ipAddress : null;
+        const normalizedIp =
+          ipAddress && ipAddress !== "0.0.0.0" ? ipAddress : null;
+
+        // Try to get SSID using NetInfo
+        let ssid: string | null = null;
+        try {
+          const netInfoState = await NetInfo.fetch();
+          if (
+            netInfoState.type === "wifi" &&
+            netInfoState.details &&
+            "ssid" in netInfoState.details &&
+            netInfoState.details.ssid
+          ) {
+            ssid = netInfoState.details.ssid as string;
+          }
+        } catch (ssidError) {
+          // SSID might not be available on all platforms or without permissions
+          console.log("Unable to fetch SSID", ssidError);
+        }
 
         if (!mountedRef.current) {
           return;
@@ -71,8 +102,9 @@ export default function ConnectionScreen() {
         setDeviceNetwork({
           type: state.type,
           isConnected: Boolean(state.isConnected),
-          isWifi: state.type === Network.NetworkStateType.WIFI && Boolean(state.isConnected),
+          isWifi: state.type === "WIFI" && Boolean(state.isConnected),
           ipAddress: normalizedIp,
+          ssid,
         });
         setDeviceNetworkError(null);
       } catch (error) {
@@ -80,7 +112,10 @@ export default function ConnectionScreen() {
           return;
         }
 
-        const message = error instanceof Error ? error.message : 'Unable to determine device network status.';
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to determine device network status.";
         setDeviceNetwork(null);
         setDeviceNetworkError(message);
       } finally {
@@ -91,7 +126,7 @@ export default function ConnectionScreen() {
         setIsLoadingDeviceNetwork(false);
       }
     },
-    [mountedRef],
+    [mountedRef]
   );
 
   useEffect(() => {
@@ -99,13 +134,8 @@ export default function ConnectionScreen() {
 
     void refreshDeviceNetwork();
 
-    const subscription = Network.addNetworkStateChangeListener((networkState) => {
-      void refreshDeviceNetwork(networkState);
-    });
-
     return () => {
       mountedRef.current = false;
-      subscription?.remove();
     };
   }, [refreshDeviceNetwork]);
 
@@ -132,12 +162,14 @@ export default function ConnectionScreen() {
   useEffect(() => {
     const available = status?.network?.availableNetworks;
     if (Array.isArray(available) && available.length) {
-      const nextNetworks = available.filter((item): item is string => typeof item === 'string');
+      const nextNetworks = available.filter(
+        (item): item is string => typeof item === "string"
+      );
       setWifiNetworks(nextNetworks);
       setWifiScanError(null);
       if (selectedNetwork && !nextNetworks.includes(selectedNetwork)) {
         setSelectedNetwork(null);
-        setWifiPassword('');
+        setWifiPassword("");
         setWifiConnectError(null);
         setWifiConnectSuccess(null);
       }
@@ -147,41 +179,48 @@ export default function ConnectionScreen() {
   const wifiStatusMeta = useMemo<WifiStatusMeta>(() => {
     if (isLoadingDeviceNetwork) {
       return {
-        color: '#FBBF24',
-        label: 'Checking network status',
-        details: ['Confirming the device Wi-Fi connection...'],
+        color: "#FBBF24",
+        label: "Checking network status",
+        details: ["Confirming the device Wi-Fi connection..."],
         helper: null,
       };
     }
 
     if (deviceNetwork?.isWifi) {
+      const details = [
+        `Network type: ${deviceNetwork.type}`,
+        `Local IP: ${deviceNetwork.ipAddress ?? "Unavailable"}`,
+      ];
+      if (deviceNetwork.ssid) {
+        details.push(`SSID: ${deviceNetwork.ssid}`);
+      }
       return {
-        color: '#1DD1A1',
-        label: 'Connected to Wi-Fi',
-        details: [
-          `Network type: ${deviceNetwork.type}`,
-          `Local IP: ${deviceNetwork.ipAddress ?? 'Unavailable'}`,
-        ],
+        color: "#1DD1A1",
+        label: "Connected to Wi-Fi",
+        details,
         helper: null,
       };
     }
 
     if (deviceNetwork) {
       return {
-        color: '#F87171',
-        label: 'Not connected to Wi-Fi',
+        color: "#F87171",
+        label: "Not connected to Wi-Fi",
         details: [`Current network type: ${deviceNetwork.type}`],
-        helper: 'Join a Wi-Fi network on your phone to continue configuring the robot.',
+        helper:
+          "Join a Wi-Fi network on your phone to continue configuring the robot.",
       };
     }
 
     return {
-      color: '#FBBF24',
-      label: 'Network status unavailable',
+      color: "#FBBF24",
+      label: "Network status unavailable",
       details: deviceNetworkError
         ? [deviceNetworkError]
-        : ['Unable to read device network information.'],
-      helper: deviceNetworkError ? null : 'Check network permissions and retry.',
+        : ["Unable to read device network information."],
+      helper: deviceNetworkError
+        ? null
+        : "Check network permissions and retry.",
     };
   }, [deviceNetwork, deviceNetworkError, isLoadingDeviceNetwork]);
 
@@ -192,32 +231,40 @@ export default function ConnectionScreen() {
     setWifiConnectSuccess(null);
 
     try {
-      const normalizedBase = baseUrl ? canonicalizeUrl(baseUrl) : canonicalizeUrl(DEFAULT_HOTSPOT_URL);
+      const normalizedBase = baseUrl
+        ? canonicalizeUrl(baseUrl)
+        : canonicalizeUrl(DEFAULT_HOTSPOT_URL);
       setWifiCommandBase(normalizedBase);
-      console.log('Requesting Wi-Fi network scan', { baseUrl: normalizedBase });
+      console.log("Requesting Wi-Fi network scan", { baseUrl: normalizedBase });
       const { networks } = await api.listWifiNetworks();
       const validNetworks = Array.isArray(networks)
-        ? networks.filter((item): item is string => typeof item === 'string')
+        ? networks.filter((item): item is string => typeof item === "string")
         : [];
 
       setWifiNetworks(validNetworks);
 
       if (!validNetworks.length) {
-        setWifiScanError('No Wi-Fi networks detected. Try again closer to the router.');
+        setWifiScanError(
+          "No Wi-Fi networks detected. Try again closer to the router."
+        );
         setSelectedNetwork(null);
-        setWifiPassword('');
+        setWifiPassword("");
       } else if (selectedNetwork && !validNetworks.includes(selectedNetwork)) {
         setSelectedNetwork(null);
-        setWifiPassword('');
+        setWifiPassword("");
       }
 
-      console.log('Wi-Fi network scan completed', { count: validNetworks.length });
+      console.log("Wi-Fi network scan completed", {
+        count: validNetworks.length,
+      });
     } catch (error) {
-      console.warn('Wi-Fi network scan failed', error);
+      console.warn("Wi-Fi network scan failed", error);
       setWifiNetworks([]);
       setSelectedNetwork(null);
-      setWifiPassword('');
-      setWifiScanError('Unable to reach the robot hotspot. Connect to the hotspot and retry.');
+      setWifiPassword("");
+      setWifiScanError(
+        "Unable to reach the robot hotspot. Connect to the hotspot and retry."
+      );
     } finally {
       setIsScanningWifi(false);
     }
@@ -228,7 +275,7 @@ export default function ConnectionScreen() {
       if (previous === network) {
         return previous;
       }
-      setWifiPassword('');
+      setWifiPassword("");
       setWifiConnectError(null);
       setWifiConnectSuccess(null);
       return network;
@@ -250,7 +297,7 @@ export default function ConnectionScreen() {
         password: wifiPassword.trim(),
       };
 
-      console.log('Submitting Wi-Fi credentials to robot', {
+      console.log("Submitting Wi-Fi credentials to robot", {
         ssid: selectedNetwork,
         hasPassword: payload.password.length > 0,
         baseUrl: wifiCommandBase,
@@ -259,20 +306,25 @@ export default function ConnectionScreen() {
       const result = await api.connectWifi(payload);
 
       if (!result.success) {
-        setWifiConnectError('The robot rejected the Wi-Fi credentials. Try again.');
+        setWifiConnectError(
+          "The robot rejected the Wi-Fi credentials. Try again."
+        );
         return;
       }
 
       setWifiConnectSuccess(
         payload.password.length
           ? `Credentials sent. The robot is joining ${selectedNetwork}.`
-          : `Connecting to ${selectedNetwork}.`,
+          : `Connecting to ${selectedNetwork}.`
       );
 
       await refreshStatus();
     } catch (error) {
-      console.warn('Failed to submit Wi-Fi credentials', error);
-      const message = error instanceof Error ? error.message : 'Failed to submit Wi-Fi credentials.';
+      console.warn("Failed to submit Wi-Fi credentials", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to submit Wi-Fi credentials.";
       setWifiConnectError(message);
     } finally {
       setIsSubmittingWifi(false);
@@ -280,7 +332,7 @@ export default function ConnectionScreen() {
   }, [api, refreshStatus, selectedNetwork, wifiCommandBase, wifiPassword]);
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -291,51 +343,78 @@ export default function ConnectionScreen() {
             Connect to Robot
           </ThemedText>
           <ThemedText style={styles.subheading}>
-            Connect your phone to the robot hotspot, then choose which Wi-Fi network the robot should join.
+            Connect your phone to the robot hotspot, then choose which Wi-Fi
+            network the robot should join.
           </ThemedText>
 
           <ThemedView style={styles.statusCard}>
             <ThemedText type="subtitle">Robot hotspot status</ThemedText>
-            <ThemedText style={styles.statusHint}>Target address: {wifiCommandBase}</ThemedText>
+            <ThemedText style={styles.statusHint}>
+              Target address: {wifiCommandBase}
+            </ThemedText>
             <View style={styles.statusRow}>
-              <View style={[styles.statusIndicator, { backgroundColor: wifiStatusMeta.color }]} />
+              <View
+                style={[
+                  styles.statusIndicator,
+                  { backgroundColor: wifiStatusMeta.color },
+                ]}
+              />
               <View style={styles.statusText}>
-                <ThemedText style={styles.statusLabel}>{wifiStatusMeta.label}</ThemedText>
+                <ThemedText style={styles.statusLabel}>
+                  {wifiStatusMeta.label}
+                </ThemedText>
                 {wifiStatusMeta.details.map((line, index) => (
-                  <ThemedText key={`${line}-${index}`} style={styles.statusMeta}>
+                  <ThemedText
+                    key={`${line}-${index}`}
+                    style={styles.statusMeta}
+                  >
                     {line}
                   </ThemedText>
                 ))}
                 {wifiStatusMeta.helper ? (
-                  <ThemedText style={styles.statusWarning}>{wifiStatusMeta.helper}</ThemedText>
+                  <ThemedText style={styles.statusWarning}>
+                    {wifiStatusMeta.helper}
+                  </ThemedText>
                 ) : null}
               </View>
             </View>
             {statusError ? (
               <ThemedText style={styles.statusError}>
-                Unable to reach the robot hotspot. Confirm that your phone is joined to the robot Wi-Fi network.
+                Unable to reach the robot hotspot. Confirm that your phone is
+                joined to the robot Wi-Fi network.
               </ThemedText>
             ) : null}
-            <Pressable style={styles.secondaryButton} onPress={handleStatusRefresh}>
-              <ThemedText style={styles.secondaryButtonText}>Refresh network info</ThemedText>
+            <Pressable
+              style={styles.secondaryButton}
+              onPress={handleStatusRefresh}
+            >
+              <ThemedText style={styles.secondaryButtonText}>
+                Refresh network info
+              </ThemedText>
             </Pressable>
           </ThemedView>
 
           <ThemedView style={styles.wifiCard}>
             <ThemedText type="subtitle">Available networks</ThemedText>
             <ThemedText style={styles.wifiHint}>
-              Scan to fetch the Wi-Fi networks the robot can see. Choose one and send credentials to bring the robot online.
+              Scan to fetch the Wi-Fi networks the robot can see. Choose one and
+              send credentials to bring the robot online.
             </ThemedText>
 
             <Pressable
-              style={[styles.scanButton, isScanningWifi && styles.disabledButton]}
+              style={[
+                styles.scanButton,
+                isScanningWifi && styles.disabledButton,
+              ]}
               disabled={isScanningWifi}
               onPress={handleScanPress}
             >
               {isScanningWifi ? (
                 <ActivityIndicator color="#E5E7EB" />
               ) : (
-                <ThemedText style={styles.secondaryButtonText}>Scan for Wi-Fi networks</ThemedText>
+                <ThemedText style={styles.secondaryButtonText}>
+                  Scan for Wi-Fi networks
+                </ThemedText>
               )}
             </Pressable>
 
@@ -351,22 +430,28 @@ export default function ConnectionScreen() {
                       pressed && styles.networkRowPressed,
                     ]}
                   >
-                    <ThemedText style={styles.networkName}>{network}</ThemedText>
+                    <ThemedText style={styles.networkName}>
+                      {network}
+                    </ThemedText>
                     {selectedNetwork === network ? (
-                      <ThemedText style={styles.networkSelectedHint}>Selected</ThemedText>
+                      <ThemedText style={styles.networkSelectedHint}>
+                        Selected
+                      </ThemedText>
                     ) : null}
                   </Pressable>
                 ))
               ) : (
                 <ThemedText style={styles.wifiMeta}>
-                  {wifiScanError ?? 'No scan results yet. Connect to the robot hotspot and scan to continue.'}
+                  {wifiScanError ??
+                    "No scan results yet. Connect to the robot hotspot and scan to continue."}
                 </ThemedText>
               )}
             </View>
 
             {wifiNetworks.length > 0 && !selectedNetwork ? (
               <ThemedText style={styles.selectNetworkHint}>
-                Select your Wi-Fi network from the list above to send credentials.
+                Select your Wi-Fi network from the list above to send
+                credentials.
               </ThemedText>
             ) : null}
 
@@ -376,7 +461,8 @@ export default function ConnectionScreen() {
                   Configure network: {selectedNetwork}
                 </ThemedText>
                 <ThemedText style={styles.credentialsHint}>
-                  Enter the Wi-Fi password for this network. Leave blank for open networks.
+                  Enter the Wi-Fi password for this network. Leave blank for
+                  open networks.
                 </ThemedText>
                 <TextInput
                   value={wifiPassword}
@@ -388,20 +474,29 @@ export default function ConnectionScreen() {
                   autoCapitalize="none"
                 />
                 {wifiConnectError ? (
-                  <ThemedText style={styles.credentialsError}>{wifiConnectError}</ThemedText>
+                  <ThemedText style={styles.credentialsError}>
+                    {wifiConnectError}
+                  </ThemedText>
                 ) : null}
                 {wifiConnectSuccess ? (
-                  <ThemedText style={styles.credentialsSuccess}>{wifiConnectSuccess}</ThemedText>
+                  <ThemedText style={styles.credentialsSuccess}>
+                    {wifiConnectSuccess}
+                  </ThemedText>
                 ) : null}
                 <Pressable
-                  style={[styles.primaryButton, isSubmittingWifi && styles.disabledPrimary]}
+                  style={[
+                    styles.primaryButton,
+                    isSubmittingWifi && styles.disabledPrimary,
+                  ]}
                   onPress={handleWifiCredentialSubmit}
                   disabled={isSubmittingWifi}
                 >
                   {isSubmittingWifi ? (
                     <ActivityIndicator color="#04110B" />
                   ) : (
-                    <ThemedText style={styles.primaryButtonText}>Send Wi-Fi credentials</ThemedText>
+                    <ThemedText style={styles.primaryButtonText}>
+                      Send Wi-Fi credentials
+                    </ThemedText>
                   )}
                 </Pressable>
               </View>
@@ -416,7 +511,7 @@ export default function ConnectionScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#050505',
+    backgroundColor: "#050505",
   },
   scrollView: {
     flex: 1,
@@ -428,29 +523,29 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     gap: 24,
-    backgroundColor: '#050505',
+    backgroundColor: "#050505",
   },
   heading: {
-    fontFamily: 'Times New Roman',
+    fontFamily: "Times New Roman",
   },
   subheading: {
-    color: '#D1D5DB',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#D1D5DB",
+    fontFamily: "JetBrainsMono-Regular",
   },
   statusCard: {
     gap: 16,
     padding: 20,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#1F2937',
-    backgroundColor: '#0F0F10',
+    borderColor: "#1F2937",
+    backgroundColor: "#0F0F10",
   },
   statusHint: {
-    color: '#6B7280',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#6B7280",
+    fontFamily: "JetBrainsMono-Regular",
   },
   statusRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 16,
   },
   statusIndicator: {
@@ -462,139 +557,139 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statusLabel: {
-    color: '#E5E7EB',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#E5E7EB",
+    fontFamily: "JetBrainsMono-Regular",
   },
   statusMeta: {
-    color: '#9CA3AF',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#9CA3AF",
+    fontFamily: "JetBrainsMono-Regular",
   },
   statusWarning: {
-    color: '#FBBF24',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#FBBF24",
+    fontFamily: "JetBrainsMono-Regular",
   },
   statusError: {
-    color: '#F87171',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#F87171",
+    fontFamily: "JetBrainsMono-Regular",
   },
   wifiCard: {
     gap: 16,
     padding: 20,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#1F2937',
-    backgroundColor: '#0F0F10',
+    borderColor: "#1F2937",
+    backgroundColor: "#0F0F10",
   },
   wifiHint: {
-    color: '#D1D5DB',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#D1D5DB",
+    fontFamily: "JetBrainsMono-Regular",
   },
   scanButton: {
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: "#1F2937",
     paddingVertical: 16,
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 0,
-    backgroundColor: '#0A0A0B',
+    backgroundColor: "#0A0A0B",
   },
   disabledButton: {
     opacity: 0.5,
   },
   secondaryButton: {
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: "#1F2937",
     paddingVertical: 16,
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 0,
-    backgroundColor: '#0A0A0B',
+    backgroundColor: "#0A0A0B",
   },
   secondaryButtonText: {
-    color: '#E5E7EB',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#E5E7EB",
+    fontFamily: "JetBrainsMono-Regular",
   },
   networkList: {
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: "#1F2937",
     borderRadius: 0,
   },
   networkRow: {
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#1F2937',
-    backgroundColor: '#0A0A0B',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    borderBottomColor: "#1F2937",
+    backgroundColor: "#0A0A0B",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   networkRowActive: {
-    backgroundColor: '#111827',
+    backgroundColor: "#111827",
   },
   networkRowPressed: {
-    backgroundColor: '#1F2937',
+    backgroundColor: "#1F2937",
   },
   networkName: {
-    color: '#F9FAFB',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#F9FAFB",
+    fontFamily: "JetBrainsMono-Regular",
   },
   networkSelectedHint: {
-    color: '#1DD1A1',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#1DD1A1",
+    fontFamily: "JetBrainsMono-Regular",
   },
   wifiMeta: {
-    color: '#9CA3AF',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#9CA3AF",
+    fontFamily: "JetBrainsMono-Regular",
     paddingVertical: 12,
   },
   selectNetworkHint: {
-    color: '#FBBF24',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#FBBF24",
+    fontFamily: "JetBrainsMono-Regular",
   },
   wifiCredentials: {
     gap: 12,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: "#1F2937",
     padding: 16,
     borderRadius: 0,
-    backgroundColor: '#0A0A0B',
+    backgroundColor: "#0A0A0B",
   },
   credentialsHeading: {
-    color: '#E5E7EB',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#E5E7EB",
+    fontFamily: "JetBrainsMono-Regular",
   },
   credentialsHint: {
-    color: '#9CA3AF',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#9CA3AF",
+    fontFamily: "JetBrainsMono-Regular",
   },
   passwordInput: {
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#1F2937',
-    backgroundColor: '#0A0A0B',
-    color: '#F9FAFB',
-    fontFamily: 'JetBrainsMono-Regular',
+    borderColor: "#1F2937",
+    backgroundColor: "#0A0A0B",
+    color: "#F9FAFB",
+    fontFamily: "JetBrainsMono-Regular",
   },
   credentialsError: {
-    color: '#F87171',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#F87171",
+    fontFamily: "JetBrainsMono-Regular",
   },
   credentialsSuccess: {
-    color: '#1DD1A1',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#1DD1A1",
+    fontFamily: "JetBrainsMono-Regular",
   },
   primaryButton: {
-    backgroundColor: '#1DD1A1',
+    backgroundColor: "#1DD1A1",
     borderRadius: 0,
     paddingVertical: 16,
-    alignItems: 'center',
+    alignItems: "center",
   },
   disabledPrimary: {
     opacity: 0.5,
   },
   primaryButtonText: {
-    color: '#04110B',
-    fontFamily: 'JetBrainsMono-Regular',
+    color: "#04110B",
+    fontFamily: "JetBrainsMono-Regular",
   },
 });

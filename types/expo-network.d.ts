@@ -1,5 +1,10 @@
-declare module 'expo-network' {
-  export type NetworkStateType = 'UNKNOWN' | 'NONE' | 'CELLULAR' | 'WIFI' | 'OTHER';
+declare module "expo-network" {
+  export type NetworkStateType =
+    | "UNKNOWN"
+    | "NONE"
+    | "CELLULAR"
+    | "WIFI"
+    | "OTHER";
 
   export type NetworkState = {
     type: NetworkStateType;
@@ -9,7 +14,4 @@ declare module 'expo-network' {
 
   export function getNetworkStateAsync(): Promise<NetworkState>;
   export function getIpAddressAsync(): Promise<string>;
-  export function addNetworkStateChangeListener(
-    listener: (state: NetworkState) => void,
-  ): { remove(): void };
 }
