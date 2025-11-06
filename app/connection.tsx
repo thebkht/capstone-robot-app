@@ -1,6 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
 import * as Network from "expo-network";
-import WifiManager from "react-native-wifi-reborn";
+import { useRouter } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import WifiManager from "react-native-wifi-reborn";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -159,6 +160,7 @@ type WifiStatusMeta = {
 };
 
 export default function ConnectionScreen() {
+  const router = useRouter();
   const { api, baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling } =
     useRobot();
   const mountedRef = useRef(true);
@@ -433,8 +435,8 @@ export default function ConnectionScreen() {
       label: "Unknown",
       details: [
         deviceNetworkError ??
-          (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ??
-          "Network name unavailable",
+        (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ??
+        "Network name unavailable",
         (statusNetwork?.ip && statusNetwork.ip.trim()) || "IP address unavailable",
       ],
       helper: deviceNetworkError
@@ -475,6 +477,12 @@ export default function ConnectionScreen() {
       setIsConnectingRobot(false);
     }
   }, [api, baseUrl, refreshStatus]);
+
+  useEffect(() => {
+    if (connectRobotSuccess) {
+      router.replace("/(tabs)/camera");
+    }
+  }, [connectRobotSuccess, router]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
@@ -549,40 +557,30 @@ export default function ConnectionScreen() {
             </Pressable>
           </ThemedView>
 
-          <ThemedView style={styles.connectCard}>
-            <ThemedText type="subtitle">Connect to the robot</ThemedText>
-            <ThemedText style={styles.connectHint}>
-              Attempt to reach the robot at the configured address. Make sure
-              this device and the robot share the same Wi-Fi network or join the
-              {ROBOT_AP_SSID} hotspot when direct connection is needed.
+          {connectRobotError ? (<ThemedView style={styles.connectCard}>
+
+            <ThemedText style={styles.connectError}>
+              {connectRobotError}
             </ThemedText>
-            {connectRobotError ? (
-              <ThemedText style={styles.connectError}>
-                {connectRobotError}
+
+
+          </ThemedView>) : null}
+          <Pressable
+            style={[
+              styles.primaryButton,
+              isConnectingRobot && styles.disabledPrimary,
+            ]}
+            onPress={handleConnectRobotPress}
+            disabled={isConnectingRobot}
+          >
+            {isConnectingRobot ? (
+              <ActivityIndicator color="#04110B" />
+            ) : (
+              <ThemedText style={styles.primaryButtonText}>
+                Connect Robot
               </ThemedText>
-            ) : null}
-            {connectRobotSuccess ? (
-              <ThemedText style={styles.connectSuccess}>
-                {connectRobotSuccess}
-              </ThemedText>
-            ) : null}
-            <Pressable
-              style={[
-                styles.primaryButton,
-                isConnectingRobot && styles.disabledPrimary,
-              ]}
-              onPress={handleConnectRobotPress}
-              disabled={isConnectingRobot}
-            >
-              {isConnectingRobot ? (
-                <ActivityIndicator color="#04110B" />
-              ) : (
-                <ThemedText style={styles.primaryButtonText}>
-                  Connect Robot
-                </ThemedText>
-              )}
-            </Pressable>
-          </ThemedView>
+            )}
+          </Pressable>
         </ThemedView>
       </ScrollView>
     </SafeAreaView>
