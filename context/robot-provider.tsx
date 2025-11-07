@@ -84,9 +84,6 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
     return () => {
       clearInterval(interval);
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-      }
     };
   }, [isPolling, refreshStatus]);
 
