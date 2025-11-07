@@ -1,28 +1,82 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
+import { useEffect } from 'react';
 import 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import {
+  Lato_100Thin,
+  Lato_100Thin_Italic,
+  Lato_300Light,
+  Lato_300Light_Italic,
+  Lato_400Regular,
+  Lato_400Regular_Italic,
+  Lato_700Bold,
+  Lato_700Bold_Italic,
+  Lato_900Black,
+  Lato_900Black_Italic,
+} from '@expo-google-fonts/lato';
+import {
+  JetBrainsMono_400Regular,
+  JetBrainsMono_600SemiBold,
+} from '@expo-google-fonts/jetbrains-mono';
+import {
+  Lora_400Regular,
+  Lora_500Medium,
+  Lora_600SemiBold,
+  Lora_700Bold,
+} from '@expo-google-fonts/lora';
 
 import { RobotProvider } from '@/context/robot-provider';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
   anchor: '(tabs)',
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  let [fontsLoaded, fontError] = useFonts({
+    Lato_100Thin,
+    Lato_100Thin_Italic,
+    Lato_300Light,
+    Lato_300Light_Italic,
+    Lato_400Regular,
+    Lato_400Regular_Italic,
+    Lato_700Bold,
+    Lato_700Bold_Italic,
+    Lato_900Black,
+    Lato_900Black_Italic,
+    JetBrainsMono_400Regular,
+    JetBrainsMono_600SemiBold,
+    Lora_400Regular,
+    Lora_500Medium,
+    Lora_600SemiBold,
+    Lora_700Bold,
+  });
+
+  useEffect(() => {
+    if (fontError) {
+      console.error('Failed to load fonts', fontError);
+    }
+  }, [fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
 
   return (
-    <RobotProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="connection" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </RobotProvider>
+    <SafeAreaProvider>
+      <RobotProvider>
+        <ThemeProvider value={DarkTheme}>
+          <Stack>
+            <Stack.Screen name="connection" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          </Stack>
+          <StatusBar style="light" />
+        </ThemeProvider>
+      </RobotProvider>
+    </SafeAreaProvider>
   );
 }

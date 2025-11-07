@@ -6,14 +6,10 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "robotcontroller",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "Allow robot-controller to discover and connect to nearby robots via Bluetooth.",
-        "NSBluetoothPeripheralUsageDescription": "Allow robot-controller to communicate with nearby robots using Bluetooth."
-      }
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
@@ -24,10 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "permissions": [
-        "android.permission.BLUETOOTH_SCAN",
-        "android.permission.BLUETOOTH_CONNECT"
-      ]
+      "permissions": ["ACCESS_FINE_LOCATION"]
     },
     "web": {
       "output": "static",
@@ -46,7 +39,7 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
     ],
     "experiments": {
       "typedRoutes": true,

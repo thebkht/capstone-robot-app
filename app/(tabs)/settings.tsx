@@ -1,19 +1,13 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useRobot } from '@/context/robot-provider';
 
 export default function SettingsScreen() {
-  const {
-    baseUrl,
-    setBaseUrl,
-    bluetoothEnabled,
-    setBluetoothEnabled,
-    refreshStatus,
-    bluetoothSupported,
-  } = useRobot();
+  const { baseUrl, setBaseUrl, refreshStatus } = useRobot();
   const [draftUrl, setDraftUrl] = useState(baseUrl);
 
   const handleSave = useCallback(() => {
@@ -27,95 +21,83 @@ export default function SettingsScreen() {
   }, [draftUrl, refreshStatus, setBaseUrl]);
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title">Configuration</ThemedText>
-      <ThemedText style={styles.description}>
-        Set the robot address and communication preferences.
-      </ThemedText>
-
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">Robot IP / host</ThemedText>
-        <TextInput
-          value={draftUrl}
-          onChangeText={setDraftUrl}
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-        />
-        <Pressable style={styles.primaryButton} onPress={handleSave}>
-          <ThemedText style={styles.primaryText}>Save</ThemedText>
-        </Pressable>
-      </ThemedView>
-
-      <ThemedView style={styles.card}>
-        <View style={styles.rowBetween}>
-          <ThemedText type="subtitle">Enable Bluetooth discovery</ThemedText>
-          <Switch
-            value={bluetoothEnabled}
-            onValueChange={setBluetoothEnabled}
-            disabled={!bluetoothSupported}
-          />
-        </View>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <ThemedView style={styles.container}>
+        <ThemedText type="title">Configuration</ThemedText>
         <ThemedText style={styles.description}>
-          {bluetoothSupported
-            ? 'Uses react-native-ble-plx to scan for nearby robots exposing BLE beacons.'
-            : 'Install react-native-ble-plx and rebuild the app to enable Bluetooth scanning.'}
+          Set the robot address and communication preferences.
         </ThemedText>
-      </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">About this app</ThemedText>
-        <ThemedText>
-          Robot companion dashboard with Wi-Fi setup, camera streaming, telemetry monitoring and BLE discovery.
-        </ThemedText>
-        <ThemedText style={styles.meta}>Version 0.1.0</ThemedText>
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle">Robot IP / host</ThemedText>
+          <TextInput
+            value={draftUrl}
+            onChangeText={setDraftUrl}
+            style={styles.input}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+          />
+          <Pressable style={styles.primaryButton} onPress={handleSave}>
+            <ThemedText style={styles.primaryText}>Save</ThemedText>
+          </Pressable>
+        </ThemedView>
+
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle">About this app</ThemedText>
+          <ThemedText>
+            Robot companion dashboard with Wi-Fi setup, camera streaming, and telemetry monitoring.
+          </ThemedText>
+          <ThemedText style={styles.meta}>Version 0.1.0</ThemedText>
+        </ThemedView>
       </ThemedView>
-    </ThemedView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#050505',
+  },
   container: {
     flex: 1,
-    padding: 20,
-    gap: 16,
+    padding: 24,
+    gap: 20,
+    backgroundColor: '#050505',
   },
   description: {
-    opacity: 0.8,
+    color: '#D1D5DB',
   },
   card: {
-    gap: 12,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
+    gap: 16,
+    padding: 20,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    backgroundColor: '#0F0F10',
   },
   input: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'rgba(0,0,0,0.1)',
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    backgroundColor: '#0A0A0B',
+    color: '#F9FAFB',
+    fontFamily: 'JetBrainsMono_400Regular',
+    letterSpacing: 0.25,
   },
   primaryButton: {
-    backgroundColor: '#10b981',
-    borderRadius: 12,
-    paddingVertical: 14,
+    backgroundColor: '#1DD1A1',
+    borderRadius: 0,
+    paddingVertical: 16,
     alignItems: 'center',
   },
   primaryText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: '#04110B',
   },
   meta: {
-    opacity: 0.7,
+    color: '#6B7280',
   },
 });

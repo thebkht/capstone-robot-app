@@ -5,49 +5,60 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = '#00C2FF';
+const tintColorDark = '#00C2FF';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
+    text: '#E8E8E8',
+    background: '#080808',
     tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
+    icon: '#6B7280',
+    tabIconDefault: '#6B7280',
     tabIconSelected: tintColorLight,
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
+    text: '#E8E8E8',
+    background: '#080808',
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: '#8B929E',
+    tabIconDefault: '#4B5563',
     tabIconSelected: tintColorDark,
   },
 };
 
+export const SerifFonts = {
+  regular: 'Lora_400Regular',
+  medium: 'Lora_500Medium',
+  semiBold: 'Lora_600SemiBold',
+  bold: 'Lora_700Bold',
+} as const;
+
+const serifFontFamily = SerifFonts.regular;
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
+    sans: 'Lato_400Regular',
     /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
+    serif: serifFontFamily,
     /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
     /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+    mono: 'JetBrainsMono_400Regular',
   },
   default: {
-    sans: 'normal',
-    serif: 'serif',
+    sans: 'Lato_400Regular',
+    serif: serifFontFamily,
     rounded: 'normal',
-    mono: 'monospace',
+    mono: 'JetBrainsMono_400Regular',
   },
   web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
+    sans: "'Lato', 'Helvetica Neue', Arial, sans-serif",
+    serif: serifFontFamily,
     rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    mono: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
+
+export const SerifFontFamily = serifFontFamily;

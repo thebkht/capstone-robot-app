@@ -1,9 +1,5 @@
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
-import { useRobot } from "@/context/robot-provider";
-import type { RobotConnectionState } from "@/services/robot-api";
-import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
+import NetInfo from "@react-native-community/netinfo";
+import * as Network from "expo-network";
 import { useRouter } from "expo-router";
 import React, {
   useCallback,
@@ -14,850 +10,588 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
+  PermissionsAndroid,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import WifiManager from "react-native-wifi-reborn";
 
-const ROBOT_ART = require("../assets/images/partial-react-logo.png");
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { SerifFonts } from "@/constants/theme";
+import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 
-interface DiscoveredDevice {
-  id: string;
-  name?: string | null;
-  rssi?: number | null;
-}
+const ROBOT_AP_SSID = "Elara_AP";
 
-const getSignalStrength = (rssi?: number | null) => {
-  if (typeof rssi !== "number") {
+const TITLE_FONT_FAMILY = SerifFonts.bold;
+
+const SUBTITLE_FONT_FAMILY = SerifFonts.semiBold;
+
+const MONO_REGULAR_FONT_FAMILY = "JetBrainsMono_400Regular";
+
+const MONO_SEMIBOLD_FONT_FAMILY = "JetBrainsMono_600SemiBold";
+
+const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, "");
+
+const isValidIpv4 = (value: string | null | undefined) => {
+  if (!value) {
+    return false;
+  }
+
+  const segments = value.split(".");
+  if (segments.length !== 4) {
+    return false;
+  }
+
+  return segments.every((segment) => {
+    if (segment.trim() === "") {
+      return false;
+    }
+    const numeric = Number(segment);
+    return Number.isInteger(numeric) && numeric >= 0 && numeric <= 255;
+  });
+};
+
+const extractUrlParts = (value: string | null | undefined) => {
+  if (!value) {
     return null;
   }
 
-  if (rssi >= -60) {
-    return "Strong";
+  try {
+    const parsed = new URL(value.includes("://") ? value : `http://${value}`);
+    return {
+      protocol: parsed.protocol || "http:",
+      host: parsed.hostname,
+      port: parsed.port,
+    };
+  } catch (error) {
+    console.warn("Failed to parse robot base URL", value, error);
+    return null;
   }
-
-  if (rssi >= -75) {
-    return "Medium";
-  }
-
-  return "Low";
 };
 
-const StatusPill = ({ color, label }: { color: string; label: string }) => (
-  <View style={styles.statusPill}>
-    <View style={[styles.statusDot, { backgroundColor: color }]} />
-    <ThemedText style={styles.statusLabel}>{label}</ThemedText>
-  </View>
-);
+const deriveRobotLanBaseUrl = (
+  deviceIpAddress: string | null | undefined,
+  options: { currentBaseUrl: string; statusIp?: string | null }
+) => {
+  const { currentBaseUrl, statusIp } = options;
+  const baseParts = extractUrlParts(currentBaseUrl);
+  const defaultParts = extractUrlParts(DEFAULT_ROBOT_BASE_URL);
+  const statusParts = extractUrlParts(statusIp);
+
+  const protocol =
+    baseParts?.protocol ??
+    statusParts?.protocol ??
+    defaultParts?.protocol ??
+    "http:";
+  const port =
+    statusParts?.port ?? baseParts?.port ?? defaultParts?.port ?? "8000";
+
+  const buildUrl = (ip: string) => {
+    const trimmedProtocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
+    const normalizedPort = port ? `:${port}` : "";
+    return `${trimmedProtocol}//${ip}${normalizedPort}`;
+  };
+
+  if (statusParts?.host && isValidIpv4(statusParts.host)) {
+    return buildUrl(statusParts.host);
+  }
+
+  if (!deviceIpAddress || !isValidIpv4(deviceIpAddress)) {
+    return null;
+  }
+
+  const ipSegments = deviceIpAddress
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment !== "");
+
+  if (ipSegments.length !== 4) {
+    return null;
+  }
+
+  const isRobotHotspotSubnet =
+    ipSegments[0] === "192" && ipSegments[1] === "168" && ipSegments[2] === "4";
+
+  if (isRobotHotspotSubnet) {
+    return buildUrl("192.168.4.1");
+  }
+
+  const candidateSources = [baseParts?.host, defaultParts?.host];
+
+  for (const source of candidateSources) {
+    if (!source || !isValidIpv4(source)) {
+      continue;
+    }
+
+    const hostSegments = source.split(".");
+    if (hostSegments.length !== 4) {
+      continue;
+    }
+
+    const candidateSegments = [
+      ipSegments[0],
+      ipSegments[1],
+      ipSegments[2],
+      hostSegments[3],
+    ];
+    const candidateIp = candidateSegments.join(".");
+
+    if (isValidIpv4(candidateIp)) {
+      return buildUrl(candidateIp);
+    }
+  }
+
+  return null;
+};
+
+type DeviceNetworkDetails = {
+  type: Network.NetworkStateType;
+  isConnected: boolean;
+  isWifi: boolean;
+  ipAddress: string | null;
+  ssid: string | null;
+};
+
+type WifiStatusMeta = {
+  color: string;
+  label: string;
+  details: string[];
+  helper: string | null;
+};
 
 export default function ConnectionScreen() {
+  const router = useRouter();
   const {
     api,
     baseUrl,
     setBaseUrl,
-    refreshStatus,
     status,
     statusError,
-    bluetoothEnabled,
-    bluetoothSupported,
-    bleManager,
-    bleState,
-    requestBlePermissions,
-    setBluetoothEnabled,
+    refreshStatus,
+    setIsPolling,
   } = useRobot();
-  const router = useRouter();
-  const [ssid, setSsid] = useState("");
-  const [password, setPassword] = useState("");
-  const [connectionState, setConnectionState] =
-    useState<RobotConnectionState>("disconnected");
-  const [lastError, setLastError] = useState<string | null>(null);
-  const [isPinging, setIsPinging] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-  const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
-  const [showWifiModal, setShowWifiModal] = useState(false);
-  const [showManualIpModal, setShowManualIpModal] = useState(false);
-  const [manualUrl, setManualUrl] = useState(baseUrl);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [wifiNetworks, setWifiNetworks] = useState<string[]>([]);
-  const [isWifiScanning, setIsWifiScanning] = useState(false);
-  const [wifiScanError, setWifiScanError] = useState<string | null>(null);
-  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasRequestedInitialWifiScan = useRef(false);
-  const devicesFoundDuringScanRef = useRef(false);
+  const mountedRef = useRef(true);
+  const [deviceNetwork, setDeviceNetwork] =
+    useState<DeviceNetworkDetails | null>(null);
+  const [deviceNetworkError, setDeviceNetworkError] = useState<string | null>(
+    null
+  );
+  const [isLoadingDeviceNetwork, setIsLoadingDeviceNetwork] = useState(false);
+  const [ssidPermissionWarning, setSsidPermissionWarning] = useState<
+    string | null
+  >(null);
+  const [isConnectingRobot, setIsConnectingRobot] = useState(false);
+  const [connectRobotError, setConnectRobotError] = useState<string | null>(
+    null
+  );
+  const [connectRobotSuccess, setConnectRobotSuccess] = useState<string | null>(
+    null
+  );
 
-  useEffect(() => {
-    setManualUrl(baseUrl);
-  }, [baseUrl]);
-
-  useEffect(() => {
-    if (connectionState === "connected" || status?.network?.ip) {
-      setShowWifiModal(false);
-      router.replace("/(tabs)/camera");
-    }
-  }, [connectionState, router, status?.network?.ip]);
-
-  const wifiConnected = Boolean(status?.network?.ip);
-
-  useEffect(() => {
-    const networkInfo = status?.network as
-      | { availableNetworks?: string[] }
-      | undefined;
-    if (networkInfo?.availableNetworks) {
-      console.log(
-        "Robot reported Wi-Fi networks from status",
-        networkInfo.availableNetworks
-      );
-      setWifiNetworks(networkInfo.availableNetworks);
-    }
-  }, [status?.network]);
-
-  const handleConnect = useCallback(async () => {
-    if (!ssid) {
-      Alert.alert("Wi-Fi credentials", "Please enter the network SSID.");
-      return;
-    }
-
-    console.log("Attempting to connect Wi-Fi", { ssid });
-    setConnectionState("connecting");
-    setLastError(null);
-
-    try {
-      await api.connectWifi({ ssid, password });
-      await refreshStatus();
-      setConnectionState("connected");
-      console.log("Wi-Fi credentials submitted successfully");
-    } catch (error) {
-      setConnectionState("error");
-      setLastError((error as Error).message);
-      console.warn("Failed to connect Wi-Fi", error);
-    }
-  }, [api, password, refreshStatus, ssid]);
-
-  const handlePing = useCallback(async () => {
-    setIsPinging(true);
-    console.log("Pinging robot for connectivity check");
-    try {
-      const data = await api.ping();
-      console.log("Ping successful", data);
-      Alert.alert("Robot reachable", JSON.stringify(data, null, 2));
-    } catch (error) {
-      console.warn("Ping failed", error);
-      Alert.alert("Ping failed", (error as Error).message);
-    } finally {
-      setIsPinging(false);
-    }
-  }, [api]);
-
-  const connectionDescription = useMemo(() => {
-    switch (connectionState) {
-      case "connecting":
-        return "Connecting to Wi-Fi…";
-      case "connected":
-        return "Connected. Robot status will refresh automatically.";
-      case "error":
-        return lastError ?? "An unknown error occurred.";
-      default:
-        return "Update the robot Wi-Fi credentials to join your network.";
-    }
-  }, [connectionState, lastError]);
-
-  const stopScan = useCallback(() => {
-    if (scanTimeoutRef.current) {
-      clearTimeout(scanTimeoutRef.current);
-      scanTimeoutRef.current = null;
-    }
-
-    if (bleManager) {
-      bleManager.stopDeviceScan();
-      console.log("Stopped BLE device scan");
-    }
-
-    setIsScanning(false);
-  }, [bleManager]);
-
-  useEffect(() => {
-    return () => {
-      stopScan();
-    };
-  }, [stopScan]);
-
-  useEffect(() => {
-    if (!bluetoothEnabled || !bluetoothSupported) {
-      stopScan();
-      setDevices([]);
-      setScanError(null);
-    }
-  }, [bluetoothEnabled, bluetoothSupported, stopScan]);
-
-  const handleScan = useCallback(() => {
-    if (!bluetoothSupported) {
-      Alert.alert(
-        "Bluetooth unavailable",
-        Platform.OS === "web"
-          ? "Bluetooth is not supported on web. Use a mobile device or native app."
-          : "Install react-native-ble-plx and set EXPO_PUBLIC_ENABLE_BLE=true, then rebuild the app to enable Bluetooth discovery."
-      );
-      return;
-    }
-
-    if (!bluetoothEnabled) {
-      Alert.alert(
-        "Bluetooth disabled",
-        "Enable Bluetooth discovery using the toggle above, then try scanning again."
-      );
-      return;
-    }
-
-    if (!bleManager) {
-      Alert.alert(
-        "Bluetooth unavailable",
-        "The Bluetooth module failed to load. Check that react-native-ble-plx is installed and EXPO_PUBLIC_ENABLE_BLE=true is set."
-      );
-      return;
-    }
-
-    if (bleState && bleState !== "PoweredOn") {
-      if (bleState === "PoweredOff") {
-        Alert.alert(
-          "Bluetooth turned off",
-          Platform.OS === "android" && bleManager.enable
-            ? 'Power on Bluetooth in system settings, or tap "Enable Bluetooth" to request system activation.'
-            : "Power on Bluetooth in system settings to discover nearby robots."
-        );
-      } else {
-        Alert.alert(
-          "Bluetooth not ready",
-          `Bluetooth state: ${bleState}. Please wait for Bluetooth to be ready.`
-        );
-      }
-      return;
-    }
-
-    console.log("Starting BLE device scan", { bleState, bluetoothEnabled });
-    stopScan();
-    setDevices([]);
-    setIsScanning(true);
-    setScanError(null);
-    devicesFoundDuringScanRef.current = false;
-
-    try {
-      // Android 12+ requires scan options
-      const scanOptions =
-        Platform.OS === "android"
-          ? {
-              allowDuplicates: false,
-              scanMode: 2, // SCAN_MODE_LOW_LATENCY
-            }
-          : undefined;
-
-      bleManager.startDeviceScan(null, scanOptions, (error, device) => {
-        if (error) {
-          stopScan();
-          const errorMsg = error.message || "Unknown scan error";
-          setScanError(errorMsg);
-          console.warn("BLE scan error", error);
-          Alert.alert(
-            "Scan failed",
-            `Bluetooth scan encountered an error: ${errorMsg}`
-          );
-          return;
-        }
-
-        if (!device) {
-          return;
-        }
-
-        setDevices((previous) => {
-          if (previous.some((existing) => existing.id === device.id)) {
-            return previous;
-          }
-
-          console.log("Discovered BLE device", {
-            id: device.id,
-            name: device.name,
-            rssi: device.rssi,
-          });
-          devicesFoundDuringScanRef.current = true;
-          return [
-            ...previous,
-            {
-              id: device.id,
-              name: device.name ?? undefined,
-              rssi: device.rssi ?? undefined,
-            },
-          ];
-        });
-      });
-
-      scanTimeoutRef.current = setTimeout(() => {
-        console.log("BLE scan timeout reached, stopping scan");
-        stopScan();
-        if (!devicesFoundDuringScanRef.current) {
-          setScanError(
-            "No devices found. Make sure Bluetooth devices are nearby and discoverable."
-          );
-        }
-      }, 10_000);
-    } catch (error) {
-      stopScan();
-      const errorMsg = (error as Error).message || "Failed to start scan";
-      setScanError(errorMsg);
-      console.error("Failed to start BLE scan", error);
-      Alert.alert("Scan failed", `Could not start Bluetooth scan: ${errorMsg}`);
-    }
-  }, [bleManager, bleState, bluetoothEnabled, bluetoothSupported, stopScan]);
-
-  const handleToggleBluetooth = useCallback(async () => {
-    console.log("Toggling Bluetooth discovery", {
-      bluetoothSupported,
-      bluetoothEnabled,
-      bleState,
-    });
-    if (!bluetoothSupported) {
-      Alert.alert(
-        "Bluetooth unavailable",
-        "Install react-native-ble-plx and rebuild the app to enable Bluetooth discovery."
-      );
-      return;
-    }
-
-    if (!bluetoothEnabled) {
-      const granted = await requestBlePermissions();
-      if (!granted) {
-        Alert.alert(
-          "Permission required",
-          "Grant Bluetooth permissions in system settings to scan for nearby robots."
-        );
+  const refreshDeviceNetwork = useCallback(
+    async (providedState?: Network.NetworkState) => {
+      if (!mountedRef.current) {
         return;
       }
 
-      if (bleState === "PoweredOff" && bleManager?.enable) {
+      setIsLoadingDeviceNetwork(true);
+
+      try {
+        const state = providedState ?? (await Network.getNetworkStateAsync());
+        const ipAddress = await Network.getIpAddressAsync();
+        const normalizedIp =
+          ipAddress && ipAddress !== "0.0.0.0" ? ipAddress : null;
+
+        // Try to get SSID via WifiManager first, then fall back to NetInfo
+        let ssid: string | null = null;
+        let permissionWarning: string | null = null;
         try {
-          await bleManager.enable();
-          console.log("Requested Bluetooth enable from BleManager");
-        } catch (error) {
-          console.warn("Failed to enable Bluetooth", error);
+          if (state.type === Network.NetworkStateType.WIFI) {
+            if (Platform.OS === "android") {
+              const fineLocationPermission =
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+
+              if (!fineLocationPermission) {
+                permissionWarning =
+                  "Wi-Fi SSID unavailable on this Android version.";
+              } else {
+                const hasPermission = await PermissionsAndroid.check(
+                  fineLocationPermission
+                );
+
+                let granted = hasPermission;
+
+                if (!hasPermission) {
+                  const status = await PermissionsAndroid.request(
+                    fineLocationPermission,
+                    {
+                      title: "Location permission needed",
+                      message:
+                        "Allow location access to display the connected Wi-Fi network name.",
+                      buttonPositive: "Allow",
+                      buttonNegative: "Deny",
+                    }
+                  );
+
+                  granted = status === PermissionsAndroid.RESULTS.GRANTED;
+                }
+
+                if (!granted) {
+                  permissionWarning =
+                    "Grant location permission to display the Wi-Fi network name.";
+                } else {
+                  const wifiManagerSsid =
+                    await WifiManager.getCurrentWifiSSID();
+                  if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
+                    ssid = wifiManagerSsid;
+                  }
+                }
+              }
+            } else {
+              const wifiManagerSsid = await WifiManager.getCurrentWifiSSID();
+              if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
+                ssid = wifiManagerSsid;
+              } else if (Platform.OS === "ios") {
+                permissionWarning =
+                  "iOS may hide the Wi-Fi network name without additional entitlements.";
+              }
+            }
+          }
+        } catch (wifiManagerError) {
+          console.log("WifiManager failed to fetch SSID", wifiManagerError);
+          if (
+            state.type === Network.NetworkStateType.WIFI &&
+            Platform.OS === "ios"
+          ) {
+            permissionWarning =
+              "iOS may hide the Wi-Fi network name without additional entitlements.";
+          }
         }
+
+        if (!ssid) {
+          try {
+            const netInfoState = await NetInfo.fetch();
+            if (
+              netInfoState.type === "wifi" &&
+              netInfoState.details &&
+              "ssid" in netInfoState.details &&
+              netInfoState.details.ssid
+            ) {
+              ssid = netInfoState.details.ssid as string;
+            }
+          } catch (netInfoError) {
+            console.log("NetInfo failed to fetch SSID", netInfoError);
+          }
+        }
+
+        if (!mountedRef.current) {
+          return;
+        }
+
+        setSsidPermissionWarning(permissionWarning);
+        setDeviceNetwork({
+          type: state.type,
+          isConnected: Boolean(state.isConnected),
+          isWifi:
+            state.type === Network.NetworkStateType.WIFI &&
+            Boolean(state.isConnected),
+          ipAddress: normalizedIp,
+          ssid,
+        });
+        setDeviceNetworkError(null);
+      } catch (error) {
+        if (!mountedRef.current) {
+          return;
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Unable to determine device network status.";
+        setDeviceNetwork(null);
+        setDeviceNetworkError(message);
+        setSsidPermissionWarning(null);
+      } finally {
+        if (!mountedRef.current) {
+          return;
+        }
+
+        setIsLoadingDeviceNetwork(false);
       }
-
-      setBluetoothEnabled(true);
-      console.log("Bluetooth discovery enabled");
-      return;
-    }
-
-    setBluetoothEnabled(false);
-    console.log("Bluetooth discovery disabled");
-  }, [
-    bleManager,
-    bleState,
-    bluetoothEnabled,
-    bluetoothSupported,
-    requestBlePermissions,
-    setBluetoothEnabled,
-  ]);
-
-  const bluetoothStatus = useMemo(() => {
-    if (!bluetoothSupported) {
-      return { color: "#fb923c", label: "Unavailable" };
-    }
-
-    if (!bluetoothEnabled) {
-      return { color: "#f472b6", label: "OFF" };
-    }
-
-    if (bleState && bleState !== "PoweredOn") {
-      return { color: "#facc15", label: "Starting…" };
-    }
-
-    return { color: "#22d3ee", label: "ON" };
-  }, [bleState, bluetoothEnabled, bluetoothSupported]);
-
-  const wifiStatus = useMemo(() => {
-    if (connectionState === "error") {
-      return { color: "#f87171", label: "Error" };
-    }
-
-    return wifiConnected
-      ? { color: "#34d399", label: "Connected" }
-      : { color: "#facc15", label: "Offline" };
-  }, [connectionState, wifiConnected]);
-
-  const handleSaveManualUrl = useCallback(() => {
-    if (!manualUrl.trim()) {
-      Alert.alert("Base URL", "Please enter a valid robot URL.");
-      return;
-    }
-
-    console.log("Saving manual robot URL", manualUrl.trim());
-    setBaseUrl(manualUrl.trim());
-    setShowManualIpModal(false);
-  }, [manualUrl, setBaseUrl]);
-
-  const handleRefreshNetworks = useCallback(async () => {
-    console.log("Requesting Wi-Fi network scan");
-    setIsWifiScanning(true);
-    setWifiScanError(null);
-    try {
-      const response = await api.listWifiNetworks();
-      console.log("Wi-Fi scan successful", response.networks);
-      setWifiNetworks(response.networks);
-      await refreshStatus();
-    } catch (error) {
-      console.warn("Wi-Fi scan failed", error);
-      setWifiScanError((error as Error).message);
-    } finally {
-      setIsWifiScanning(false);
-    }
-  }, [api, refreshStatus]);
+    },
+    [mountedRef]
+  );
 
   useEffect(() => {
-    if (hasRequestedInitialWifiScan.current) {
+    mountedRef.current = true;
+
+    void refreshDeviceNetwork();
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [refreshDeviceNetwork]);
+
+  useEffect(() => {
+    if (!deviceNetwork?.isWifi || !deviceNetwork.ipAddress) {
       return;
     }
 
-    hasRequestedInitialWifiScan.current = true;
-    void handleRefreshNetworks();
-  }, [handleRefreshNetworks]);
+    const derivedUrl = deriveRobotLanBaseUrl(deviceNetwork.ipAddress, {
+      currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
+      statusIp: status?.network?.ip,
+    });
+
+    if (!derivedUrl) {
+      return;
+    }
+
+    const normalizedDerived = canonicalizeUrl(derivedUrl);
+    const normalizedBase = baseUrl ? canonicalizeUrl(baseUrl) : "";
+
+    if (normalizedBase !== normalizedDerived) {
+      setBaseUrl(normalizedDerived);
+    }
+  }, [
+    baseUrl,
+    deviceNetwork?.ipAddress,
+    deviceNetwork?.isWifi,
+    setBaseUrl,
+    status?.network?.ip,
+  ]);
+
+  useEffect(() => {
+    if (!status?.network?.ip) {
+      return;
+    }
+
+    const nextUrl = deriveRobotLanBaseUrl(deviceNetwork?.ipAddress, {
+      currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
+      statusIp: status.network.ip,
+    });
+
+    if (!nextUrl) {
+      return;
+    }
+
+    const normalizedNext = canonicalizeUrl(nextUrl);
+    const normalizedBase = baseUrl ? canonicalizeUrl(baseUrl) : "";
+
+    if (normalizedNext !== normalizedBase) {
+      setBaseUrl(normalizedNext);
+    }
+  }, [baseUrl, deviceNetwork?.ipAddress, setBaseUrl, status?.network?.ip]);
+
+  const handleStatusRefresh = useCallback(() => {
+    void refreshDeviceNetwork();
+    void refreshStatus();
+  }, [refreshDeviceNetwork, refreshStatus]);
+
+  useEffect(() => {
+    setIsPolling(false);
+    return () => setIsPolling(true);
+  }, [setIsPolling]);
+
+  useEffect(() => {
+    void refreshStatus();
+  }, [refreshStatus]);
+
+  const statusNetwork = status?.network;
+
+  const wifiStatusMeta = useMemo<WifiStatusMeta>(() => {
+    if (isLoadingDeviceNetwork) {
+      return {
+        color: "#FBBF24",
+        label: "Checking...",
+        details: ["Loading network name...", "Loading IP address..."],
+        helper: null,
+      };
+    }
+
+    if (deviceNetwork?.isWifi) {
+      const networkName =
+        (deviceNetwork.ssid && deviceNetwork.ssid.trim()) ||
+        (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ||
+        "Unknown network";
+      const ipAddress =
+        (deviceNetwork.ipAddress && deviceNetwork.ipAddress.trim()) ||
+        (statusNetwork?.ip && statusNetwork.ip.trim()) ||
+        "Unavailable";
+      return {
+        color: "#1DD1A1",
+        label: "Connected",
+        details: [networkName, ipAddress],
+        helper: ssidPermissionWarning,
+      };
+    }
+
+    if (deviceNetwork) {
+      return {
+        color: "#F87171",
+        label: "Offline",
+        details: ["Not connected", "Unavailable"],
+        helper: `Connect this device to the same Wi-Fi network as the robot or join the ${ROBOT_AP_SSID} hotspot to continue.`,
+      };
+    }
+
+    return {
+      color: "#FBBF24",
+      label: "Unknown",
+      details: [
+        deviceNetworkError ??
+          (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ??
+          "Network name unavailable",
+        (statusNetwork?.ip && statusNetwork.ip.trim()) ||
+          "IP address unavailable",
+      ],
+      helper: deviceNetworkError
+        ? null
+        : ssidPermissionWarning ?? "Check network permissions and retry.",
+    };
+  }, [
+    deviceNetwork,
+    deviceNetworkError,
+    isLoadingDeviceNetwork,
+    ssidPermissionWarning,
+    statusNetwork,
+  ]);
+
+  const handleConnectRobotPress = useCallback(async () => {
+    setIsConnectingRobot(true);
+    setConnectRobotError(null);
+    setConnectRobotSuccess(null);
+
+    try {
+      const normalizedBase = canonicalizeUrl(baseUrl || DEFAULT_ROBOT_BASE_URL);
+      console.log("Attempting to connect to robot", {
+        baseUrl: normalizedBase,
+      });
+      await api.ping();
+      setConnectRobotSuccess(
+        "Robot responded successfully. Connection details refreshed."
+      );
+      await refreshStatus();
+    } catch (error) {
+      console.warn("Failed to connect to robot", error);
+      setConnectRobotError(
+        error instanceof Error
+          ? error.message
+          : "Unable to reach the robot. Ensure you are on the same network and try again."
+      );
+    } finally {
+      setIsConnectingRobot(false);
+    }
+  }, [api, baseUrl, refreshStatus]);
+
+  useEffect(() => {
+    if (connectRobotSuccess) {
+      router.replace("/(tabs)/camera");
+    }
+  }, [connectRobotSuccess, router]);
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-      edges={["top", "bottom", "left", "right"]}
-    >
-      <View style={styles.gradient}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <ThemedView style={styles.container}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.heroCard}>
-              <View style={styles.heroAccent} />
-              <View style={styles.heroHeader}>
-                <View style={styles.heroHeading}>
-                  <ThemedText style={styles.heroEyebrow}>
-                    Robot Control
-                  </ThemedText>
-                  <ThemedText style={styles.heroTitle} type="title">
-                    Connection Control Center
-                  </ThemedText>
-                </View>
-                <StatusPill color={wifiStatus.color} label={wifiStatus.label} />
-              </View>
-              <ThemedText style={styles.heroSubtitle}>
-                Pair the robot over Wi-Fi or Bluetooth with a crisp interface
-                inspired by the reference mockup.
-              </ThemedText>
-              <View style={styles.heroMeta}>
-                <View style={styles.heroMetaItem}>
-                  <ThemedText style={styles.heroMetaLabel}>
-                    Current SSID
-                  </ThemedText>
-                  <ThemedText style={styles.heroMetaValue}>
-                    {status?.network?.wifiSsid ?? "Not connected"}
-                  </ThemedText>
-                </View>
-                <View style={styles.heroMetaDivider} />
-                <View style={styles.heroMetaItem}>
-                  <ThemedText style={styles.heroMetaLabel}>
-                    IP Address
-                  </ThemedText>
-                  <ThemedText style={styles.heroMetaValue}>
-                    {status?.network?.ip ?? "—"}
-                  </ThemedText>
-                </View>
-              </View>
-            </View>
+          <ThemedText type="title" style={styles.heading}>
+            Connect to Robot
+          </ThemedText>
+          <ThemedText style={styles.subheading}>
+            If you are on Wi-Fi, the app will try to find the robot on your
+            network. Otherwise, connect this device to the same Wi-Fi as the
+            robot or join the {ROBOT_AP_SSID} hotspot to start setup.
+          </ThemedText>
 
-            <View style={styles.card}>
-              <View style={styles.cardAccent} />
-              <View style={styles.cardHeader}>
-                <View>
-                  <ThemedText style={styles.cardTitle} type="subtitle">
-                    Bluetooth Discovery
-                  </ThemedText>
-                  <ThemedText style={styles.cardSubtitle}>
-                    {bluetoothSupported
-                      ? "Discover nearby robots broadcasting over BLE."
-                      : "Optional Bluetooth support is not installed."}
-                  </ThemedText>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Toggle Bluetooth discovery"
-                  onPress={() => {
-                    void handleToggleBluetooth();
-                  }}
-                  style={({ pressed }) => [pressed && styles.pressablePressed]}
-                >
-                  <StatusPill
-                    color={bluetoothStatus.color}
-                    label={`Bluetooth ${bluetoothStatus.label}`}
-                  />
-                </Pressable>
-              </View>
-
-              <View style={styles.sectionHeader}>
-                <ThemedText style={styles.sectionLabel}>
-                  Nearby devices
+          <ThemedView style={styles.statusCard}>
+            <ThemedText type="subtitle" style={styles.statusTitle}>
+              Connection Info
+            </ThemedText>
+            <View style={styles.infoGroup}>
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>
+                  WiFi Connection:
                 </ThemedText>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.iconButton,
-                    (isScanning || !bluetoothSupported) &&
-                      styles.iconButtonDisabled,
-                    pressed && styles.pressablePressed,
-                  ]}
-                  onPress={handleScan}
-                  disabled={isScanning || !bluetoothSupported}
-                >
-                  {isScanning ? (
-                    <ActivityIndicator size="small" color="#111111" />
-                  ) : (
-                    <Ionicons
-                      name="refresh"
-                      size={18}
-                      color={
-                        bluetoothSupported ? "#111111" : "rgba(17,17,17,0.4)"
-                      }
-                    />
-                  )}
-                </Pressable>
-              </View>
-
-              <View style={styles.deviceList}>
-                {devices.length === 0 ? (
-                  <ThemedText style={styles.placeholderText}>
-                    {bluetoothSupported
-                      ? "Tap the refresh icon to look for nearby robots."
-                      : "Enable Bluetooth support to discover robots."}
+                <View style={styles.infoValueContainer}>
+                  <ThemedText style={styles.infoValue}>
+                    {wifiStatusMeta.label}
                   </ThemedText>
-                ) : (
-                  devices.map((device) => {
-                    const signalStrength = getSignalStrength(device.rssi);
-                    return (
-                      <Pressable
-                        key={device.id}
-                        style={({ pressed }) => [
-                          styles.deviceItem,
-                          pressed && styles.pressablePressed,
-                        ]}
-                      >
-                        <View style={styles.deviceDetails}>
-                          <ThemedText
-                            style={styles.deviceName}
-                            type="defaultSemiBold"
-                          >
-                            {device.name ?? "Unnamed device"}
-                          </ThemedText>
-                          <ThemedText style={styles.deviceId}>
-                            {device.id}
-                          </ThemedText>
-                        </View>
-                        {signalStrength ? (
-                          <View style={styles.signalBadge}>
-                            <ThemedText style={styles.signalBadgeText}>
-                              {signalStrength}
-                            </ThemedText>
-                          </View>
-                        ) : null}
-                      </Pressable>
-                    );
-                  })
-                )}
-              </View>
-              {scanError ? (
-                <ThemedText style={styles.errorText}>{scanError}</ThemedText>
-              ) : null}
-            </View>
-
-            <View style={styles.card}>
-              <View style={styles.cardAccent} />
-              <ThemedText style={styles.cardTitle} type="subtitle">
-                Robot Wi-Fi Status
-              </ThemedText>
-
-              <View style={styles.metaRow}>
-                <ThemedText style={styles.metaLabel}>
-                  Wi-Fi Connection
-                </ThemedText>
-                <StatusPill color={wifiStatus.color} label={wifiStatus.label} />
-              </View>
-              <View style={styles.metaRow}>
-                <ThemedText style={styles.metaLabel}>Network Name</ThemedText>
-                <ThemedText style={styles.metaValue}>
-                  {status?.network?.wifiSsid ?? "Not connected"}
-                </ThemedText>
-              </View>
-              <View style={styles.metaRow}>
-                <ThemedText style={styles.metaLabel}>IP Address</ThemedText>
-                <ThemedText style={styles.metaValue}>
-                  {status?.network?.ip ?? "—"}
-                </ThemedText>
-              </View>
-
-              <View style={styles.sectionHeader}>
-                <ThemedText style={styles.sectionLabel}>
-                  Available networks
-                </ThemedText>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.iconButton,
-                    isWifiScanning && styles.iconButtonDisabled,
-                    pressed && styles.pressablePressed,
-                  ]}
-                  onPress={() => {
-                    void handleRefreshNetworks();
-                  }}
-                  disabled={isWifiScanning}
-                >
-                  {isWifiScanning ? (
-                    <ActivityIndicator size="small" color="#111111" />
-                  ) : (
-                    <Ionicons name="refresh" size={18} color="#111111" />
-                  )}
-                </Pressable>
-              </View>
-
-              <View style={styles.networkList}>
-                {wifiNetworks.length === 0 ? (
-                  <ThemedText style={styles.placeholderText}>
-                    {isWifiScanning
-                      ? "Scanning for networks…"
-                      : "No networks discovered yet."}
-                  </ThemedText>
-                ) : (
-                  wifiNetworks.map((network) => (
-                    <View key={network} style={styles.networkRow}>
-                      <ThemedText style={styles.networkName}>
-                        {network}
-                      </ThemedText>
-                    </View>
-                  ))
-                )}
-              </View>
-
-              {wifiScanError ? (
-                <ThemedText style={styles.errorText}>
-                  {wifiScanError}
-                </ThemedText>
-              ) : null}
-
-              <View style={styles.actionRow}>
-                <View style={[styles.actionButton, styles.primaryAction]}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.primaryActionPressable,
-                      pressed && styles.pressablePressed,
-                      isPinging && styles.pressableDisabled,
+                  <View
+                    style={[
+                      styles.statusIndicator,
+                      { backgroundColor: wifiStatusMeta.color },
                     ]}
-                    onPress={handlePing}
-                    disabled={isPinging}
-                  >
-                    {isPinging ? (
-                      <ActivityIndicator color="#111111" />
-                    ) : (
-                      <ThemedText style={styles.primaryActionText}>
-                        Test Robot Link
-                      </ThemedText>
-                    )}
-                  </Pressable>
+                  />
                 </View>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.actionButton,
-                    styles.secondaryAction,
-                    pressed && styles.pressablePressed,
-                  ]}
-                  onPress={() => setShowWifiModal(true)}
-                >
-                  <ThemedText style={styles.secondaryActionText}>
-                    Update Credentials
-                  </ThemedText>
-                </Pressable>
               </View>
-
-              <ThemedText style={styles.helperText}>
-                {connectionDescription}
-              </ThemedText>
-              {lastError || statusError ? (
-                <ThemedText style={styles.errorText}>
-                  {lastError ?? statusError}
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Network Name:</ThemedText>
+                <ThemedText style={styles.infoValue}>
+                  {wifiStatusMeta.details[0]}
                 </ThemedText>
-              ) : null}
+              </View>
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>IP Address:</ThemedText>
+                <ThemedText style={styles.infoValue}>
+                  {wifiStatusMeta.details[1]}
+                </ThemedText>
+              </View>
             </View>
-
+            {wifiStatusMeta.helper ? (
+              <ThemedText style={styles.statusWarning}>
+                {wifiStatusMeta.helper}
+              </ThemedText>
+            ) : null}
+            {statusError ? (
+              <ThemedText style={styles.statusError}>
+                Unable to reach the robot. Make sure your device and the robot
+                are on the same Wi-Fi network or join the {ROBOT_AP_SSID}
+                hotspot.
+              </ThemedText>
+            ) : null}
             <Pressable
-              style={({ pressed }) => [
-                styles.outlineButton,
-                pressed && styles.pressablePressed,
-              ]}
-              onPress={() => setShowManualIpModal(true)}
+              style={styles.secondaryButton}
+              onPress={handleStatusRefresh}
             >
-              <ThemedText style={styles.outlineButtonText}>
-                Connect to a specific IP
+              <ThemedText style={styles.secondaryButtonText}>
+                Refresh network info
               </ThemedText>
             </Pressable>
+          </ThemedView>
 
-            <Image
-              source={ROBOT_ART}
-              style={styles.footerArt}
-              contentFit="contain"
-            />
-          </ScrollView>
-
-          <Modal
-            animationType="fade"
-            transparent
-            visible={showWifiModal}
-            onRequestClose={() => setShowWifiModal(false)}
+          {connectRobotError ? (
+            <ThemedView style={styles.connectCard}>
+              <ThemedText style={styles.connectError}>
+                {connectRobotError}
+              </ThemedText>
+            </ThemedView>
+          ) : null}
+          <Pressable
+            style={[
+              styles.primaryButton,
+              isConnectingRobot && styles.disabledPrimary,
+            ]}
+            onPress={handleConnectRobotPress}
+            disabled={isConnectingRobot}
           >
-            <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
-              style={styles.modalBackdrop}
-            >
-              <View style={styles.modalCard}>
-                <ThemedText style={styles.modalTitle} type="subtitle">
-                  Update Wi-Fi Credentials
-                </ThemedText>
-                <ThemedText style={styles.modalDescription}>
-                  Provide the Wi-Fi network name and password the robot should
-                  join.
-                </ThemedText>
-
-                <View style={styles.formRow}>
-                  <ThemedText style={styles.formLabel}>SSID</ThemedText>
-                  <TextInput
-                    value={ssid}
-                    onChangeText={setSsid}
-                    placeholder="Robot Wi-Fi network"
-                    placeholderTextColor="rgba(220,220,220,0.35)"
-                    style={styles.input}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                </View>
-
-                <View style={styles.formRow}>
-                  <ThemedText style={styles.formLabel}>Password</ThemedText>
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="Network password"
-                    placeholderTextColor="rgba(220,220,220,0.35)"
-                    secureTextEntry
-                    style={styles.input}
-                  />
-                </View>
-
-                <View style={styles.modalActions}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.modalButton,
-                      styles.modalSecondaryButton,
-                      pressed && styles.pressablePressed,
-                    ]}
-                    onPress={() => setShowWifiModal(false)}
-                  >
-                    <ThemedText style={styles.secondaryActionText}>
-                      Cancel
-                    </ThemedText>
-                  </Pressable>
-                  <View style={[styles.modalButton, styles.modalPrimaryButton]}>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.primaryActionPressable,
-                        pressed && styles.pressablePressed,
-                        connectionState === "connecting" &&
-                          styles.pressableDisabled,
-                      ]}
-                      onPress={handleConnect}
-                      disabled={connectionState === "connecting"}
-                    >
-                      {connectionState === "connecting" ? (
-                        <ActivityIndicator color="#111111" />
-                      ) : (
-                        <ThemedText style={styles.primaryActionText}>
-                          Save &amp; Connect
-                        </ThemedText>
-                      )}
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            </KeyboardAvoidingView>
-          </Modal>
-
-          <Modal
-            animationType="fade"
-            transparent
-            visible={showManualIpModal}
-            onRequestClose={() => setShowManualIpModal(false)}
-          >
-            <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
-              style={styles.modalBackdrop}
-            >
-              <View style={styles.modalCard}>
-                <ThemedText style={styles.modalTitle} type="subtitle">
-                  Connect to a specific IP
-                </ThemedText>
-                <ThemedText style={styles.modalDescription}>
-                  Enter the robot&apos;s base URL or IP address to connect
-                  directly.
-                </ThemedText>
-
-                <View style={styles.formRow}>
-                  <ThemedText style={styles.formLabel}>Robot URL</ThemedText>
-                  <TextInput
-                    value={manualUrl}
-                    onChangeText={setManualUrl}
-                    placeholder="http://10.0.0.10:8000"
-                    placeholderTextColor="rgba(220,220,220,0.35)"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.input}
-                  />
-                </View>
-
-                <View style={styles.modalActions}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.modalButton,
-                      styles.modalSecondaryButton,
-                      pressed && styles.pressablePressed,
-                    ]}
-                    onPress={() => setShowManualIpModal(false)}
-                  >
-                    <ThemedText style={styles.secondaryActionText}>
-                      Cancel
-                    </ThemedText>
-                  </Pressable>
-                  <View style={[styles.modalButton, styles.modalPrimaryButton]}>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.primaryActionPressable,
-                        pressed && styles.pressablePressed,
-                      ]}
-                      onPress={handleSaveManualUrl}
-                    >
-                      <ThemedText style={styles.primaryActionText}>
-                        Save
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            </KeyboardAvoidingView>
-          </Modal>
+            {isConnectingRobot ? (
+              <ActivityIndicator color="#04110B" />
+            ) : (
+              <ThemedText style={styles.primaryButtonText}>
+                Connect Robot
+              </ThemedText>
+            )}
+          </Pressable>
         </ThemedView>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -867,397 +601,116 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#050505",
   },
-  gradient: {
+  scrollView: {
     flex: 1,
-    backgroundColor: "#101010",
+  },
+  scrollContent: {
+    paddingBottom: 48,
   },
   container: {
     flex: 1,
-    backgroundColor: "transparent",
-  },
-  scrollContent: {
-    padding: 28,
-    paddingBottom: 120,
-    gap: 28,
-  },
-  helperText: {
-    opacity: 0.8,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  heroCard: {
-    borderRadius: 0,
-    padding: 28,
-    borderWidth: 1,
-    borderColor: "rgba(160,160,160,0.25)",
-    backgroundColor: "rgba(10,10,10,0.92)",
-    gap: 20,
-    shadowColor: "#101010",
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 18 },
-    shadowRadius: 48,
-    elevation: 24,
-    overflow: "hidden",
-    position: "relative",
-  },
-  heroAccent: {
-    position: "absolute",
-    width: "160%",
-    height: "160%",
-    top: -120,
-    right: -80,
-    backgroundColor: "rgba(140,140,140,0.25)",
-    opacity: 0.45,
-    transform: [{ rotate: "28deg" }],
-    zIndex: -1,
-  },
-  heroHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 16,
-  },
-  heroHeading: {
-    flex: 1,
-    gap: 6,
-  },
-  heroEyebrow: {
-    fontSize: 12,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    color: "rgba(190,190,190,0.85)",
-  },
-  heroTitle: {
-    flex: 1,
-  },
-  heroSubtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: "rgba(230,230,230,0.88)",
-  },
-  heroMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 0,
-    backgroundColor: "rgba(32,32,32,0.75)",
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    gap: 20,
-  },
-  heroMetaItem: {
-    flex: 1,
-    gap: 4,
-  },
-  heroMetaLabel: {
-    fontSize: 12,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-    color: "rgba(195,195,195,0.88)",
-  },
-  heroMetaValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "rgba(235,235,235,0.96)",
-  },
-  heroMetaDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: "100%",
-    backgroundColor: "rgba(200,200,200,0.15)",
-  },
-  card: {
-    borderRadius: 0,
     padding: 24,
-    borderWidth: 1,
-    borderColor: "rgba(170,170,170,0.16)",
-    backgroundColor: "rgba(12,12,12,0.9)",
-    gap: 18,
-    shadowColor: "#111111",
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 18 },
-    shadowRadius: 40,
-    elevation: 18,
-    overflow: "hidden",
-    position: "relative",
+    gap: 24,
+    backgroundColor: "#050505",
   },
-  cardAccent: {
-    position: "absolute",
-    width: "120%",
-    height: "120%",
-    top: -80,
-    right: -60,
-    backgroundColor: "rgba(160,160,160,0.18)",
-    transform: [{ rotate: "20deg" }],
-    zIndex: -1,
+  heading: {
+    fontFamily: TITLE_FONT_FAMILY,
   },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+  subheading: {
+    color: "#D1D5DB",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
+  },
+  statusCard: {
     gap: 16,
-  },
-  cardTitle: {
-    marginBottom: 6,
-  },
-  cardSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "rgba(195,195,195,0.88)",
-  },
-  statusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    padding: 20,
     borderRadius: 0,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(170,170,170,0.3)",
-    backgroundColor: "rgba(34,34,34,0.75)",
+    borderWidth: 1,
+    borderColor: "#1F2937",
+    backgroundColor: "#0F0F10",
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 0,
+  statusTitle: {
+    color: "#F9FAFB",
+    fontFamily: SUBTITLE_FONT_FAMILY,
   },
-  statusLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "rgba(235,235,235,0.92)",
+  statusIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  sectionHeader: {
+  statusWarning: {
+    color: "#FBBF24",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
+  },
+  infoGroup: {
+    gap: 12,
+    paddingTop: 8,
+  },
+  infoRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    color: "rgba(195,195,195,0.9)",
-  },
-  iconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 0,
-    backgroundColor: "#f0f0f0",
     alignItems: "center",
-    justifyContent: "center",
-  },
-  iconButtonDisabled: {
-    opacity: 0.35,
-  },
-  deviceList: {
     gap: 12,
   },
-  placeholderText: {
-    fontSize: 14,
-    color: "rgba(195,195,195,0.75)",
+  infoLabel: {
+    color: "#9CA3AF",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
-  deviceItem: {
-    borderRadius: 0,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "rgba(170,170,170,0.12)",
-    backgroundColor: "rgba(36,36,36,0.7)",
+  infoValue: {
+    color: "#F9FAFB",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
+  },
+  infoValueContainer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-  },
-  deviceDetails: {
-    gap: 4,
-  },
-  deviceName: {
-    fontSize: 15,
-  },
-  deviceId: {
-    fontSize: 12,
-    color: "rgba(190,190,190,0.75)",
-  },
-  signalBadge: {
-    borderRadius: 0,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "rgba(160,160,160,0.28)",
-  },
-  signalBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "rgba(235,235,235,0.9)",
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  metaLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "rgba(195,195,195,0.85)",
-  },
-  metaValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "rgba(235,235,235,0.94)",
-  },
-  networkList: {
-    gap: 10,
-  },
-  networkRow: {
-    borderRadius: 0,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: "rgba(170,170,170,0.14)",
-    backgroundColor: "rgba(24,24,24,0.78)",
-  },
-  networkName: {
-    fontSize: 15,
-    color: "rgba(235,235,235,0.92)",
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    borderRadius: 0,
-    overflow: "hidden",
-  },
-  primaryAction: {
-    borderWidth: 0,
-    backgroundColor: "#f3f4f6",
-    shadowColor: "#111111",
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 12 },
-    shadowRadius: 32,
-    elevation: 16,
-  },
-  primaryActionPressable: {
-    paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-  },
-  pressablePressed: {
-    opacity: 0.85,
-  },
-  pressableDisabled: {
-    opacity: 0.6,
-  },
-  primaryActionText: {
-    fontWeight: "700",
-    color: "#111111",
-  },
-  secondaryAction: {
-    borderWidth: 1,
-    borderColor: "rgba(185,185,185,0.25)",
-    backgroundColor: "rgba(40,40,40,0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-  },
-  secondaryActionText: {
-    fontWeight: "600",
-    color: "rgba(235,235,235,0.9)",
-  },
-  errorText: {
-    color: "#f87171",
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  outlineButton: {
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: "rgba(190,190,190,0.28)",
-    paddingVertical: 16,
-    alignItems: "center",
-    backgroundColor: "rgba(40,40,40,0.55)",
-  },
-  outlineButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "rgba(235,235,235,0.94)",
-  },
-  footerArt: {
-    width: "100%",
-    height: 160,
-    marginTop: 8,
-    opacity: 0.8,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.82)",
-    padding: 24,
-    justifyContent: "center",
-  },
-  modalCard: {
-    borderRadius: 0,
-    padding: 26,
-    borderWidth: 1,
-    borderColor: "rgba(185,185,185,0.18)",
-    gap: 18,
-    backgroundColor: "rgba(18,18,18,0.96)",
-    shadowColor: "#111111",
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 20 },
-    shadowRadius: 48,
-    elevation: 20,
-  },
-  modalTitle: {
-    marginBottom: -4,
-  },
-  modalDescription: {
-    opacity: 0.82,
-    fontSize: 15,
-    lineHeight: 21,
-    color: "rgba(235,235,235,0.9)",
-  },
-  formRow: {
     gap: 8,
   },
-  formLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-    color: "rgba(195,195,195,0.85)",
+  statusError: {
+    color: "#F87171",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
-  input: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  connectCard: {
+    gap: 16,
+    padding: 20,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: "rgba(200,200,200,0.16)",
-    backgroundColor: "rgba(22,22,22,0.94)",
-    color: "#ffffff",
+    borderColor: "#1F2937",
+    backgroundColor: "#0F0F10",
   },
-  modalActions: {
-    flexDirection: "row",
-    gap: 12,
+  connectHint: {
+    color: "#D1D5DB",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
-  modalButton: {
-    flex: 1,
-    borderRadius: 0,
-    overflow: "hidden",
+  connectError: {
+    color: "#F87171",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
-  modalPrimaryButton: {
-    borderWidth: 0,
-    backgroundColor: "#f3f4f6",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#111111",
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 12 },
-    shadowRadius: 30,
-    elevation: 16,
+  connectSuccess: {
+    color: "#1DD1A1",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
-  modalSecondaryButton: {
+  secondaryButton: {
     borderWidth: 1,
-    borderColor: "rgba(185,185,185,0.25)",
-    backgroundColor: "rgba(40,40,40,0.55)",
+    borderColor: "#1F2937",
+    paddingVertical: 16,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 15,
+    borderRadius: 0,
+    backgroundColor: "#0A0A0B",
+  },
+  secondaryButtonText: {
+    color: "#E5E7EB",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
+  },
+  primaryButton: {
+    backgroundColor: "#1DD1A1",
+    borderRadius: 0,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  disabledPrimary: {
+    opacity: 0.5,
+  },
+  primaryButtonText: {
+    color: "#04110B",
+    fontFamily: MONO_SEMIBOLD_FONT_FAMILY,
   },
 });

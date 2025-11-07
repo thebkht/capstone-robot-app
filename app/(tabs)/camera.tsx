@@ -55,8 +55,16 @@ export default function CameraScreen() {
 
   return (
     <ScrollView
+      style={styles.scrollView}
       contentContainerStyle={styles.scroll}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handlePullRefresh} />}>
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handlePullRefresh}
+          tintColor="#1DD1A1"
+          titleColor="#1DD1A1"
+        />
+      }>
       <ThemedView style={styles.container}>
         <ThemedText type="title">Camera</ThemedText>
         <ThemedText style={styles.description}>
@@ -80,7 +88,7 @@ export default function CameraScreen() {
           </Pressable>
           <Pressable style={styles.primaryButton} onPress={handleSnapshot}>
             {isCapturing ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color="#04110B" />
             ) : (
               <ThemedText style={styles.primaryText}>Capture photo</ThemedText>
             )}
@@ -110,24 +118,30 @@ export default function CameraScreen() {
 }
 
 const styles = StyleSheet.create({
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#050505',
+  },
   scroll: {
     flexGrow: 1,
+    paddingBottom: 32,
   },
   container: {
     flex: 1,
-    padding: 20,
-    gap: 16,
+    padding: 24,
+    gap: 24,
+    backgroundColor: '#050505',
   },
   description: {
-    opacity: 0.8,
+    color: '#D1D5DB',
   },
   cameraFrame: {
-    borderRadius: 16,
+    borderRadius: 0,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: '#1F2937',
     aspectRatio: 16 / 9,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: '#0A0A0B',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -137,49 +151,52 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 16,
     alignItems: 'center',
   },
   primaryButton: {
     flex: 1,
-    backgroundColor: '#ef4444',
-    borderRadius: 12,
-    paddingVertical: 14,
+    backgroundColor: '#1DD1A1',
+    borderRadius: 0,
+    paddingVertical: 16,
     alignItems: 'center',
   },
   primaryText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: '#04110B',
   },
   secondaryButton: {
     flex: 1,
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderRadius: 0,
+    paddingVertical: 16,
     alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    backgroundColor: '#0A0A0B',
   },
   snapshotCard: {
-    gap: 12,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
+    gap: 16,
+    padding: 20,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    backgroundColor: '#0F0F10',
   },
   snapshot: {
     width: '100%',
     aspectRatio: 16 / 9,
-    borderRadius: 12,
+    borderRadius: 0,
   },
   joystickCard: {
-    gap: 12,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
+    gap: 16,
+    padding: 20,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+    backgroundColor: '#0F0F10',
     alignItems: 'center',
   },
   joystickValue: {
     fontVariant: ['tabular-nums'],
+    color: '#E5E7EB',
   },
 });
