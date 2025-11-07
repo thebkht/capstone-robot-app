@@ -149,6 +149,23 @@ const deriveRobotLanBaseUrl = (
   return null;
 };
 
+const deriveIpPrefix = (value: string | null | undefined) => {
+  if (!value || !isValidIpv4(value)) {
+    return null;
+  }
+
+  const segments = value
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment !== "");
+
+  if (segments.length !== 4) {
+    return null;
+  }
+
+  return segments.slice(0, 3).join(".");
+};
+
 type DeviceNetworkDetails = {
   type: Network.NetworkStateType;
   isConnected: boolean;
@@ -191,6 +208,10 @@ export default function ConnectionScreen() {
   );
   const [connectRobotSuccess, setConnectRobotSuccess] = useState<string | null>(
     null
+  );
+  const deviceIpPrefix = useMemo(
+    () => deriveIpPrefix(deviceNetwork?.ipAddress),
+    [deviceNetwork?.ipAddress]
   );
 
   const refreshDeviceNetwork = useCallback(
@@ -435,7 +456,7 @@ export default function ConnectionScreen() {
         color: "#F87171",
         label: "Offline",
         details: ["Not connected", "Unavailable"],
-        helper: `Connect this device to the same Wi-Fi network as the robot or join the ${ROBOT_AP_SSID} hotspot to continue.`,
+        helper: `Connect this device to the same Wi-Fi network as the robot or join the ${ROBOT_AP_SSID} hotspot to continue. Temporarily disable any personal hotspot connection first.`,
       };
     }
 
@@ -508,7 +529,9 @@ export default function ConnectionScreen() {
           <ThemedText style={styles.subheading}>
             If you are on Wi-Fi, the app will try to find the robot on your
             network. Otherwise, connect this device to the same Wi-Fi as the
-            robot or join the {ROBOT_AP_SSID} hotspot to start setup.
+            robot or join the {ROBOT_AP_SSID} hotspot to start setup. If this
+            device is running a hotspot, temporarily disable it so the Wi-Fi
+            connection stays active.
           </ThemedText>
 
           <ThemedView style={styles.statusCard}>
@@ -550,11 +573,22 @@ export default function ConnectionScreen() {
                 {wifiStatusMeta.helper}
               </ThemedText>
             ) : null}
+            {deviceNetwork?.isWifi ? (
+              <ThemedText style={styles.statusHint}>
+                Tip:{" "}
+                {deviceIpPrefix
+                  ? `The robot's address typically shares the first three numbers of this device's IP (${deviceIpPrefix}.x).`
+                  : "The robot's address typically shares the first three numbers of this device's IP."}
+                {" "}Use that prefix when entering the robot IP and turn off
+                any hotspot while connecting.
+              </ThemedText>
+            ) : null}
             {statusError ? (
               <ThemedText style={styles.statusError}>
                 Unable to reach the robot. Make sure your device and the robot
                 are on the same Wi-Fi network or join the {ROBOT_AP_SSID}
-                hotspot.
+                hotspot. Temporarily disable any personal hotspot so your
+                device stays on Wi-Fi.
               </ThemedText>
             ) : null}
             <Pressable
@@ -639,6 +673,10 @@ const styles = StyleSheet.create({
   },
   statusWarning: {
     color: "#FBBF24",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
+  },
+  statusHint: {
+    color: "#9CA3AF",
     fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   infoGroup: {
