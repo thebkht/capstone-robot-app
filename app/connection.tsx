@@ -25,7 +25,7 @@ import { ThemedView } from "@/components/themed-view";
 import { SerifFonts } from "@/constants/theme";
 import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 
-const ROBOT_AP_SSID = "ROBOTSNAME_AP";
+const ROBOT_AP_SSID = "Elara_AP";
 
 const TITLE_FONT_FAMILY = SerifFonts.bold;
 
