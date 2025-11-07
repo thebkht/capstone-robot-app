@@ -74,10 +74,15 @@ const extractUrlParts = (value: string | null | undefined) => {
   }
 };
 
-const deriveRobotLanBaseUrl = (
+type RobotLanCandidateResult = {
+  urls: string[];
+  ipPrefix: string | null;
+};
+
+const gatherRobotLanBaseUrlCandidates = (
   deviceIpAddress: string | null | undefined,
   options: { currentBaseUrl: string; statusIp?: string | null }
-) => {
+): RobotLanCandidateResult => {
   const { currentBaseUrl, statusIp } = options;
   const baseParts = extractUrlParts(currentBaseUrl);
   const defaultParts = extractUrlParts(DEFAULT_ROBOT_BASE_URL);
@@ -91,18 +96,39 @@ const deriveRobotLanBaseUrl = (
   const port =
     statusParts?.port ?? baseParts?.port ?? defaultParts?.port ?? "8000";
 
-  const buildUrl = (ip: string) => {
-    const trimmedProtocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
-    const normalizedPort = port ? `:${port}` : "";
-    return `${trimmedProtocol}//${ip}${normalizedPort}`;
+  const trimmedProtocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
+  const normalizedPort = port ? `:${port}` : "";
+
+  const seenIps = new Set<string>();
+  const urls: string[] = [];
+
+  const pushCandidate = (ip: string | null | undefined) => {
+    if (!ip || !isValidIpv4(ip)) {
+      return;
+    }
+
+    const normalizedIp = ip.trim();
+    if (deviceIpAddress && normalizedIp === deviceIpAddress.trim()) {
+      return;
+    }
+
+    if (seenIps.has(normalizedIp)) {
+      return;
+    }
+
+    seenIps.add(normalizedIp);
+    urls.push(`${trimmedProtocol}//${normalizedIp}${normalizedPort}`);
   };
 
   if (statusParts?.host && isValidIpv4(statusParts.host)) {
-    return buildUrl(statusParts.host);
+    pushCandidate(statusParts.host);
   }
 
+  const hostCandidates = [baseParts?.host, defaultParts?.host];
+  hostCandidates.forEach(pushCandidate);
+
   if (!deviceIpAddress || !isValidIpv4(deviceIpAddress)) {
-    return null;
+    return { urls, ipPrefix: null };
   }
 
   const ipSegments = deviceIpAddress
@@ -111,42 +137,96 @@ const deriveRobotLanBaseUrl = (
     .filter((segment) => segment !== "");
 
   if (ipSegments.length !== 4) {
-    return null;
+    return { urls, ipPrefix: null };
   }
 
   const isRobotHotspotSubnet =
     ipSegments[0] === "192" && ipSegments[1] === "168" && ipSegments[2] === "4";
 
   if (isRobotHotspotSubnet) {
-    return buildUrl("192.168.4.1");
+    pushCandidate("192.168.4.1");
+    return { urls, ipPrefix: ipSegments.slice(0, 3).join(".") };
   }
 
-  const candidateSources = [baseParts?.host, defaultParts?.host];
+  const prefixSegments = ipSegments.slice(0, 3);
+  const ipPrefix = prefixSegments.join(".");
 
-  for (const source of candidateSources) {
-    if (!source || !isValidIpv4(source)) {
+  const preferredLastSegments = new Set<string>();
+  for (const host of hostCandidates) {
+    if (!host || !isValidIpv4(host)) {
       continue;
     }
-
-    const hostSegments = source.split(".");
-    if (hostSegments.length !== 4) {
-      continue;
-    }
-
-    const candidateSegments = [
-      ipSegments[0],
-      ipSegments[1],
-      ipSegments[2],
-      hostSegments[3],
-    ];
-    const candidateIp = candidateSegments.join(".");
-
-    if (isValidIpv4(candidateIp)) {
-      return buildUrl(candidateIp);
+    const hostSegments = host.split(".").map((segment) => segment.trim());
+    if (hostSegments.length === 4) {
+      preferredLastSegments.add(hostSegments[3]);
     }
   }
 
-  return null;
+  for (const lastSegment of preferredLastSegments) {
+    pushCandidate(`${ipPrefix}.${lastSegment}`);
+  }
+
+  for (let lastSegment = 1; lastSegment <= 254; lastSegment += 1) {
+    const octet = String(lastSegment);
+    if (octet === ipSegments[3]) {
+      continue;
+    }
+    pushCandidate(`${ipPrefix}.${octet}`);
+  }
+
+  return { urls, ipPrefix };
+};
+
+const deriveRobotLanBaseUrl = (
+  deviceIpAddress: string | null | undefined,
+  options: { currentBaseUrl: string; statusIp?: string | null }
+) => {
+  const candidates = gatherRobotLanBaseUrlCandidates(deviceIpAddress, options);
+  return candidates.urls[0] ?? null;
+};
+
+const probeRobotBaseUrl = async (
+  baseUrl: string,
+  options?: { timeoutMs?: number }
+): Promise<boolean> => {
+  const timeoutMs = options?.timeoutMs ?? 1500;
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = setTimeout(() => {
+    if (controller) {
+      controller.abort();
+    }
+  }, timeoutMs);
+
+  try {
+    const response = await fetch(`${baseUrl}/status`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller?.signal,
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const contentType = response.headers.get("content-type");
+    if (contentType?.includes("application/json")) {
+      // Validate the payload is JSON; discard the result otherwise.
+      await response.json().catch(() => null);
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return false;
+    }
+    return false;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 };
 
 const deriveIpPrefix = (value: string | null | undefined) => {
@@ -209,10 +289,20 @@ export default function ConnectionScreen() {
   const [connectRobotSuccess, setConnectRobotSuccess] = useState<string | null>(
     null
   );
+  const [autoDiscoveryHelper, setAutoDiscoveryHelper] = useState<string | null>(
+    null
+  );
+  const [isAutoDiscoveringRobot, setIsAutoDiscoveringRobot] = useState(false);
   const deviceIpPrefix = useMemo(
     () => deriveIpPrefix(deviceNetwork?.ipAddress),
     [deviceNetwork?.ipAddress]
   );
+  const autoDiscoveryRef = useRef({
+    running: false,
+    ipPrefix: null as string | null,
+    triedUrls: new Set<string>(),
+    foundUrl: null as string | null,
+  });
 
   const refreshDeviceNetwork = useCallback(
     async (providedState?: Network.NetworkState) => {
@@ -408,6 +498,149 @@ export default function ConnectionScreen() {
     }
   }, [baseUrl, deviceNetwork?.ipAddress, setBaseUrl, status?.network?.ip]);
 
+  useEffect(() => {
+    if (deviceNetwork?.isWifi) {
+      return;
+    }
+
+    autoDiscoveryRef.current.running = false;
+    autoDiscoveryRef.current.ipPrefix = null;
+    autoDiscoveryRef.current.triedUrls = new Set<string>();
+    autoDiscoveryRef.current.foundUrl = null;
+    setIsAutoDiscoveringRobot(false);
+    setAutoDiscoveryHelper(null);
+  }, [deviceNetwork?.isWifi]);
+
+  useEffect(() => {
+    if (status?.network?.ip && isValidIpv4(status.network.ip)) {
+      setAutoDiscoveryHelper(null);
+      setIsAutoDiscoveringRobot(false);
+    }
+  }, [status?.network?.ip]);
+
+  useEffect(() => {
+    if (!deviceNetwork?.isWifi || !deviceNetwork.ipAddress) {
+      return;
+    }
+
+    if (status?.network?.ip && isValidIpv4(status.network.ip)) {
+      return;
+    }
+
+    if (!status && !statusError) {
+      return;
+    }
+
+    const { urls: candidateUrls, ipPrefix } = gatherRobotLanBaseUrlCandidates(
+      deviceNetwork.ipAddress,
+      {
+        currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
+        statusIp: status?.network?.ip,
+      }
+    );
+
+    if (autoDiscoveryRef.current.ipPrefix !== ipPrefix) {
+      autoDiscoveryRef.current.ipPrefix = ipPrefix ?? null;
+      autoDiscoveryRef.current.triedUrls = new Set<string>();
+      autoDiscoveryRef.current.foundUrl = null;
+    }
+
+    const normalizedBase = canonicalizeUrl(baseUrl || DEFAULT_ROBOT_BASE_URL);
+    const normalizedFound = autoDiscoveryRef.current.foundUrl
+      ? canonicalizeUrl(autoDiscoveryRef.current.foundUrl)
+      : null;
+
+    if (normalizedFound && normalizedFound === normalizedBase) {
+      return;
+    }
+
+    if (!candidateUrls.length || autoDiscoveryRef.current.running) {
+      return;
+    }
+
+    const untriedCandidates = candidateUrls.filter((candidate) => {
+      const normalized = canonicalizeUrl(candidate);
+      return (
+        normalized !== normalizedBase &&
+        !autoDiscoveryRef.current.triedUrls.has(normalized)
+      );
+    });
+
+    if (!untriedCandidates.length) {
+      return;
+    }
+
+    autoDiscoveryRef.current.running = true;
+    setIsAutoDiscoveringRobot(true);
+    setAutoDiscoveryHelper(
+      ipPrefix
+        ? `Searching for the robot on ${ipPrefix}.x...`
+        : "Searching for the robot on the network..."
+    );
+
+    let cancelled = false;
+
+    const search = async () => {
+      for (const candidate of untriedCandidates) {
+        if (!mountedRef.current || cancelled) {
+          break;
+        }
+
+        const normalized = canonicalizeUrl(candidate);
+        autoDiscoveryRef.current.triedUrls.add(normalized);
+
+        const found = await probeRobotBaseUrl(candidate);
+
+        if (!mountedRef.current || cancelled) {
+          break;
+        }
+
+        if (found) {
+          autoDiscoveryRef.current.foundUrl = candidate;
+          setAutoDiscoveryHelper(`Robot found at ${candidate}`);
+          if (normalized !== normalizedBase) {
+            setBaseUrl(candidate);
+          }
+          return;
+        }
+      }
+    };
+
+    search()
+      .catch((error) => {
+        if (mountedRef.current) {
+          console.warn("Failed to auto-discover robot", error);
+        }
+      })
+      .finally(() => {
+        autoDiscoveryRef.current.running = false;
+        if (!mountedRef.current) {
+          return;
+        }
+        setIsAutoDiscoveringRobot(false);
+        if (cancelled) {
+          return;
+        }
+        if (!autoDiscoveryRef.current.foundUrl) {
+          setAutoDiscoveryHelper(
+            "Unable to find the robot automatically. Enter the IP manually if needed."
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    baseUrl,
+    deviceNetwork?.ipAddress,
+    deviceNetwork?.isWifi,
+    setBaseUrl,
+    status,
+    status?.network?.ip,
+    statusError,
+  ]);
+
   const handleStatusRefresh = useCallback(() => {
     void refreshDeviceNetwork();
     void refreshStatus();
@@ -443,11 +676,18 @@ export default function ConnectionScreen() {
         (deviceNetwork.ipAddress && deviceNetwork.ipAddress.trim()) ||
         (statusNetwork?.ip && statusNetwork.ip.trim()) ||
         "Unavailable";
+      const helperMessages: string[] = [];
+      if (ssidPermissionWarning) {
+        helperMessages.push(ssidPermissionWarning);
+      }
+      if (autoDiscoveryHelper) {
+        helperMessages.push(autoDiscoveryHelper);
+      }
       return {
-        color: "#1DD1A1",
-        label: "Connected",
+        color: isAutoDiscoveringRobot ? "#FBBF24" : "#1DD1A1",
+        label: isAutoDiscoveringRobot ? "Searching" : "Connected",
         details: [networkName, ipAddress],
-        helper: ssidPermissionWarning,
+        helper: helperMessages.length ? helperMessages.join("\n") : null,
       };
     }
 
@@ -475,9 +715,11 @@ export default function ConnectionScreen() {
         : ssidPermissionWarning ?? "Check network permissions and retry.",
     };
   }, [
+    autoDiscoveryHelper,
     deviceNetwork,
     deviceNetworkError,
     isLoadingDeviceNetwork,
+    isAutoDiscoveringRobot,
     ssidPermissionWarning,
     statusNetwork,
   ]);
