@@ -263,15 +263,8 @@ type WifiStatusMeta = {
 
 export default function ConnectionScreen() {
   const router = useRouter();
-  const {
-    api,
-    baseUrl,
-    setBaseUrl,
-    status,
-    statusError,
-    refreshStatus,
-    setIsPolling,
-  } = useRobot();
+  const { baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling } =
+    useRobot();
   const mountedRef = useRef(true);
   const [deviceNetwork, setDeviceNetwork] =
     useState<DeviceNetworkDetails | null>(null);
@@ -729,16 +722,80 @@ export default function ConnectionScreen() {
     setConnectRobotError(null);
     setConnectRobotSuccess(null);
 
-    try {
-      const normalizedBase = canonicalizeUrl(baseUrl || DEFAULT_ROBOT_BASE_URL);
-      console.log("Attempting to connect to robot", {
-        baseUrl: normalizedBase,
+    const normalizedBase = canonicalizeUrl(baseUrl || DEFAULT_ROBOT_BASE_URL);
+    const { urls: autoDiscoveryCandidates, ipPrefix } =
+      gatherRobotLanBaseUrlCandidates(deviceNetwork?.ipAddress ?? null, {
+        currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
+        statusIp: status?.network?.ip,
       });
-      await api.ping();
-      setConnectRobotSuccess(
-        "Robot responded successfully. Connection details refreshed."
+
+    autoDiscoveryRef.current.ipPrefix = ipPrefix ?? null;
+
+    const seenCandidates = new Set<string>();
+    const candidatesToTry: string[] = [];
+    const registerCandidate = (candidate: string | null | undefined) => {
+      if (!candidate) {
+        return;
+      }
+      const normalized = canonicalizeUrl(candidate);
+      if (seenCandidates.has(normalized)) {
+        return;
+      }
+      seenCandidates.add(normalized);
+      candidatesToTry.push(normalized);
+    };
+
+    registerCandidate(normalizedBase);
+    autoDiscoveryCandidates.forEach(registerCandidate);
+
+    if (!candidatesToTry.length) {
+      setConnectRobotError(
+        "No potential robot addresses were found. Enter the robot IP manually and try again."
       );
-      await refreshStatus();
+      setIsConnectingRobot(false);
+      return;
+    }
+
+    let connectedUrl: string | null = null;
+
+    try {
+      for (const candidate of candidatesToTry) {
+        console.log("Attempting to connect to robot", {
+          baseUrl: candidate,
+        });
+
+        autoDiscoveryRef.current.triedUrls.add(candidate);
+
+        const found = await probeRobotBaseUrl(candidate, { timeoutMs: 2000 });
+        if (!found) {
+          continue;
+        }
+
+        connectedUrl = candidate;
+        autoDiscoveryRef.current.foundUrl = candidate;
+        setAutoDiscoveryHelper(`Robot found at ${candidate}`);
+
+        if (candidate !== normalizedBase) {
+          setBaseUrl(candidate);
+        }
+
+        setConnectRobotSuccess(
+          `Robot responded successfully at ${candidate}. Connection details refreshed.`
+        );
+
+        await refreshStatus();
+        break;
+      }
+
+      if (!connectedUrl) {
+        const triedSummary =
+          candidatesToTry.length === 1
+            ? `Tried ${candidatesToTry[0]}.`
+            : `Tried ${candidatesToTry.length} addresses: ${candidatesToTry.join(", ")}.`;
+        setConnectRobotError(
+          `Unable to reach the robot automatically. Ensure you are on the same network and try again. ${triedSummary}`
+        );
+      }
     } catch (error) {
       console.warn("Failed to connect to robot", error);
       setConnectRobotError(
@@ -749,7 +806,13 @@ export default function ConnectionScreen() {
     } finally {
       setIsConnectingRobot(false);
     }
-  }, [api, baseUrl, refreshStatus]);
+  }, [
+    baseUrl,
+    deviceNetwork?.ipAddress,
+    refreshStatus,
+    setBaseUrl,
+    status?.network?.ip,
+  ]);
 
   useEffect(() => {
     if (connectRobotSuccess) {
