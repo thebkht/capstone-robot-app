@@ -1,4 +1,6 @@
-import NetInfo from "@react-native-community/netinfo";
+import NetInfo, {
+  type NetInfoState,
+} from "@react-native-community/netinfo";
 import * as Network from "expo-network";
 import { useRouter } from "expo-router";
 import React, {
@@ -79,6 +81,41 @@ type RobotLanCandidateResult = {
   ipPrefix: string | null;
 };
 
+const isLinkLocalIpv4 = (value: string | null | undefined) => {
+  if (!value || !isValidIpv4(value)) {
+    return false;
+  }
+
+  const segments = value.split(".").map((segment) => segment.trim());
+  if (segments.length !== 4) {
+    return false;
+  }
+
+  return segments[0] === "169" && segments[1] === "254";
+};
+
+const selectPreferredIpv4 = (
+  candidates: (string | null | undefined)[]
+): string | null => {
+  const normalized = candidates
+    .map((candidate) => (candidate ? candidate.trim() : null))
+    .filter((candidate): candidate is string => Boolean(candidate));
+
+  const validCandidates = normalized.filter((candidate) =>
+    isValidIpv4(candidate)
+  );
+
+  if (!validCandidates.length) {
+    return null;
+  }
+
+  const nonLinkLocal = validCandidates.filter(
+    (candidate) => !isLinkLocalIpv4(candidate)
+  );
+
+  return nonLinkLocal[0] ?? validCandidates[0] ?? null;
+};
+
 const gatherRobotLanBaseUrlCandidates = (
   deviceIpAddress: string | null | undefined,
   options: { currentBaseUrl: string; statusIp?: string | null }
@@ -127,7 +164,11 @@ const gatherRobotLanBaseUrlCandidates = (
   const hostCandidates = [baseParts?.host, defaultParts?.host];
   hostCandidates.forEach(pushCandidate);
 
-  if (!deviceIpAddress || !isValidIpv4(deviceIpAddress)) {
+  if (
+    !deviceIpAddress ||
+    !isValidIpv4(deviceIpAddress) ||
+    isLinkLocalIpv4(deviceIpAddress)
+  ) {
     return { urls, ipPrefix: null };
   }
 
@@ -377,21 +418,30 @@ export default function ConnectionScreen() {
           }
         }
 
-        if (!ssid) {
-          try {
-            const netInfoState = await NetInfo.fetch();
-            if (
-              netInfoState.type === "wifi" &&
-              netInfoState.details &&
-              "ssid" in netInfoState.details &&
-              netInfoState.details.ssid
-            ) {
-              ssid = netInfoState.details.ssid as string;
-            }
-          } catch (netInfoError) {
-            console.log("NetInfo failed to fetch SSID", netInfoError);
-          }
+        let netInfoState: NetInfoState | null = null;
+
+        try {
+          netInfoState = await NetInfo.fetch();
+        } catch (netInfoError) {
+          console.log("NetInfo failed to fetch connection details", netInfoError);
         }
+
+        if (netInfoState?.type === "wifi" && netInfoState.details) {
+          if (!ssid && "ssid" in netInfoState.details && netInfoState.details.ssid) {
+            ssid = netInfoState.details.ssid as string;
+          }
+
+          // NetInfo may expose a more accurate Wi-Fi IPv4 address than Expo's network module.
+        }
+
+        const resolvedIp = selectPreferredIpv4([
+          normalizedIp,
+          netInfoState?.type === "wifi" &&
+          netInfoState.details &&
+          "ipAddress" in netInfoState.details
+            ? (netInfoState.details.ipAddress as string)
+            : null,
+        ]);
 
         if (!mountedRef.current) {
           return;
@@ -404,7 +454,7 @@ export default function ConnectionScreen() {
           isWifi:
             state.type === Network.NetworkStateType.WIFI &&
             Boolean(state.isConnected),
-          ipAddress: normalizedIp,
+          ipAddress: resolvedIp,
           ssid,
         });
         setDeviceNetworkError(null);
