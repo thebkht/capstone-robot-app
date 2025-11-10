@@ -15,6 +15,35 @@ import {
   createRobotApi,
 } from "@/services/robot-api";
 
+const isIpv4Address = (value: string | null | undefined) => {
+  if (!value) {
+    return false;
+  }
+
+  const segments = value.split(".");
+  if (segments.length !== 4) {
+    return false;
+  }
+
+  return segments.every((segment) => {
+    if (segment.trim() === "") {
+      return false;
+    }
+    const numeric = Number(segment);
+    return Number.isInteger(numeric) && numeric >= 0 && numeric <= 255;
+  });
+};
+
+const deriveIpv4FromUrl = (value: string) => {
+  try {
+    const parsed = new URL(value.includes("://") ? value : `http://${value}`);
+    return isIpv4Address(parsed.hostname) ? parsed.hostname : null;
+  } catch (error) {
+    console.warn("Failed to parse robot base URL for IPv4 fallback", value, error);
+    return null;
+  }
+};
+
 interface RobotContextValue {
   api: RobotAPI;
   baseUrl: string;
@@ -88,17 +117,31 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         return Object.keys(aggregated).length ? aggregated : undefined;
       })();
 
+      const baseUrlIpv4 = deriveIpv4FromUrl(baseUrl);
+
+      const combinedNetwork: RobotNetworkInfo | undefined = (() => {
+        const network: RobotNetworkInfo = mergedNetwork
+          ? { ...mergedNetwork }
+          : {};
+
+        if (!network.ip && baseUrlIpv4) {
+          network.ip = baseUrlIpv4;
+        }
+
+        return Object.keys(network).length ? network : undefined;
+      })();
+
       const combined: RobotStatus = {
         health,
         telemetry: telemetry ?? undefined,
-        network: mergedNetwork,
+        network: combinedNetwork,
         battery: telemetry?.battery ?? health?.battery,
         cpuLoad: telemetry?.cpuLoad,
         temperatureC: telemetry?.temperatureC,
         humidity: telemetry?.humidity,
         uptimeSeconds: telemetry?.uptimeSeconds ?? health?.uptimeSeconds,
         mode:
-          mode?.mode ?? mode?.current ?? mode?.status ?? mergedNetwork?.mode,
+          mode?.mode ?? mode?.current ?? mode?.status ?? combinedNetwork?.mode,
       };
 
       setStatus(combined);
