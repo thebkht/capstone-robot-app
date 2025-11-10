@@ -39,6 +39,9 @@ const MONO_SEMIBOLD_FONT_FAMILY = "JetBrainsMono_600SemiBold";
 
 const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, "");
 
+const DEFAULT_LAN_PROTOCOL = "http:";
+const DEFAULT_LAN_PORT = "8000";
+
 const isValidIpv4 = (value: string | null | undefined) => {
   if (!value) {
     return false;
@@ -125,13 +128,40 @@ const gatherRobotLanBaseUrlCandidates = (
   const defaultParts = extractUrlParts(DEFAULT_ROBOT_BASE_URL);
   const statusParts = extractUrlParts(statusIp);
 
-  const protocol =
-    baseParts?.protocol ??
-    statusParts?.protocol ??
-    defaultParts?.protocol ??
-    "http:";
-  const port =
-    statusParts?.port ?? baseParts?.port ?? defaultParts?.port ?? "8000";
+  const resolveLanProtocol = () => {
+    if (statusParts?.host && isValidIpv4(statusParts.host) && statusParts.protocol) {
+      return statusParts.protocol;
+    }
+
+    if (baseParts?.host && isValidIpv4(baseParts.host) && baseParts.protocol) {
+      return baseParts.protocol;
+    }
+
+    if (defaultParts?.host && isValidIpv4(defaultParts.host) && defaultParts.protocol) {
+      return defaultParts.protocol;
+    }
+
+    return DEFAULT_LAN_PROTOCOL;
+  };
+
+  const resolveLanPort = () => {
+    if (statusParts?.host && isValidIpv4(statusParts.host) && statusParts.port) {
+      return statusParts.port;
+    }
+
+    if (baseParts?.host && isValidIpv4(baseParts.host) && baseParts.port) {
+      return baseParts.port;
+    }
+
+    if (defaultParts?.host && isValidIpv4(defaultParts.host) && defaultParts.port) {
+      return defaultParts.port;
+    }
+
+    return DEFAULT_LAN_PORT;
+  };
+
+  const protocol = resolveLanProtocol();
+  const port = resolveLanPort();
 
   const trimmedProtocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
   const normalizedPort = port ? `:${port}` : "";
@@ -795,6 +825,7 @@ export default function ConnectionScreen() {
       candidatesToTry.push(normalized);
     };
 
+    registerCandidate(canonicalizeUrl(DEFAULT_ROBOT_BASE_URL));
     registerCandidate(normalizedBase);
     autoDiscoveryCandidates.forEach(registerCandidate);
 
