@@ -8,7 +8,12 @@ import React, {
   useState,
 } from "react";
 
-import { RobotAPI, RobotStatus, createRobotApi } from "@/services/robot-api";
+import {
+  RobotAPI,
+  RobotNetworkInfo,
+  RobotStatus,
+  createRobotApi,
+} from "@/services/robot-api";
 
 interface RobotContextValue {
   api: RobotAPI;
@@ -39,11 +44,67 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const refreshStatus = useCallback(async () => {
     try {
       console.log("Refreshing robot status from", baseUrl);
-      const latest = await api.fetchStatus();
-      setStatus(latest);
+      const health = await api.fetchHealth();
+
+      const [networkInfo, telemetry, mode] = await Promise.all([
+        api
+          .fetchNetworkInfo()
+          .catch((error) => {
+            console.warn("Failed to load robot network info", error);
+            return null;
+          }),
+        api
+          .fetchTelemetry()
+          .catch((error) => {
+            console.warn("Failed to load robot telemetry", error);
+            return null;
+          }),
+        api
+          .fetchMode()
+          .catch((error) => {
+            console.warn("Failed to load robot mode", error);
+            return null;
+          }),
+      ]);
+
+      const mergedNetwork: RobotNetworkInfo | undefined = (() => {
+        const sources: (RobotNetworkInfo | null | undefined)[] = [
+          health?.network,
+          telemetry?.network,
+          networkInfo,
+        ];
+
+        const aggregated: RobotNetworkInfo = {};
+        for (const source of sources) {
+          if (!source) {
+            continue;
+          }
+          Object.assign(aggregated, source);
+          if (source.ssid && !aggregated.wifiSsid) {
+            aggregated.wifiSsid = source.ssid;
+          }
+        }
+
+        return Object.keys(aggregated).length ? aggregated : undefined;
+      })();
+
+      const combined: RobotStatus = {
+        health,
+        telemetry: telemetry ?? undefined,
+        network: mergedNetwork,
+        battery: telemetry?.battery ?? health?.battery,
+        cpuLoad: telemetry?.cpuLoad,
+        temperatureC: telemetry?.temperatureC,
+        humidity: telemetry?.humidity,
+        uptimeSeconds: telemetry?.uptimeSeconds ?? health?.uptimeSeconds,
+        mode:
+          mode?.mode ?? mode?.current ?? mode?.status ?? mergedNetwork?.mode,
+      };
+
+      setStatus(combined);
       setLastUpdated(new Date());
       setStatusError(null);
-      console.log("Robot status updated", latest);
+      console.log("Robot status updated", combined);
     } catch (error) {
       console.warn("Failed to refresh robot status", error);
       setStatus(null);

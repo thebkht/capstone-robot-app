@@ -270,7 +270,7 @@ const probeRobotBaseUrl = async (
   }, timeoutMs);
 
   try {
-    const response = await fetch(`${baseUrl}/status`, {
+    const response = await fetch(`${baseUrl}/health`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -897,9 +897,15 @@ export default function ConnectionScreen() {
 
   useEffect(() => {
     if (connectRobotSuccess) {
-      router.replace("/(tabs)/camera");
+      router.replace("/");
     }
   }, [connectRobotSuccess, router]);
+
+  useEffect(() => {
+    if (status?.network?.ip) {
+      router.replace("/");
+    }
+  }, [router, status?.network?.ip]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
