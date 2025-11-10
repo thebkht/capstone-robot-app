@@ -40,18 +40,33 @@ export default function CameraScreen() {
     setTimeout(() => setRefreshing(false), 500);
   }, [handleRefreshStream]);
 
+  const resolveSnapshotUrl = useCallback(() => {
+    if (!baseUrl) {
+      return null;
+    }
+
+    const cacheBuster = Date.now();
+    return `${api.snapshotUrl}?ts=${cacheBuster}`;
+  }, [api, baseUrl]);
+
   const handleSnapshot = useCallback(async () => {
     setIsCapturing(true);
     try {
-      const result = await api.triggerSnapshot();
-      setLastSnapshot(result.url);
+      const metadata = await api.capturePhoto();
+      const url =
+        (metadata?.url as string | undefined) ||
+        (metadata?.snapshotUrl as string | undefined) ||
+        (metadata?.imageUrl as string | undefined) ||
+        (metadata?.path as string | undefined) ||
+        resolveSnapshotUrl();
+      setLastSnapshot(url ?? null);
     } catch (error) {
-      setLastSnapshot(null);
       console.warn('Snapshot failed', error);
+      setLastSnapshot(resolveSnapshotUrl());
     } finally {
       setIsCapturing(false);
     }
-  }, [api]);
+  }, [api, resolveSnapshotUrl]);
 
   return (
     <ScrollView
