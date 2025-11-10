@@ -1,4 +1,6 @@
-import NetInfo from "@react-native-community/netinfo";
+import NetInfo, {
+  type NetInfoState,
+} from "@react-native-community/netinfo";
 import * as Network from "expo-network";
 import { useRouter } from "expo-router";
 import React, {
@@ -37,6 +39,9 @@ const MONO_SEMIBOLD_FONT_FAMILY = "JetBrainsMono_600SemiBold";
 
 const canonicalizeUrl = (value: string) => value.trim().replace(/\/$/, "");
 
+const DEFAULT_LAN_PROTOCOL = "http:";
+const DEFAULT_LAN_PORT = "8000";
+
 const isValidIpv4 = (value: string | null | undefined) => {
   if (!value) {
     return false;
@@ -74,35 +79,127 @@ const extractUrlParts = (value: string | null | undefined) => {
   }
 };
 
-const deriveRobotLanBaseUrl = (
+type RobotLanCandidateResult = {
+  urls: string[];
+  ipPrefix: string | null;
+};
+
+const isLinkLocalIpv4 = (value: string | null | undefined) => {
+  if (!value || !isValidIpv4(value)) {
+    return false;
+  }
+
+  const segments = value.split(".").map((segment) => segment.trim());
+  if (segments.length !== 4) {
+    return false;
+  }
+
+  return segments[0] === "169" && segments[1] === "254";
+};
+
+const selectPreferredIpv4 = (
+  candidates: (string | null | undefined)[]
+): string | null => {
+  const normalized = candidates
+    .map((candidate) => (candidate ? candidate.trim() : null))
+    .filter((candidate): candidate is string => Boolean(candidate));
+
+  const validCandidates = normalized.filter((candidate) =>
+    isValidIpv4(candidate)
+  );
+
+  if (!validCandidates.length) {
+    return null;
+  }
+
+  const nonLinkLocal = validCandidates.filter(
+    (candidate) => !isLinkLocalIpv4(candidate)
+  );
+
+  return nonLinkLocal[0] ?? validCandidates[0] ?? null;
+};
+
+const gatherRobotLanBaseUrlCandidates = (
   deviceIpAddress: string | null | undefined,
   options: { currentBaseUrl: string; statusIp?: string | null }
-) => {
+): RobotLanCandidateResult => {
   const { currentBaseUrl, statusIp } = options;
   const baseParts = extractUrlParts(currentBaseUrl);
   const defaultParts = extractUrlParts(DEFAULT_ROBOT_BASE_URL);
   const statusParts = extractUrlParts(statusIp);
 
-  const protocol =
-    baseParts?.protocol ??
-    statusParts?.protocol ??
-    defaultParts?.protocol ??
-    "http:";
-  const port =
-    statusParts?.port ?? baseParts?.port ?? defaultParts?.port ?? "8000";
+  const resolveLanProtocol = () => {
+    if (statusParts?.host && isValidIpv4(statusParts.host) && statusParts.protocol) {
+      return statusParts.protocol;
+    }
 
-  const buildUrl = (ip: string) => {
-    const trimmedProtocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
-    const normalizedPort = port ? `:${port}` : "";
-    return `${trimmedProtocol}//${ip}${normalizedPort}`;
+    if (baseParts?.host && isValidIpv4(baseParts.host) && baseParts.protocol) {
+      return baseParts.protocol;
+    }
+
+    if (defaultParts?.host && isValidIpv4(defaultParts.host) && defaultParts.protocol) {
+      return defaultParts.protocol;
+    }
+
+    return DEFAULT_LAN_PROTOCOL;
+  };
+
+  const resolveLanPort = () => {
+    if (statusParts?.host && isValidIpv4(statusParts.host) && statusParts.port) {
+      return statusParts.port;
+    }
+
+    if (baseParts?.host && isValidIpv4(baseParts.host) && baseParts.port) {
+      return baseParts.port;
+    }
+
+    if (defaultParts?.host && isValidIpv4(defaultParts.host) && defaultParts.port) {
+      return defaultParts.port;
+    }
+
+    return DEFAULT_LAN_PORT;
+  };
+
+  const protocol = resolveLanProtocol();
+  const port = resolveLanPort();
+
+  const trimmedProtocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
+  const normalizedPort = port ? `:${port}` : "";
+
+  const seenIps = new Set<string>();
+  const urls: string[] = [];
+
+  const pushCandidate = (ip: string | null | undefined) => {
+    if (!ip || !isValidIpv4(ip)) {
+      return;
+    }
+
+    const normalizedIp = ip.trim();
+    if (deviceIpAddress && normalizedIp === deviceIpAddress.trim()) {
+      return;
+    }
+
+    if (seenIps.has(normalizedIp)) {
+      return;
+    }
+
+    seenIps.add(normalizedIp);
+    urls.push(`${trimmedProtocol}//${normalizedIp}${normalizedPort}`);
   };
 
   if (statusParts?.host && isValidIpv4(statusParts.host)) {
-    return buildUrl(statusParts.host);
+    pushCandidate(statusParts.host);
   }
 
-  if (!deviceIpAddress || !isValidIpv4(deviceIpAddress)) {
-    return null;
+  const hostCandidates = [baseParts?.host, defaultParts?.host];
+  hostCandidates.forEach(pushCandidate);
+
+  if (
+    !deviceIpAddress ||
+    !isValidIpv4(deviceIpAddress) ||
+    isLinkLocalIpv4(deviceIpAddress)
+  ) {
+    return { urls, ipPrefix: null };
   }
 
   const ipSegments = deviceIpAddress
@@ -111,42 +208,113 @@ const deriveRobotLanBaseUrl = (
     .filter((segment) => segment !== "");
 
   if (ipSegments.length !== 4) {
-    return null;
+    return { urls, ipPrefix: null };
   }
 
   const isRobotHotspotSubnet =
     ipSegments[0] === "192" && ipSegments[1] === "168" && ipSegments[2] === "4";
 
   if (isRobotHotspotSubnet) {
-    return buildUrl("192.168.4.1");
+    pushCandidate("192.168.4.1");
+    return { urls, ipPrefix: ipSegments.slice(0, 3).join(".") };
   }
 
-  const candidateSources = [baseParts?.host, defaultParts?.host];
+  const prefixSegments = ipSegments.slice(0, 3);
+  const ipPrefix = prefixSegments.join(".");
 
-  for (const source of candidateSources) {
-    if (!source || !isValidIpv4(source)) {
+  const preferredLastSegments = new Set<string>();
+  for (const host of hostCandidates) {
+    if (!host || !isValidIpv4(host)) {
       continue;
     }
-
-    const hostSegments = source.split(".");
-    if (hostSegments.length !== 4) {
-      continue;
-    }
-
-    const candidateSegments = [
-      ipSegments[0],
-      ipSegments[1],
-      ipSegments[2],
-      hostSegments[3],
-    ];
-    const candidateIp = candidateSegments.join(".");
-
-    if (isValidIpv4(candidateIp)) {
-      return buildUrl(candidateIp);
+    const hostSegments = host.split(".").map((segment) => segment.trim());
+    if (hostSegments.length === 4) {
+      preferredLastSegments.add(hostSegments[3]);
     }
   }
 
-  return null;
+  for (const lastSegment of preferredLastSegments) {
+    pushCandidate(`${ipPrefix}.${lastSegment}`);
+  }
+
+  for (let lastSegment = 1; lastSegment <= 254; lastSegment += 1) {
+    const octet = String(lastSegment);
+    if (octet === ipSegments[3]) {
+      continue;
+    }
+    pushCandidate(`${ipPrefix}.${octet}`);
+  }
+
+  return { urls, ipPrefix };
+};
+
+const deriveRobotLanBaseUrl = (
+  deviceIpAddress: string | null | undefined,
+  options: { currentBaseUrl: string; statusIp?: string | null }
+) => {
+  const candidates = gatherRobotLanBaseUrlCandidates(deviceIpAddress, options);
+  return candidates.urls[0] ?? null;
+};
+
+const probeRobotBaseUrl = async (
+  baseUrl: string,
+  options?: { timeoutMs?: number }
+): Promise<boolean> => {
+  const timeoutMs = options?.timeoutMs ?? 1500;
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = setTimeout(() => {
+    if (controller) {
+      controller.abort();
+    }
+  }, timeoutMs);
+
+  try {
+    const response = await fetch(`${baseUrl}/health`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller?.signal,
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const contentType = response.headers.get("content-type");
+    if (contentType?.includes("application/json")) {
+      // Validate the payload is JSON; discard the result otherwise.
+      await response.json().catch(() => null);
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return false;
+    }
+    return false;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const deriveIpPrefix = (value: string | null | undefined) => {
+  if (!value || !isValidIpv4(value)) {
+    return null;
+  }
+
+  const segments = value
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment !== "");
+
+  if (segments.length !== 4) {
+    return null;
+  }
+
+  return segments.slice(0, 3).join(".");
 };
 
 type DeviceNetworkDetails = {
@@ -166,15 +334,8 @@ type WifiStatusMeta = {
 
 export default function ConnectionScreen() {
   const router = useRouter();
-  const {
-    api,
-    baseUrl,
-    setBaseUrl,
-    status,
-    statusError,
-    refreshStatus,
-    setIsPolling,
-  } = useRobot();
+  const { baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling } =
+    useRobot();
   const mountedRef = useRef(true);
   const [deviceNetwork, setDeviceNetwork] =
     useState<DeviceNetworkDetails | null>(null);
@@ -192,6 +353,20 @@ export default function ConnectionScreen() {
   const [connectRobotSuccess, setConnectRobotSuccess] = useState<string | null>(
     null
   );
+  const [autoDiscoveryHelper, setAutoDiscoveryHelper] = useState<string | null>(
+    null
+  );
+  const [isAutoDiscoveringRobot, setIsAutoDiscoveringRobot] = useState(false);
+  const deviceIpPrefix = useMemo(
+    () => deriveIpPrefix(deviceNetwork?.ipAddress),
+    [deviceNetwork?.ipAddress]
+  );
+  const autoDiscoveryRef = useRef({
+    running: false,
+    ipPrefix: null as string | null,
+    triedUrls: new Set<string>(),
+    foundUrl: null as string | null,
+  });
 
   const refreshDeviceNetwork = useCallback(
     async (providedState?: Network.NetworkState) => {
@@ -273,21 +448,30 @@ export default function ConnectionScreen() {
           }
         }
 
-        if (!ssid) {
-          try {
-            const netInfoState = await NetInfo.fetch();
-            if (
-              netInfoState.type === "wifi" &&
-              netInfoState.details &&
-              "ssid" in netInfoState.details &&
-              netInfoState.details.ssid
-            ) {
-              ssid = netInfoState.details.ssid as string;
-            }
-          } catch (netInfoError) {
-            console.log("NetInfo failed to fetch SSID", netInfoError);
-          }
+        let netInfoState: NetInfoState | null = null;
+
+        try {
+          netInfoState = await NetInfo.fetch();
+        } catch (netInfoError) {
+          console.log("NetInfo failed to fetch connection details", netInfoError);
         }
+
+        if (netInfoState?.type === "wifi" && netInfoState.details) {
+          if (!ssid && "ssid" in netInfoState.details && netInfoState.details.ssid) {
+            ssid = netInfoState.details.ssid as string;
+          }
+
+          // NetInfo may expose a more accurate Wi-Fi IPv4 address than Expo's network module.
+        }
+
+        const resolvedIp = selectPreferredIpv4([
+          normalizedIp,
+          netInfoState?.type === "wifi" &&
+          netInfoState.details &&
+          "ipAddress" in netInfoState.details
+            ? (netInfoState.details.ipAddress as string)
+            : null,
+        ]);
 
         if (!mountedRef.current) {
           return;
@@ -300,7 +484,7 @@ export default function ConnectionScreen() {
           isWifi:
             state.type === Network.NetworkStateType.WIFI &&
             Boolean(state.isConnected),
-          ipAddress: normalizedIp,
+          ipAddress: resolvedIp,
           ssid,
         });
         setDeviceNetworkError(null);
@@ -387,6 +571,149 @@ export default function ConnectionScreen() {
     }
   }, [baseUrl, deviceNetwork?.ipAddress, setBaseUrl, status?.network?.ip]);
 
+  useEffect(() => {
+    if (deviceNetwork?.isWifi) {
+      return;
+    }
+
+    autoDiscoveryRef.current.running = false;
+    autoDiscoveryRef.current.ipPrefix = null;
+    autoDiscoveryRef.current.triedUrls = new Set<string>();
+    autoDiscoveryRef.current.foundUrl = null;
+    setIsAutoDiscoveringRobot(false);
+    setAutoDiscoveryHelper(null);
+  }, [deviceNetwork?.isWifi]);
+
+  useEffect(() => {
+    if (status?.network?.ip && isValidIpv4(status.network.ip)) {
+      setAutoDiscoveryHelper(null);
+      setIsAutoDiscoveringRobot(false);
+    }
+  }, [status?.network?.ip]);
+
+  useEffect(() => {
+    if (!deviceNetwork?.isWifi || !deviceNetwork.ipAddress) {
+      return;
+    }
+
+    if (status?.network?.ip && isValidIpv4(status.network.ip)) {
+      return;
+    }
+
+    if (!status && !statusError) {
+      return;
+    }
+
+    const { urls: candidateUrls, ipPrefix } = gatherRobotLanBaseUrlCandidates(
+      deviceNetwork.ipAddress,
+      {
+        currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
+        statusIp: status?.network?.ip,
+      }
+    );
+
+    if (autoDiscoveryRef.current.ipPrefix !== ipPrefix) {
+      autoDiscoveryRef.current.ipPrefix = ipPrefix ?? null;
+      autoDiscoveryRef.current.triedUrls = new Set<string>();
+      autoDiscoveryRef.current.foundUrl = null;
+    }
+
+    const normalizedBase = canonicalizeUrl(baseUrl || DEFAULT_ROBOT_BASE_URL);
+    const normalizedFound = autoDiscoveryRef.current.foundUrl
+      ? canonicalizeUrl(autoDiscoveryRef.current.foundUrl)
+      : null;
+
+    if (normalizedFound && normalizedFound === normalizedBase) {
+      return;
+    }
+
+    if (!candidateUrls.length || autoDiscoveryRef.current.running) {
+      return;
+    }
+
+    const untriedCandidates = candidateUrls.filter((candidate) => {
+      const normalized = canonicalizeUrl(candidate);
+      return (
+        normalized !== normalizedBase &&
+        !autoDiscoveryRef.current.triedUrls.has(normalized)
+      );
+    });
+
+    if (!untriedCandidates.length) {
+      return;
+    }
+
+    autoDiscoveryRef.current.running = true;
+    setIsAutoDiscoveringRobot(true);
+    setAutoDiscoveryHelper(
+      ipPrefix
+        ? `Searching for the robot on ${ipPrefix}.x...`
+        : "Searching for the robot on the network..."
+    );
+
+    let cancelled = false;
+
+    const search = async () => {
+      for (const candidate of untriedCandidates) {
+        if (!mountedRef.current || cancelled) {
+          break;
+        }
+
+        const normalized = canonicalizeUrl(candidate);
+        autoDiscoveryRef.current.triedUrls.add(normalized);
+
+        const found = await probeRobotBaseUrl(candidate);
+
+        if (!mountedRef.current || cancelled) {
+          break;
+        }
+
+        if (found) {
+          autoDiscoveryRef.current.foundUrl = candidate;
+          setAutoDiscoveryHelper(`Robot found at ${candidate}`);
+          if (normalized !== normalizedBase) {
+            setBaseUrl(candidate);
+          }
+          return;
+        }
+      }
+    };
+
+    search()
+      .catch((error) => {
+        if (mountedRef.current) {
+          console.warn("Failed to auto-discover robot", error);
+        }
+      })
+      .finally(() => {
+        autoDiscoveryRef.current.running = false;
+        if (!mountedRef.current) {
+          return;
+        }
+        setIsAutoDiscoveringRobot(false);
+        if (cancelled) {
+          return;
+        }
+        if (!autoDiscoveryRef.current.foundUrl) {
+          setAutoDiscoveryHelper(
+            "Unable to find the robot automatically. Enter the IP manually if needed."
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    baseUrl,
+    deviceNetwork?.ipAddress,
+    deviceNetwork?.isWifi,
+    setBaseUrl,
+    status,
+    status?.network?.ip,
+    statusError,
+  ]);
+
   const handleStatusRefresh = useCallback(() => {
     void refreshDeviceNetwork();
     void refreshStatus();
@@ -422,11 +749,18 @@ export default function ConnectionScreen() {
         (deviceNetwork.ipAddress && deviceNetwork.ipAddress.trim()) ||
         (statusNetwork?.ip && statusNetwork.ip.trim()) ||
         "Unavailable";
+      const helperMessages: string[] = [];
+      if (ssidPermissionWarning) {
+        helperMessages.push(ssidPermissionWarning);
+      }
+      if (autoDiscoveryHelper) {
+        helperMessages.push(autoDiscoveryHelper);
+      }
       return {
-        color: "#1DD1A1",
-        label: "Connected",
+        color: isAutoDiscoveringRobot ? "#FBBF24" : "#1DD1A1",
+        label: isAutoDiscoveringRobot ? "Searching" : "Connected",
         details: [networkName, ipAddress],
-        helper: ssidPermissionWarning,
+        helper: helperMessages.length ? helperMessages.join("\n") : null,
       };
     }
 
@@ -435,7 +769,7 @@ export default function ConnectionScreen() {
         color: "#F87171",
         label: "Offline",
         details: ["Not connected", "Unavailable"],
-        helper: `Connect this device to the same Wi-Fi network as the robot or join the ${ROBOT_AP_SSID} hotspot to continue.`,
+        helper: `Connect this device to the same Wi-Fi network as the robot or join the ${ROBOT_AP_SSID} hotspot to continue. Temporarily disable any personal hotspot connection first.`,
       };
     }
 
@@ -454,9 +788,11 @@ export default function ConnectionScreen() {
         : ssidPermissionWarning ?? "Check network permissions and retry.",
     };
   }, [
+    autoDiscoveryHelper,
     deviceNetwork,
     deviceNetworkError,
     isLoadingDeviceNetwork,
+    isAutoDiscoveringRobot,
     ssidPermissionWarning,
     statusNetwork,
   ]);
@@ -466,16 +802,81 @@ export default function ConnectionScreen() {
     setConnectRobotError(null);
     setConnectRobotSuccess(null);
 
-    try {
-      const normalizedBase = canonicalizeUrl(baseUrl || DEFAULT_ROBOT_BASE_URL);
-      console.log("Attempting to connect to robot", {
-        baseUrl: normalizedBase,
+    const normalizedBase = canonicalizeUrl(baseUrl || DEFAULT_ROBOT_BASE_URL);
+    const { urls: autoDiscoveryCandidates, ipPrefix } =
+      gatherRobotLanBaseUrlCandidates(deviceNetwork?.ipAddress ?? null, {
+        currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
+        statusIp: status?.network?.ip,
       });
-      await api.ping();
-      setConnectRobotSuccess(
-        "Robot responded successfully. Connection details refreshed."
+
+    autoDiscoveryRef.current.ipPrefix = ipPrefix ?? null;
+
+    const seenCandidates = new Set<string>();
+    const candidatesToTry: string[] = [];
+    const registerCandidate = (candidate: string | null | undefined) => {
+      if (!candidate) {
+        return;
+      }
+      const normalized = canonicalizeUrl(candidate);
+      if (seenCandidates.has(normalized)) {
+        return;
+      }
+      seenCandidates.add(normalized);
+      candidatesToTry.push(normalized);
+    };
+
+    registerCandidate(canonicalizeUrl(DEFAULT_ROBOT_BASE_URL));
+    registerCandidate(normalizedBase);
+    autoDiscoveryCandidates.forEach(registerCandidate);
+
+    if (!candidatesToTry.length) {
+      setConnectRobotError(
+        "No potential robot addresses were found. Enter the robot IP manually and try again."
       );
-      await refreshStatus();
+      setIsConnectingRobot(false);
+      return;
+    }
+
+    let connectedUrl: string | null = null;
+
+    try {
+      for (const candidate of candidatesToTry) {
+        console.log("Attempting to connect to robot", {
+          baseUrl: candidate,
+        });
+
+        autoDiscoveryRef.current.triedUrls.add(candidate);
+
+        const found = await probeRobotBaseUrl(candidate, { timeoutMs: 2000 });
+        if (!found) {
+          continue;
+        }
+
+        connectedUrl = candidate;
+        autoDiscoveryRef.current.foundUrl = candidate;
+        setAutoDiscoveryHelper(`Robot found at ${candidate}`);
+
+        if (candidate !== normalizedBase) {
+          setBaseUrl(candidate);
+        }
+
+        setConnectRobotSuccess(
+          `Robot responded successfully at ${candidate}. Connection details refreshed.`
+        );
+
+        await refreshStatus();
+        break;
+      }
+
+      if (!connectedUrl) {
+        const triedSummary =
+          candidatesToTry.length === 1
+            ? `Tried ${candidatesToTry[0]}.`
+            : `Tried ${candidatesToTry.length} addresses: ${candidatesToTry.join(", ")}.`;
+        setConnectRobotError(
+          `Unable to reach the robot automatically. Ensure you are on the same network and try again. ${triedSummary}`
+        );
+      }
     } catch (error) {
       console.warn("Failed to connect to robot", error);
       setConnectRobotError(
@@ -486,13 +887,25 @@ export default function ConnectionScreen() {
     } finally {
       setIsConnectingRobot(false);
     }
-  }, [api, baseUrl, refreshStatus]);
+  }, [
+    baseUrl,
+    deviceNetwork?.ipAddress,
+    refreshStatus,
+    setBaseUrl,
+    status?.network?.ip,
+  ]);
 
   useEffect(() => {
     if (connectRobotSuccess) {
-      router.replace("/(tabs)/camera");
+      router.replace("/");
     }
   }, [connectRobotSuccess, router]);
+
+  useEffect(() => {
+    if (status?.network?.ip) {
+      router.replace("/");
+    }
+  }, [router, status?.network?.ip]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
@@ -508,7 +921,9 @@ export default function ConnectionScreen() {
           <ThemedText style={styles.subheading}>
             If you are on Wi-Fi, the app will try to find the robot on your
             network. Otherwise, connect this device to the same Wi-Fi as the
-            robot or join the {ROBOT_AP_SSID} hotspot to start setup.
+            robot or join the {ROBOT_AP_SSID} hotspot to start setup. If this
+            device is running a hotspot, temporarily disable it so the Wi-Fi
+            connection stays active.
           </ThemedText>
 
           <ThemedView style={styles.statusCard}>
@@ -550,11 +965,22 @@ export default function ConnectionScreen() {
                 {wifiStatusMeta.helper}
               </ThemedText>
             ) : null}
+            {deviceNetwork?.isWifi ? (
+              <ThemedText style={styles.statusHint}>
+                Tip:{" "}
+                {deviceIpPrefix
+                  ? `The robot's address typically shares the first three numbers of this device's IP (${deviceIpPrefix}.x).`
+                  : "The robot's address typically shares the first three numbers of this device's IP."}
+                {" "}Use that prefix when entering the robot IP and turn off
+                any hotspot while connecting.
+              </ThemedText>
+            ) : null}
             {statusError ? (
               <ThemedText style={styles.statusError}>
                 Unable to reach the robot. Make sure your device and the robot
                 are on the same Wi-Fi network or join the {ROBOT_AP_SSID}
-                hotspot.
+                hotspot. Temporarily disable any personal hotspot so your
+                device stays on Wi-Fi.
               </ThemedText>
             ) : null}
             <Pressable
@@ -639,6 +1065,10 @@ const styles = StyleSheet.create({
   },
   statusWarning: {
     color: "#FBBF24",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
+  },
+  statusHint: {
+    color: "#9CA3AF",
     fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
   infoGroup: {

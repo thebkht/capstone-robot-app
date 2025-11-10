@@ -7,23 +7,63 @@ export interface WifiCredentials {
   password: string;
 }
 
-export interface RobotStatus {
+export interface RobotNetworkInfo {
+  ip?: string;
+  ssid?: string;
+  wifiSsid?: string;
+  signalStrength?: number;
+  availableNetworks?: string[];
+  mode?: string;
+  [key: string]: unknown;
+}
+
+export interface RobotHealth {
+  connected?: boolean;
+  firmware?: Record<string, unknown>;
+  battery?: number;
+  uptimeSeconds?: number;
+  network?: RobotNetworkInfo;
+  [key: string]: unknown;
+}
+
+export interface RobotTelemetry {
   battery?: number;
   cpuLoad?: number;
   temperatureC?: number;
   humidity?: number;
   uptimeSeconds?: number;
-  network?: {
-    ip?: string;
-    wifiSsid?: string;
-    signalStrength?: number;
-    availableNetworks?: string[];
-  };
+  network?: RobotNetworkInfo;
   [key: string]: unknown;
 }
 
-export interface SnapshotResponse {
-  url: string;
+export interface CameraCaptureMetadata {
+  id?: string;
+  url?: string;
+  snapshotUrl?: string;
+  imageUrl?: string;
+  path?: string;
+  saved?: boolean;
+  [key: string]: unknown;
+}
+
+export interface RobotModeState {
+  mode?: string;
+  current?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+export interface RobotStatus {
+  health?: RobotHealth;
+  telemetry?: RobotTelemetry;
+  network?: RobotNetworkInfo;
+  battery?: number;
+  cpuLoad?: number;
+  temperatureC?: number;
+  humidity?: number;
+  uptimeSeconds?: number;
+  mode?: string;
+  [key: string]: unknown;
 }
 
 export interface WifiScanResponse {
@@ -53,6 +93,10 @@ export class RobotAPI {
 
   public get streamUrl() {
     return `${this.baseUrl}/camera/stream`;
+  }
+
+  public get snapshotUrl() {
+    return `${this.baseUrl}/camera/snapshot`;
   }
 
   private async request<T>(path: string, method: HttpMethod = 'GET', body?: unknown): Promise<T> {
@@ -100,28 +144,51 @@ export class RobotAPI {
     }
   }
 
-  public async ping(): Promise<RobotStatus> {
-    return this.request<RobotStatus>('/status');
+  public async ping(): Promise<RobotHealth> {
+    return this.request<RobotHealth>('/health');
+  }
+
+  public async fetchHealth(): Promise<RobotHealth> {
+    return this.request<RobotHealth>('/health');
+  }
+
+  public async fetchNetworkInfo(): Promise<RobotNetworkInfo> {
+    return this.request<RobotNetworkInfo>('/network-info');
+  }
+
+  public async fetchTelemetry(): Promise<RobotTelemetry> {
+    return this.request<RobotTelemetry>('/status');
+  }
+
+  public async fetchMode(): Promise<RobotModeState> {
+    return this.request<RobotModeState>('/mode');
   }
 
   public async connectWifi(credentials: WifiCredentials): Promise<{ success: boolean }>
   public async connectWifi(credentials: WifiCredentials, options?: { force: boolean }): Promise<{ success: boolean }>
   public async connectWifi(credentials: WifiCredentials, _options?: { force: boolean }) {
-    return this.request<{ success: boolean }>('/connect', 'POST', credentials);
+    return this.request<{ success: boolean }>('/wifi/connect', 'POST', credentials);
   }
 
-  public async fetchStatus(): Promise<RobotStatus> {
-    return this.request<RobotStatus>('/status');
-  }
-
-  public async triggerSnapshot(): Promise<SnapshotResponse> {
-    return this.request<SnapshotResponse>('/camera/snapshot', 'POST');
+  public async capturePhoto(): Promise<CameraCaptureMetadata> {
+    return this.request<CameraCaptureMetadata>('/camera/capture', 'POST');
   }
 
   public async listWifiNetworks(): Promise<WifiScanResponse> {
     return this.request<WifiScanResponse>('/wifi/networks');
   }
-}
 
+  public async move(payload: { linear: number; angular: number }) {
+    return this.request('/control/move', 'POST', payload);
+  }
+
+  public async stop() {
+    return this.request('/control/stop', 'POST');
+  }
+
+  public async moveHead(payload: { pan: number; tilt: number }) {
+    return this.request('/control/head', 'POST', payload);
+  }
+}
 
 export const createRobotApi = (baseUrl: string, timeout?: number) => new RobotAPI({ baseUrl, timeout });
