@@ -522,13 +522,25 @@ export default function ConnectionScreen() {
   }, [refreshDeviceNetwork]);
 
   useEffect(() => {
-    if (!deviceNetwork?.isWifi || !deviceNetwork.ipAddress) {
+    if (
+      !deviceNetwork?.isWifi ||
+      !deviceNetwork.ipAddress ||
+      !status?.network?.ip ||
+      !isValidIpv4(status.network.ip)
+    ) {
+      return;
+    }
+
+    const devicePrefix = deriveIpPrefix(deviceNetwork.ipAddress);
+    const statusPrefix = deriveIpPrefix(status.network.ip);
+
+    if (!devicePrefix || !statusPrefix || devicePrefix !== statusPrefix) {
       return;
     }
 
     const derivedUrl = deriveRobotLanBaseUrl(deviceNetwork.ipAddress, {
       currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
-      statusIp: status?.network?.ip,
+      statusIp: status.network.ip,
     });
 
     if (!derivedUrl) {
@@ -548,28 +560,6 @@ export default function ConnectionScreen() {
     setBaseUrl,
     status?.network?.ip,
   ]);
-
-  useEffect(() => {
-    if (!status?.network?.ip) {
-      return;
-    }
-
-    const nextUrl = deriveRobotLanBaseUrl(deviceNetwork?.ipAddress, {
-      currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
-      statusIp: status.network.ip,
-    });
-
-    if (!nextUrl) {
-      return;
-    }
-
-    const normalizedNext = canonicalizeUrl(nextUrl);
-    const normalizedBase = baseUrl ? canonicalizeUrl(baseUrl) : "";
-
-    if (normalizedNext !== normalizedBase) {
-      setBaseUrl(normalizedNext);
-    }
-  }, [baseUrl, deviceNetwork?.ipAddress, setBaseUrl, status?.network?.ip]);
 
   useEffect(() => {
     if (deviceNetwork?.isWifi) {
