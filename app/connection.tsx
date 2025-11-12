@@ -386,8 +386,17 @@ export default function ConnectionScreen() {
         let ssid: string | null = null;
         let permissionWarning: string | null = null;
         try {
+          const wifiManagerAvailable =
+            WifiManager &&
+            typeof WifiManager.getCurrentWifiSSID === "function";
+
           if (state.type === Network.NetworkStateType.WIFI) {
-            if (Platform.OS === "android") {
+            if (!wifiManagerAvailable) {
+              permissionWarning =
+                Platform.OS === "ios"
+                  ? "iOS may hide the Wi-Fi network name without additional entitlements."
+                  : "Wi-Fi network name unavailable on this platform.";
+            } else if (Platform.OS === "android") {
               const fineLocationPermission =
                 PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
 
@@ -427,7 +436,7 @@ export default function ConnectionScreen() {
                   }
                 }
               }
-            } else {
+            } else if (wifiManagerAvailable) {
               const wifiManagerSsid = await WifiManager.getCurrentWifiSSID();
               if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
                 ssid = wifiManagerSsid;
