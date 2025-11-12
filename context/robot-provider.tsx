@@ -6,6 +6,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -72,6 +73,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
+  const hasPollingBeenPausedRef = useRef(false);
   const [controlToken, setControlTokenState] = useState<string | null>(null);
 
   const api = useMemo(() => createRobotApi(baseUrl, undefined, controlToken), [baseUrl, controlToken]);
@@ -208,12 +210,17 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
   useEffect(() => {
     if (!isPolling) {
+      hasPollingBeenPausedRef.current = true;
       return;
     }
 
-    refreshStatus();
+    if (!hasPollingBeenPausedRef.current) {
+      return;
+    }
+
+    void refreshStatus();
     const interval = setInterval(() => {
-      refreshStatus();
+      void refreshStatus();
     }, 10_000);
 
     return () => {

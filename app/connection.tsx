@@ -607,13 +607,11 @@ export default function ConnectionScreen() {
       return;
     }
 
-    // Build candidate list: last URL → mDNS rovy.local → hotspot → known defaults
+    // Build candidate list: last URL → known defaults → auto-discovered IPs
     const allCandidates: string[] = [];
     if (normalizedBase) {
       allCandidates.push(normalizedBase);
     }
-    allCandidates.push("http://rovy.local:8000");
-    allCandidates.push("http://192.168.4.1:8000");
     allCandidates.push(...candidateUrls);
 
     if (!allCandidates.length || autoDiscoveryRef.current.running) {
@@ -883,13 +881,15 @@ export default function ConnectionScreen() {
       }
 
       if (!connectedUrl) {
-        const hiddenForSummary = new Set([
-          canonicalizeUrl("http://rovy.local:8000"),
-          canonicalizeUrl("http://192.168.4.1:8000"),
-        ]);
-        const visibleCandidates = candidatesToTry.filter(
-          (candidate) => !hiddenForSummary.has(candidate)
-        );
+        const visibleCandidates = candidatesToTry.filter((candidate) => {
+          const parts = extractUrlParts(candidate);
+          if (!parts?.host) {
+            return true;
+          }
+          return (
+            parts.host !== "rovy.local" && parts.host !== "192.168.4.1"
+          );
+        });
         const triedSummary = visibleCandidates.length
           ? visibleCandidates.length === 1
             ? `Tried ${visibleCandidates[0]}.`
