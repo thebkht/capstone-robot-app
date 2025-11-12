@@ -54,11 +54,14 @@ interface RobotContextValue {
   isPolling: boolean;
   setIsPolling: (value: boolean) => void;
   refreshStatus: () => Promise<void>;
+  controlToken: string | null;
+  setControlToken: (token: string | null) => void;
 }
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
 export const ROBOT_BASE_URL_STORAGE_KEY = "robot_base_url";
+export const ROBOT_CONTROL_TOKEN_STORAGE_KEY = "robot_control_token";
 export const DEFAULT_ROBOT_BASE_URL = "https://tegra-ubuntu.tail535f32.ts.net";
 
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
@@ -67,8 +70,12 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
+  const [controlToken, setControlTokenState] = useState<string | null>(null);
 
-  const api = useMemo(() => createRobotApi(baseUrl), [baseUrl]);
+  const api = useMemo(
+    () => createRobotApi(baseUrl, { controlToken }),
+    [baseUrl, controlToken]
+  );
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -166,6 +173,12 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
           console.log("Loaded stored robot base URL", storedUrl);
           setBaseUrlState(storedUrl);
         }
+        const storedToken = await AsyncStorage.getItem(
+          ROBOT_CONTROL_TOKEN_STORAGE_KEY
+        );
+        if (storedToken && isMounted) {
+          setControlTokenState(storedToken);
+        }
       } catch (error) {
         console.warn("Failed to load stored robot base URL", error);
       }
@@ -210,6 +223,32 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     [api, baseUrl]
   );
 
+  const setControlToken = useCallback(
+    (token: string | null) => {
+      const normalized = token ? token.trim() : null;
+      console.log("Updating robot control token", {
+        present: Boolean(controlToken),
+        next: Boolean(normalized),
+      });
+      setControlTokenState(normalized);
+      void (async () => {
+        try {
+          if (normalized) {
+            await AsyncStorage.setItem(
+              ROBOT_CONTROL_TOKEN_STORAGE_KEY,
+              normalized
+            );
+          } else {
+            await AsyncStorage.removeItem(ROBOT_CONTROL_TOKEN_STORAGE_KEY);
+          }
+        } catch (error) {
+          console.warn("Failed to persist robot control token", error);
+        }
+      })();
+    },
+    [controlToken]
+  );
+
   const value = useMemo(
     () => ({
       api,
@@ -221,8 +260,21 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       isPolling,
       setIsPolling,
       refreshStatus,
+      controlToken,
+      setControlToken,
     }),
-    [api, baseUrl, isPolling, lastUpdated, refreshStatus, status, statusError]
+    [
+      api,
+      baseUrl,
+      controlToken,
+      isPolling,
+      lastUpdated,
+      refreshStatus,
+      setBaseUrl,
+      setControlToken,
+      status,
+      statusError,
+    ]
   );
 
   return (

@@ -74,21 +74,28 @@ export interface RobotApiOptions {
   baseUrl: string;
   fetchImpl?: typeof fetch;
   timeout?: number; // Timeout in milliseconds, default 5000
+  controlToken?: string | null;
 }
 
 export class RobotAPI {
   private baseUrl: string;
   private fetchImpl: typeof fetch;
   private timeout: number;
+  private controlToken: string | null;
 
   constructor(options: RobotApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeout = options.timeout ?? 5000;
+    this.controlToken = options.controlToken ?? null;
   }
 
   public updateBaseUrl(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
+  }
+
+  public updateControlToken(controlToken: string | null) {
+    this.controlToken = controlToken ?? null;
   }
 
   public get streamUrl() {
@@ -108,12 +115,18 @@ export class RobotAPI {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      };
+
+      if (this.controlToken) {
+        headers['x-control-token'] = this.controlToken;
+      }
+
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
@@ -191,4 +204,13 @@ export class RobotAPI {
   }
 }
 
-export const createRobotApi = (baseUrl: string, timeout?: number) => new RobotAPI({ baseUrl, timeout });
+export const createRobotApi = (
+  baseUrl: string,
+  options?: { timeout?: number; controlToken?: string | null; fetchImpl?: typeof fetch }
+) =>
+  new RobotAPI({
+    baseUrl,
+    timeout: options?.timeout,
+    controlToken: options?.controlToken ?? null,
+    fetchImpl: options?.fetchImpl,
+  });

@@ -29,6 +29,7 @@ import {
   Lora_700Bold,
 } from '@expo-google-fonts/lora';
 
+import { AuthProvider } from '@/context/auth-provider';
 import { RobotProvider } from '@/context/robot-provider';
 
 export const unstable_settings = {
@@ -67,16 +68,18 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <RobotProvider>
-        <ThemeProvider value={DarkTheme}>
-          <Stack>
-            <Stack.Screen name="connection" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          </Stack>
-          <StatusBar style="light" />
-        </ThemeProvider>
-      </RobotProvider>
+      <AuthProvider>
+        <RobotProvider>
+          <ThemeProvider value={DarkTheme}>
+            <Stack>
+              <Stack.Screen name="connection" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+            </Stack>
+            <StatusBar style="light" />
+          </ThemeProvider>
+        </RobotProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }
