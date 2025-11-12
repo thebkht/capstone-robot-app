@@ -217,7 +217,6 @@ const gatherRobotLanBaseUrlCandidates = (
 
   if (isRobotHotspotSubnet) {
     isRobotHotspot = true;
-    pushCandidate("192.168.4.1");
   }
 
   return { urls, isRobotHotspot };
@@ -881,15 +880,7 @@ export default function ConnectionScreen() {
       }
 
       if (!connectedUrl) {
-        const visibleCandidates = candidatesToTry.filter((candidate) => {
-          const parts = extractUrlParts(candidate);
-          if (!parts?.host) {
-            return true;
-          }
-          return (
-            parts.host !== "rovy.local" && parts.host !== "192.168.4.1"
-          );
-        });
+        const visibleCandidates = candidatesToTry;
         const triedSummary = visibleCandidates.length
           ? visibleCandidates.length === 1
             ? `Tried ${visibleCandidates[0]}.`
