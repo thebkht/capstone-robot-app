@@ -17,6 +17,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -24,8 +25,17 @@ import WifiManager from "react-native-wifi-reborn";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { CLOUD_DISCOVERY_REFRESH_INTERVAL_MS } from "@/constants/env";
 import { SerifFonts } from "@/constants/theme";
+import { useAuth } from "@/context/auth-provider";
 import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
+import {
+  claimRobot,
+  fetchClaimedRobots,
+  fetchUnclaimedRobots,
+} from "@/services/cloud-api";
+import { connectNearbyRobotsSocket } from "@/services/robot-directory";
+import type { CloudRobot, NearbyRobotSummary } from "@/types/cloud";
 
 const ROBOT_AP_SSID = "Elara_AP";
 
@@ -332,10 +342,46 @@ type WifiStatusMeta = {
   helper: string | null;
 };
 
+const toErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : "Unexpected error occurred.";
+
+const describeRobot = (robot: CloudRobot | NearbyRobotSummary) =>
+  robot.name?.trim() || robot.serial;
+
+const formatLastSeen = (value?: string | null) => {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
+};
+
 export default function ConnectionScreen() {
   const router = useRouter();
-  const { baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling } =
-    useRobot();
+  const {
+    user,
+    sessionToken,
+    isAuthenticated,
+    isLoading: isAuthLoading,
+    authError,
+    signIn,
+    signOut,
+  } = useAuth();
+  const {
+    baseUrl,
+    setBaseUrl,
+    status,
+    statusError,
+    refreshStatus,
+    setIsPolling,
+    controlToken,
+    setControlToken,
+  } = useRobot();
   const mountedRef = useRef(true);
   const [deviceNetwork, setDeviceNetwork] =
     useState<DeviceNetworkDetails | null>(null);
@@ -357,6 +403,24 @@ export default function ConnectionScreen() {
     null
   );
   const [isAutoDiscoveringRobot, setIsAutoDiscoveringRobot] = useState(false);
+  const [claimedRobots, setClaimedRobots] = useState<CloudRobot[]>([]);
+  const [claimedRobotsError, setClaimedRobotsError] = useState<string | null>(
+    null
+  );
+  const [isLoadingClaimed, setIsLoadingClaimed] = useState(false);
+  const [unclaimedRobots, setUnclaimedRobots] = useState<NearbyRobotSummary[]>(
+    []
+  );
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
+  const [isLoadingNearby, setIsLoadingNearby] = useState(false);
+  const [isWatchingNearby, setIsWatchingNearby] = useState(false);
+  const [serialInput, setSerialInput] = useState("");
+  const [pinInput, setPinInput] = useState("");
+  const [isClaimingRobot, setIsClaimingRobot] = useState(false);
+  const [claimRobotError, setClaimRobotError] = useState<string | null>(null);
+  const [claimRobotMessage, setClaimRobotMessage] = useState<string | null>(
+    null
+  );
   const deviceIpPrefix = useMemo(
     () => deriveIpPrefix(deviceNetwork?.ipAddress),
     [deviceNetwork?.ipAddress]
@@ -367,6 +431,103 @@ export default function ConnectionScreen() {
     triedUrls: new Set<string>(),
     foundUrl: null as string | null,
   });
+
+  const handleSignInPress = useCallback(() => {
+    if (isAuthLoading) {
+      return;
+    }
+
+    signIn().catch((error) => {
+      console.warn("Google sign-in failed", error);
+    });
+  }, [isAuthLoading, signIn]);
+
+  const handleSignOutPress = useCallback(() => {
+    signOut()
+      .then(() => {
+        setControlToken(null);
+        setClaimedRobots([]);
+        setUnclaimedRobots([]);
+      })
+      .catch((error) => {
+        console.warn("Sign-out failed", error);
+      });
+  }, [setControlToken, signOut]);
+
+  const handleClaimRobot = useCallback(async () => {
+    if (!sessionToken) {
+      setClaimRobotError("Sign in to claim a robot first.");
+      return;
+    }
+
+    const serial = serialInput.trim();
+    const pin = pinInput.trim();
+
+    if (!serial || !pin) {
+      setClaimRobotError("Enter both the robot serial and the 6-digit PIN.");
+      return;
+    }
+
+    setIsClaimingRobot(true);
+    setClaimRobotError(null);
+    setClaimRobotMessage(null);
+
+    try {
+      const result = await claimRobot(sessionToken, { serial, pin });
+      setClaimRobotMessage(
+        `Claimed ${describeRobot(result.robot)}. Control unlocked.`
+      );
+      if (result.controlToken) {
+        setControlToken(result.controlToken);
+      }
+      if (result.robotBaseUrl) {
+        setBaseUrl(result.robotBaseUrl);
+      }
+      setClaimedRobots((current) => {
+        const next = new Map(current.map((robot) => [robot.id, robot]));
+        next.set(result.robot.id, result.robot);
+        return Array.from(next.values());
+      });
+      setUnclaimedRobots((current) =>
+        current.filter((robot) => robot.serial !== result.robot.serial)
+      );
+      setSerialInput("");
+      setPinInput("");
+      await refreshStatus();
+    } catch (error) {
+      setClaimRobotError(toErrorMessage(error));
+    } finally {
+      setIsClaimingRobot(false);
+    }
+  }, [
+    pinInput,
+    refreshStatus,
+    serialInput,
+    sessionToken,
+    setBaseUrl,
+    setControlToken,
+  ]);
+
+  useEffect(() => {
+    if (isAuthLoading) {
+      return;
+    }
+
+    if (!isAuthenticated || !sessionToken) {
+      setClaimedRobots([]);
+      setClaimedRobotsError(null);
+      setUnclaimedRobots([]);
+      setNearbyError(null);
+      setClaimRobotMessage(null);
+      setClaimRobotError(null);
+    }
+  }, [
+    isAuthLoading,
+    isAuthenticated,
+    sessionToken,
+    setClaimedRobots,
+    setUnclaimedRobots,
+  ]);
 
   const refreshDeviceNetwork = useCallback(
     async (providedState?: Network.NetworkState) => {
@@ -467,8 +628,8 @@ export default function ConnectionScreen() {
         const resolvedIp = selectPreferredIpv4([
           normalizedIp,
           netInfoState?.type === "wifi" &&
-          netInfoState.details &&
-          "ipAddress" in netInfoState.details
+            netInfoState.details &&
+            "ipAddress" in netInfoState.details
             ? (netInfoState.details.ipAddress as string)
             : null,
         ]);
@@ -522,7 +683,143 @@ export default function ConnectionScreen() {
   }, [refreshDeviceNetwork]);
 
   useEffect(() => {
-    if (!deviceNetwork?.isWifi || !deviceNetwork.ipAddress) {
+    if (!isAuthenticated || !sessionToken) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingClaimed(true);
+
+    fetchClaimedRobots(sessionToken)
+      .then((robots) => {
+        if (cancelled) {
+          return;
+        }
+        setClaimedRobots(robots);
+        setClaimedRobotsError(null);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        setClaimedRobotsError(toErrorMessage(error));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingClaimed(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, sessionToken]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !sessionToken) {
+      return;
+    }
+
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const loadNearby = async (showSpinner: boolean) => {
+      if (showSpinner) {
+        setIsLoadingNearby(true);
+      }
+
+      try {
+        const robots = await fetchUnclaimedRobots(sessionToken);
+        if (cancelled) {
+          return;
+        }
+        const filtered = robots.filter((robot) => !robot.ownerUserId);
+        setUnclaimedRobots(filtered);
+        setNearbyError(null);
+      } catch (error) {
+        if (!cancelled) {
+          setNearbyError(toErrorMessage(error));
+        }
+      } finally {
+        if (!cancelled && showSpinner) {
+          setIsLoadingNearby(false);
+        }
+
+        if (!cancelled) {
+          timeout = setTimeout(() => {
+            void loadNearby(false);
+          }, CLOUD_DISCOVERY_REFRESH_INTERVAL_MS);
+        }
+      }
+    };
+
+    void loadNearby(true);
+
+    return () => {
+      cancelled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [isAuthenticated, sessionToken]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !sessionToken) {
+      return;
+    }
+
+    let unsubscribe: (() => void) | null = null;
+    try {
+      unsubscribe = connectNearbyRobotsSocket(sessionToken, {
+        onSnapshot: (robots) => {
+          setUnclaimedRobots((current) => {
+            const next = new Map(current.map((robot) => [robot.serial, robot]));
+            robots.forEach((robot) => {
+              if (robot.ownerUserId) {
+                next.delete(robot.serial);
+              } else {
+                next.set(robot.serial, robot);
+              }
+            });
+            return Array.from(next.values()).sort((a, b) =>
+              describeRobot(a).localeCompare(describeRobot(b))
+            );
+          });
+        },
+        onError: (error) => {
+          setNearbyError(toErrorMessage(error));
+        },
+        onClose: () => {
+          setIsWatchingNearby(false);
+        },
+      });
+      setIsWatchingNearby(true);
+    } catch (error) {
+      setNearbyError(toErrorMessage(error));
+    }
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      setIsWatchingNearby(false);
+    };
+  }, [isAuthenticated, sessionToken]);
+
+  useEffect(() => {
+    if (
+      !deviceNetwork?.isWifi ||
+      !deviceNetwork.ipAddress ||
+      !status?.network?.ip ||
+      !isValidIpv4(status.network.ip)
+    ) {
+      return;
+    }
+
+    const devicePrefix = deriveIpPrefix(deviceNetwork.ipAddress);
+    const statusPrefix = deriveIpPrefix(status.network.ip);
+
+    if (!devicePrefix || !statusPrefix || devicePrefix !== statusPrefix) {
       return;
     }
 
@@ -756,6 +1053,9 @@ export default function ConnectionScreen() {
       if (autoDiscoveryHelper) {
         helperMessages.push(autoDiscoveryHelper);
       }
+      if (!controlToken && isAuthenticated) {
+        helperMessages.push("Claim the robot to unlock controls.");
+      }
       return {
         color: isAutoDiscoveringRobot ? "#FBBF24" : "#1DD1A1",
         label: isAutoDiscoveringRobot ? "Searching" : "Connected",
@@ -778,10 +1078,10 @@ export default function ConnectionScreen() {
       label: "Unknown",
       details: [
         deviceNetworkError ??
-          (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ??
-          "Network name unavailable",
+        (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ??
+        "Network name unavailable",
         (statusNetwork?.ip && statusNetwork.ip.trim()) ||
-          "IP address unavailable",
+        "IP address unavailable",
       ],
       helper: deviceNetworkError
         ? null
@@ -793,6 +1093,8 @@ export default function ConnectionScreen() {
     deviceNetworkError,
     isLoadingDeviceNetwork,
     isAutoDiscoveringRobot,
+    controlToken,
+    isAuthenticated,
     ssidPermissionWarning,
     statusNetwork,
   ]);
@@ -926,6 +1228,188 @@ export default function ConnectionScreen() {
             connection stays active.
           </ThemedText>
 
+          <ThemedView style={styles.connectCard}>
+            <ThemedText type="subtitle" style={styles.statusTitle}>
+              Account
+            </ThemedText>
+            {isAuthLoading ? (
+              <View style={styles.infoValueContainer}>
+                <ActivityIndicator color="#1DD1A1" />
+                <ThemedText style={styles.infoValue}>Checking session...</ThemedText>
+              </View>
+            ) : isAuthenticated && user ? (
+              <>
+                <ThemedText style={styles.infoValue}>
+                  {user.name || user.email}
+                </ThemedText>
+                {user.email ? (
+                  <ThemedText style={styles.statusHint}>{user.email}</ThemedText>
+                ) : null}
+                <Pressable
+                  style={[styles.secondaryButton, isAuthLoading && styles.disabledPrimary]}
+                  onPress={handleSignOutPress}
+                  disabled={isAuthLoading}
+                >
+                  <ThemedText style={styles.secondaryButtonText}>Sign out</ThemedText>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <ThemedText style={styles.statusHint}>
+                  Sign in with Google to claim and control your robot.
+                </ThemedText>
+                <Pressable
+                  style={[styles.primaryButton, isAuthLoading && styles.disabledPrimary]}
+                  onPress={handleSignInPress}
+                  disabled={isAuthLoading}
+                >
+                  {isAuthLoading ? (
+                    <ActivityIndicator color="#04110B" />
+                  ) : (
+                    <ThemedText style={styles.primaryButtonText}>
+                      Sign in with Google
+                    </ThemedText>
+                  )}
+                </Pressable>
+              </>
+            )}
+            {authError ? (
+              <ThemedText style={styles.statusError}>{authError}</ThemedText>
+            ) : null}
+          </ThemedView>
+
+          <ThemedView style={styles.connectCard}>
+            <ThemedText type="subtitle" style={styles.statusTitle}>
+              Claim a robot
+            </ThemedText>
+            <ThemedText style={styles.connectHint}>
+              Request a 6-digit PIN from the robot, then enter the serial and PIN
+              below to lock ownership to your account.
+            </ThemedText>
+            <TextInput
+              style={styles.input}
+              value={serialInput}
+              onChangeText={setSerialInput}
+              placeholder="Serial (e.g. RVY-0001)"
+              placeholderTextColor="#6B7280"
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.input}
+              value={pinInput}
+              onChangeText={setPinInput}
+              placeholder="PIN"
+              placeholderTextColor="#6B7280"
+              keyboardType="number-pad"
+              maxLength={6}
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            {claimRobotError ? (
+              <ThemedText style={styles.connectError}>{claimRobotError}</ThemedText>
+            ) : null}
+            {claimRobotMessage ? (
+              <ThemedText style={styles.connectSuccess}>{claimRobotMessage}</ThemedText>
+            ) : null}
+            <Pressable
+              style={[
+                styles.primaryButton,
+                (!isAuthenticated || isClaimingRobot) && styles.disabledPrimary,
+              ]}
+              onPress={handleClaimRobot}
+              disabled={!isAuthenticated || isClaimingRobot}
+            >
+              {isClaimingRobot ? (
+                <ActivityIndicator color="#04110B" />
+              ) : (
+                <ThemedText style={styles.primaryButtonText}>
+                  Claim robot
+                </ThemedText>
+              )}
+            </Pressable>
+            {!isAuthenticated ? (
+              <ThemedText style={styles.statusHint}>
+                Sign in to claim a robot.
+              </ThemedText>
+            ) : null}
+          </ThemedView>
+
+          <ThemedView style={styles.connectCard}>
+            <ThemedText type="subtitle" style={styles.statusTitle}>
+              Claimed robots
+            </ThemedText>
+            {isLoadingClaimed ? (
+              <ActivityIndicator color="#1DD1A1" />
+            ) : claimedRobots.length ? (
+              claimedRobots.map((robot) => (
+                <View key={robot.id} style={styles.listItem}>
+                  <ThemedText style={styles.listPrimary}>
+                    {describeRobot(robot)}
+                  </ThemedText>
+                  <ThemedText style={styles.listSecondary}>
+                    Serial: {robot.serial}
+                  </ThemedText>
+                  {robot.lastSeenAt ? (
+                    <ThemedText style={styles.listSecondary}>
+                      Last seen {formatLastSeen(robot.lastSeenAt)}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              ))
+            ) : (
+              <ThemedText style={styles.statusHint}>
+                {isAuthenticated
+                  ? "No robots claimed yet. Enter the serial and PIN above to claim one."
+                  : "Sign in to view your claimed robots."}
+              </ThemedText>
+            )}
+            {claimedRobotsError ? (
+              <ThemedText style={styles.statusError}>{claimedRobotsError}</ThemedText>
+            ) : null}
+          </ThemedView>
+
+          <ThemedView style={styles.connectCard}>
+            <ThemedText type="subtitle" style={styles.statusTitle}>
+              Nearby unclaimed robots
+            </ThemedText>
+            {isLoadingNearby ? <ActivityIndicator color="#1DD1A1" /> : null}
+            {unclaimedRobots.length ? (
+              unclaimedRobots.map((robot) => (
+                <View key={robot.serial} style={styles.listItem}>
+                  <ThemedText style={styles.listPrimary}>
+                    {describeRobot(robot)}
+                  </ThemedText>
+                  <ThemedText style={styles.listSecondary}>
+                    Serial: {robot.serial}
+                  </ThemedText>
+                  {robot.ip ? (
+                    <ThemedText style={styles.listSecondary}>
+                      LAN IP: {robot.ip}
+                    </ThemedText>
+                  ) : null}
+                  {robot.lastSeenAt ? (
+                    <ThemedText style={styles.listSecondary}>
+                      Seen {formatLastSeen(robot.lastSeenAt)}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              ))
+            ) : !isLoadingNearby ? (
+              <ThemedText style={styles.statusHint}>
+                {isAuthenticated
+                  ? "No unclaimed robots detected nearby."
+                  : "Sign in to discover nearby unclaimed robots."}
+              </ThemedText>
+            ) : null}
+            {nearbyError ? (
+              <ThemedText style={styles.statusError}>{nearbyError}</ThemedText>
+            ) : null}
+            {isWatchingNearby ? (
+              <ThemedText style={styles.liveBadge}>Live feed active</ThemedText>
+            ) : null}
+          </ThemedView>
+
           <ThemedView style={styles.statusCard}>
             <ThemedText type="subtitle" style={styles.statusTitle}>
               Connection Info
@@ -957,6 +1441,12 @@ export default function ConnectionScreen() {
                 <ThemedText style={styles.infoLabel}>IP Address:</ThemedText>
                 <ThemedText style={styles.infoValue}>
                   {wifiStatusMeta.details[1]}
+                </ThemedText>
+              </View>
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.infoLabel}>Control token:</ThemedText>
+                <ThemedText style={styles.infoValue}>
+                  {controlToken ? "Stored" : "Missing"}
                 </ThemedText>
               </View>
             </View>
@@ -997,6 +1487,13 @@ export default function ConnectionScreen() {
             <ThemedView style={styles.connectCard}>
               <ThemedText style={styles.connectError}>
                 {connectRobotError}
+              </ThemedText>
+            </ThemedView>
+          ) : null}
+          {connectRobotSuccess ? (
+            <ThemedView style={styles.connectCard}>
+              <ThemedText style={styles.connectSuccess}>
+                {connectRobotSuccess}
               </ThemedText>
             </ThemedView>
           ) : null}
@@ -1142,5 +1639,33 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: "#04110B",
     fontFamily: MONO_SEMIBOLD_FONT_FAMILY,
+  },
+  input: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: "#1F2937",
+    backgroundColor: "#0A0A0B",
+    color: "#F9FAFB",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
+  },
+  listItem: {
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#1F2937",
+    gap: 4,
+  },
+  listPrimary: {
+    color: "#F9FAFB",
+    fontFamily: MONO_SEMIBOLD_FONT_FAMILY,
+  },
+  listSecondary: {
+    color: "#9CA3AF",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
+  },
+  liveBadge: {
+    color: "#1DD1A1",
+    fontFamily: MONO_REGULAR_FONT_FAMILY,
   },
 });

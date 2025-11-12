@@ -15,6 +15,35 @@ import {
   createRobotApi,
 } from "@/services/robot-api";
 
+const isIpv4Address = (value: string | null | undefined) => {
+  if (!value) {
+    return false;
+  }
+
+  const segments = value.split(".");
+  if (segments.length !== 4) {
+    return false;
+  }
+
+  return segments.every((segment) => {
+    if (segment.trim() === "") {
+      return false;
+    }
+    const numeric = Number(segment);
+    return Number.isInteger(numeric) && numeric >= 0 && numeric <= 255;
+  });
+};
+
+const deriveIpv4FromUrl = (value: string) => {
+  try {
+    const parsed = new URL(value.includes("://") ? value : `http://${value}`);
+    return isIpv4Address(parsed.hostname) ? parsed.hostname : null;
+  } catch (error) {
+    console.warn("Failed to parse robot base URL for IPv4 fallback", value, error);
+    return null;
+  }
+};
+
 interface RobotContextValue {
   api: RobotAPI;
   baseUrl: string;
@@ -25,11 +54,14 @@ interface RobotContextValue {
   isPolling: boolean;
   setIsPolling: (value: boolean) => void;
   refreshStatus: () => Promise<void>;
+  controlToken: string | null;
+  setControlToken: (token: string | null) => void;
 }
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
 export const ROBOT_BASE_URL_STORAGE_KEY = "robot_base_url";
+export const ROBOT_CONTROL_TOKEN_STORAGE_KEY = "robot_control_token";
 export const DEFAULT_ROBOT_BASE_URL = "https://tegra-ubuntu.tail535f32.ts.net";
 
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
@@ -38,8 +70,12 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
+  const [controlToken, setControlTokenState] = useState<string | null>(null);
 
-  const api = useMemo(() => createRobotApi(baseUrl), [baseUrl]);
+  const api = useMemo(
+    () => createRobotApi(baseUrl, { controlToken }),
+    [baseUrl, controlToken]
+  );
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -88,17 +124,31 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         return Object.keys(aggregated).length ? aggregated : undefined;
       })();
 
+      const baseUrlIpv4 = deriveIpv4FromUrl(baseUrl);
+
+      const combinedNetwork: RobotNetworkInfo | undefined = (() => {
+        const network: RobotNetworkInfo = mergedNetwork
+          ? { ...mergedNetwork }
+          : {};
+
+        if (!network.ip && baseUrlIpv4) {
+          network.ip = baseUrlIpv4;
+        }
+
+        return Object.keys(network).length ? network : undefined;
+      })();
+
       const combined: RobotStatus = {
         health,
         telemetry: telemetry ?? undefined,
-        network: mergedNetwork,
+        network: combinedNetwork,
         battery: telemetry?.battery ?? health?.battery,
         cpuLoad: telemetry?.cpuLoad,
         temperatureC: telemetry?.temperatureC,
         humidity: telemetry?.humidity,
         uptimeSeconds: telemetry?.uptimeSeconds ?? health?.uptimeSeconds,
         mode:
-          mode?.mode ?? mode?.current ?? mode?.status ?? mergedNetwork?.mode,
+          mode?.mode ?? mode?.current ?? mode?.status ?? combinedNetwork?.mode,
       };
 
       setStatus(combined);
@@ -122,6 +172,12 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         if (storedUrl && isMounted) {
           console.log("Loaded stored robot base URL", storedUrl);
           setBaseUrlState(storedUrl);
+        }
+        const storedToken = await AsyncStorage.getItem(
+          ROBOT_CONTROL_TOKEN_STORAGE_KEY
+        );
+        if (storedToken && isMounted) {
+          setControlTokenState(storedToken);
         }
       } catch (error) {
         console.warn("Failed to load stored robot base URL", error);
@@ -167,6 +223,32 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     [api, baseUrl]
   );
 
+  const setControlToken = useCallback(
+    (token: string | null) => {
+      const normalized = token ? token.trim() : null;
+      console.log("Updating robot control token", {
+        present: Boolean(controlToken),
+        next: Boolean(normalized),
+      });
+      setControlTokenState(normalized);
+      void (async () => {
+        try {
+          if (normalized) {
+            await AsyncStorage.setItem(
+              ROBOT_CONTROL_TOKEN_STORAGE_KEY,
+              normalized
+            );
+          } else {
+            await AsyncStorage.removeItem(ROBOT_CONTROL_TOKEN_STORAGE_KEY);
+          }
+        } catch (error) {
+          console.warn("Failed to persist robot control token", error);
+        }
+      })();
+    },
+    [controlToken]
+  );
+
   const value = useMemo(
     () => ({
       api,
@@ -178,8 +260,21 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       isPolling,
       setIsPolling,
       refreshStatus,
+      controlToken,
+      setControlToken,
     }),
-    [api, baseUrl, isPolling, lastUpdated, refreshStatus, status, statusError]
+    [
+      api,
+      baseUrl,
+      controlToken,
+      isPolling,
+      lastUpdated,
+      refreshStatus,
+      setBaseUrl,
+      setControlToken,
+      status,
+      statusError,
+    ]
   );
 
   return (
