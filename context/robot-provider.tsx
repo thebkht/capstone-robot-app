@@ -73,7 +73,6 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
   const [controlToken, setControlTokenState] = useState<string | null>(null);
-  const [controlToken, setControlTokenState] = useState<string | null>(null);
 
   const api = useMemo(() => createRobotApi(baseUrl, undefined, controlToken), [baseUrl, controlToken]);
 
@@ -278,10 +277,8 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       refreshStatus,
       controlToken,
       setControlToken,
-      controlToken,
-      setControlToken,
     }),
-    [api, baseUrl, isPolling, lastUpdated, refreshStatus, status, statusError, controlToken, setControlToken]
+    [api, baseUrl, isPolling, lastUpdated, refreshStatus, status, statusError, setControlToken]
   );
 
   return (
