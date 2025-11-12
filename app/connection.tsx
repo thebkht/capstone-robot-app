@@ -872,12 +872,22 @@ export default function ConnectionScreen() {
       }
 
       if (!connectedUrl) {
-        const triedSummary =
-          candidatesToTry.length === 1
-            ? `Tried ${candidatesToTry[0]}.`
-            : `Tried ${candidatesToTry.length} addresses: ${candidatesToTry.join(", ")}.`;
+        const hiddenForSummary = new Set([
+          canonicalizeUrl("http://rovy.local:8000"),
+          canonicalizeUrl("http://192.168.4.1:8000"),
+        ]);
+        const visibleCandidates = candidatesToTry.filter(
+          (candidate) => !hiddenForSummary.has(candidate)
+        );
+        const triedSummary = visibleCandidates.length
+          ? visibleCandidates.length === 1
+            ? `Tried ${visibleCandidates[0]}.`
+            : `Tried ${visibleCandidates.length} addresses: ${visibleCandidates.join(", ")}.`
+          : null;
         setConnectRobotError(
-          `Unable to reach the robot automatically. Ensure you are on the same network and try again. ${triedSummary}`
+          `Unable to reach the robot automatically. Ensure you are on the same network and try again.${
+            triedSummary ? ` ${triedSummary}` : ""
+          }`
         );
       }
     } catch (error) {
