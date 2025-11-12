@@ -81,7 +81,7 @@ const extractUrlParts = (value: string | null | undefined) => {
 
 type RobotLanCandidateResult = {
   urls: string[];
-  ipPrefix: string | null;
+  isRobotHotspot: boolean;
 };
 
 const isLinkLocalIpv4 = (value: string | null | undefined) => {
@@ -127,6 +127,7 @@ const gatherRobotLanBaseUrlCandidates = (
   const baseParts = extractUrlParts(currentBaseUrl);
   const defaultParts = extractUrlParts(DEFAULT_ROBOT_BASE_URL);
   const statusParts = extractUrlParts(statusIp);
+  let isRobotHotspot = false;
 
   const resolveLanProtocol = () => {
     if (statusParts?.host && isValidIpv4(statusParts.host) && statusParts.protocol) {
@@ -199,7 +200,7 @@ const gatherRobotLanBaseUrlCandidates = (
     !isValidIpv4(deviceIpAddress) ||
     isLinkLocalIpv4(deviceIpAddress)
   ) {
-    return { urls, ipPrefix: null };
+    return { urls, isRobotHotspot };
   }
 
   const ipSegments = deviceIpAddress
@@ -208,44 +209,18 @@ const gatherRobotLanBaseUrlCandidates = (
     .filter((segment) => segment !== "");
 
   if (ipSegments.length !== 4) {
-    return { urls, ipPrefix: null };
+    return { urls, isRobotHotspot };
   }
 
   const isRobotHotspotSubnet =
     ipSegments[0] === "192" && ipSegments[1] === "168" && ipSegments[2] === "4";
 
   if (isRobotHotspotSubnet) {
+    isRobotHotspot = true;
     pushCandidate("192.168.4.1");
-    return { urls, ipPrefix: ipSegments.slice(0, 3).join(".") };
   }
 
-  const prefixSegments = ipSegments.slice(0, 3);
-  const ipPrefix = prefixSegments.join(".");
-
-  const preferredLastSegments = new Set<string>();
-  for (const host of hostCandidates) {
-    if (!host || !isValidIpv4(host)) {
-      continue;
-    }
-    const hostSegments = host.split(".").map((segment) => segment.trim());
-    if (hostSegments.length === 4) {
-      preferredLastSegments.add(hostSegments[3]);
-    }
-  }
-
-  for (const lastSegment of preferredLastSegments) {
-    pushCandidate(`${ipPrefix}.${lastSegment}`);
-  }
-
-  for (let lastSegment = 1; lastSegment <= 254; lastSegment += 1) {
-    const octet = String(lastSegment);
-    if (octet === ipSegments[3]) {
-      continue;
-    }
-    pushCandidate(`${ipPrefix}.${octet}`);
-  }
-
-  return { urls, ipPrefix };
+  return { urls, isRobotHotspot };
 };
 
 const deriveRobotLanBaseUrl = (
@@ -332,6 +307,8 @@ type WifiStatusMeta = {
   helper: string | null;
 };
 
+type AutoDiscoveryContext = "robot-hotspot" | null;
+
 export default function ConnectionScreen() {
   const router = useRouter();
   const { baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling, controlToken } =
@@ -363,7 +340,7 @@ export default function ConnectionScreen() {
   );
   const autoDiscoveryRef = useRef({
     running: false,
-    ipPrefix: null as string | null,
+    searchContext: null as AutoDiscoveryContext,
     triedUrls: new Set<string>(),
     foundUrl: null as string | null,
   });
@@ -576,7 +553,7 @@ export default function ConnectionScreen() {
     }
 
     autoDiscoveryRef.current.running = false;
-    autoDiscoveryRef.current.ipPrefix = null;
+    autoDiscoveryRef.current.searchContext = null;
     autoDiscoveryRef.current.triedUrls = new Set<string>();
     autoDiscoveryRef.current.foundUrl = null;
     setIsAutoDiscoveringRobot(false);
@@ -603,7 +580,7 @@ export default function ConnectionScreen() {
       return;
     }
 
-    const { urls: candidateUrls, ipPrefix } = gatherRobotLanBaseUrlCandidates(
+    const { urls: candidateUrls, isRobotHotspot } = gatherRobotLanBaseUrlCandidates(
       deviceNetwork.ipAddress,
       {
         currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
@@ -611,8 +588,12 @@ export default function ConnectionScreen() {
       }
     );
 
-    if (autoDiscoveryRef.current.ipPrefix !== ipPrefix) {
-      autoDiscoveryRef.current.ipPrefix = ipPrefix ?? null;
+    const nextContext: AutoDiscoveryContext = isRobotHotspot
+      ? "robot-hotspot"
+      : null;
+
+    if (autoDiscoveryRef.current.searchContext !== nextContext) {
+      autoDiscoveryRef.current.searchContext = nextContext;
       autoDiscoveryRef.current.triedUrls = new Set<string>();
       autoDiscoveryRef.current.foundUrl = null;
     }
@@ -626,7 +607,7 @@ export default function ConnectionScreen() {
       return;
     }
 
-    // Build candidate list: last URL → mDNS rovy.local → hotspot → subnet probe
+    // Build candidate list: last URL → mDNS rovy.local → hotspot → known defaults
     const allCandidates: string[] = [];
     if (normalizedBase) {
       allCandidates.push(normalizedBase);
@@ -654,8 +635,8 @@ export default function ConnectionScreen() {
     autoDiscoveryRef.current.running = true;
     setIsAutoDiscoveringRobot(true);
     setAutoDiscoveryHelper(
-      ipPrefix
-        ? `Searching for the robot on ${ipPrefix}.x...`
+      autoDiscoveryRef.current.searchContext === "robot-hotspot"
+        ? `Checking for the robot on the ${ROBOT_AP_SSID} hotspot...`
         : "Searching for the robot on the network..."
     );
 
@@ -811,13 +792,15 @@ export default function ConnectionScreen() {
     setConnectRobotSuccess(null);
 
     const normalizedBase = canonicalizeUrl(baseUrl || DEFAULT_ROBOT_BASE_URL);
-    const { urls: autoDiscoveryCandidates, ipPrefix } =
+    const { urls: autoDiscoveryCandidates, isRobotHotspot } =
       gatherRobotLanBaseUrlCandidates(deviceNetwork?.ipAddress ?? null, {
         currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
         statusIp: status?.network?.ip,
       });
 
-    autoDiscoveryRef.current.ipPrefix = ipPrefix ?? null;
+    autoDiscoveryRef.current.searchContext = isRobotHotspot
+      ? "robot-hotspot"
+      : null;
 
     const seenCandidates = new Set<string>();
     const candidatesToTry: string[] = [];
@@ -833,7 +816,7 @@ export default function ConnectionScreen() {
       candidatesToTry.push(normalized);
     };
 
-    // Connection order: Last URL → mDNS rovy.local → hotspot → subnet probe
+    // Connection order: Last URL → mDNS rovy.local → hotspot → known defaults
     // 1. Try last URL first (from storage)
     registerCandidate(normalizedBase);
 
@@ -845,7 +828,7 @@ export default function ConnectionScreen() {
     const hotspotUrl = "http://192.168.4.1:8000";
     registerCandidate(hotspotUrl);
 
-    // 4. Add default and subnet probe candidates
+    // 4. Add default candidates
     registerCandidate(canonicalizeUrl(DEFAULT_ROBOT_BASE_URL));
     autoDiscoveryCandidates.forEach(registerCandidate);
 
