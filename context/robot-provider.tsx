@@ -9,13 +9,13 @@ import React, {
   useState,
 } from "react";
 
+import { CONTROL_TOKEN_STORAGE_KEY } from "@/app/pairing";
 import {
   RobotAPI,
   RobotNetworkInfo,
   RobotStatus,
   createRobotApi,
 } from "@/services/robot-api";
-import { CONTROL_TOKEN_STORAGE_KEY } from "@/app/pairing";
 
 const isIpv4Address = (value: string | null | undefined) => {
   if (!value) {
@@ -63,6 +63,7 @@ interface RobotContextValue {
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
 export const ROBOT_BASE_URL_STORAGE_KEY = "robot_base_url";
+export const ROBOT_CONTROL_TOKEN_STORAGE_KEY = "robot_control_token";
 export const DEFAULT_ROBOT_BASE_URL = "https://tegra-ubuntu.tail535f32.ts.net";
 
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
@@ -71,6 +72,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
+  const [controlToken, setControlTokenState] = useState<string | null>(null);
   const [controlToken, setControlTokenState] = useState<string | null>(null);
 
   const api = useMemo(() => createRobotApi(baseUrl, undefined, controlToken), [baseUrl, controlToken]);
@@ -171,6 +173,12 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
           console.log("Loaded stored robot base URL", storedUrl);
           setBaseUrlState(storedUrl);
         }
+        const storedToken = await AsyncStorage.getItem(
+          ROBOT_CONTROL_TOKEN_STORAGE_KEY
+        );
+        if (storedToken && isMounted) {
+          setControlTokenState(storedToken);
+        }
       } catch (error) {
         console.warn("Failed to load stored robot base URL", error);
       }
@@ -268,6 +276,8 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       isPolling,
       setIsPolling,
       refreshStatus,
+      controlToken,
+      setControlToken,
       controlToken,
       setControlToken,
     }),

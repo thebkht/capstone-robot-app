@@ -1,6 +1,10 @@
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-export type RobotConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type RobotConnectionState =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "error";
 
 export interface WifiCredentials {
   ssid: string;
@@ -93,16 +97,18 @@ export class RobotAPI {
   private fetchImpl: typeof fetch;
   private timeout: number;
   private controlToken: string | null;
+  private controlToken: string | null;
 
   constructor(options: RobotApiOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/$/, '');
+    this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeout = options.timeout ?? 5000;
+    this.controlToken = options.controlToken ?? null;
     this.controlToken = options.controlToken ?? null;
   }
 
   public updateBaseUrl(baseUrl: string) {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.baseUrl = baseUrl.replace(/\/$/, "");
   }
 
   public setControlToken(token: string | null) {
@@ -121,27 +127,33 @@ export class RobotAPI {
     return `${this.baseUrl}/camera/snapshot`;
   }
 
-  private async request<T>(path: string, method: HttpMethod = 'GET', body?: unknown, requireAuth: boolean = false): Promise<T> {
+  private async request<T>(
+    path: string,
+    method: HttpMethod = "GET",
+    body?: unknown,
+    requireAuth: boolean = false
+  ): Promise<T> {
     if (!this.baseUrl) {
-      throw new Error('Robot base URL is not configured.');
+      throw new Error("Robot base URL is not configured.");
     }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
+      "Content-Type": "application/json",
+      Accept: "application/json",
     };
 
     // Add control token header for protected calls
     if (requireAuth && this.controlToken) {
-      headers['x-control-token'] = this.controlToken;
+      headers["x-control-token"] = this.controlToken;
     }
 
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method,
+        headers,
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
@@ -158,15 +170,15 @@ export class RobotAPI {
         return {} as T;
       }
 
-      const contentType = response.headers.get('content-type');
-      if (contentType?.includes('application/json')) {
+      const contentType = response.headers.get("content-type");
+      if (contentType?.includes("application/json")) {
         return (await response.json()) as T;
       }
 
       return (await response.text()) as unknown as T;
     } catch (error) {
       clearTimeout(timeoutId);
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (error instanceof Error && error.name === "AbortError") {
         throw new Error(`Network request timed out after ${this.timeout}ms`);
       }
       throw error;
@@ -174,59 +186,76 @@ export class RobotAPI {
   }
 
   public async ping(): Promise<RobotHealth> {
-    return this.request<RobotHealth>('/health');
+    return this.request<RobotHealth>("/health");
   }
 
   public async fetchHealth(): Promise<RobotHealth> {
-    return this.request<RobotHealth>('/health');
+    return this.request<RobotHealth>("/health");
   }
 
   public async fetchNetworkInfo(): Promise<RobotNetworkInfo> {
-    return this.request<RobotNetworkInfo>('/network-info');
+    return this.request<RobotNetworkInfo>("/network-info");
   }
 
   public async fetchTelemetry(): Promise<RobotTelemetry> {
-    return this.request<RobotTelemetry>('/status');
+    return this.request<RobotTelemetry>("/status");
   }
 
   public async fetchMode(): Promise<RobotModeState> {
-    return this.request<RobotModeState>('/mode');
+    return this.request<RobotModeState>("/mode");
   }
 
-  public async connectWifi(credentials: WifiCredentials): Promise<{ success: boolean }>
-  public async connectWifi(credentials: WifiCredentials, options?: { force: boolean }): Promise<{ success: boolean }>
-  public async connectWifi(credentials: WifiCredentials, _options?: { force: boolean }) {
-    return this.request<{ success: boolean }>('/wifi/connect', 'POST', credentials);
+  public async connectWifi(
+    credentials: WifiCredentials
+  ): Promise<{ success: boolean }>;
+  public async connectWifi(
+    credentials: WifiCredentials,
+    options?: { force: boolean }
+  ): Promise<{ success: boolean }>;
+  public async connectWifi(
+    credentials: WifiCredentials,
+    _options?: { force: boolean }
+  ) {
+    return this.request<{ success: boolean }>(
+      "/wifi/connect",
+      "POST",
+      credentials
+    );
   }
 
   public async capturePhoto(): Promise<CameraCaptureMetadata> {
-    return this.request<CameraCaptureMetadata>('/camera/capture', 'POST');
+    return this.request<CameraCaptureMetadata>("/camera/capture", "POST");
   }
 
   public async listWifiNetworks(): Promise<WifiScanResponse> {
-    return this.request<WifiScanResponse>('/wifi/networks');
+    return this.request<WifiScanResponse>("/wifi/networks");
   }
 
   public async requestClaim(): Promise<ClaimRequestResponse> {
-    return this.request<ClaimRequestResponse>('/claim/request', 'POST');
+    return this.request<ClaimRequestResponse>("/claim/request", "POST");
   }
 
   public async confirmClaim(pin: string): Promise<ClaimConfirmResponse> {
-    return this.request<ClaimConfirmResponse>('/claim/confirm', 'POST', { pin });
+    return this.request<ClaimConfirmResponse>("/claim/confirm", "POST", {
+      pin,
+    });
   }
 
   public async move(payload: { linear: number; angular: number }) {
-    return this.request('/control/move', 'POST', payload, true);
+    return this.request("/control/move", "POST", payload, true);
   }
 
   public async stop() {
-    return this.request('/control/stop', 'POST', undefined, true);
+    return this.request("/control/stop", "POST", undefined, true);
   }
 
   public async moveHead(payload: { pan: number; tilt: number }) {
-    return this.request('/control/head', 'POST', payload, true);
+    return this.request("/control/head", "POST", payload, true);
   }
 }
 
-export const createRobotApi = (baseUrl: string, timeout?: number, controlToken?: string | null) => 
-  new RobotAPI({ baseUrl, timeout, controlToken });
+export const createRobotApi = (
+  baseUrl: string,
+  timeout?: number,
+  controlToken?: string | null
+) => new RobotAPI({ baseUrl, timeout, controlToken });

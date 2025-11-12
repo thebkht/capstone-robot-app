@@ -1,11 +1,15 @@
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useFonts } from 'expo-font';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import {
+  JetBrainsMono_400Regular,
+  JetBrainsMono_600SemiBold,
+} from '@expo-google-fonts/jetbrains-mono';
 import {
   Lato_100Thin,
   Lato_100Thin_Italic,
@@ -18,10 +22,6 @@ import {
   Lato_900Black,
   Lato_900Black_Italic,
 } from '@expo-google-fonts/lato';
-import {
-  JetBrainsMono_400Regular,
-  JetBrainsMono_600SemiBold,
-} from '@expo-google-fonts/jetbrains-mono';
 import {
   Lora_400Regular,
   Lora_500Medium,
