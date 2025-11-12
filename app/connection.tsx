@@ -816,19 +816,10 @@ export default function ConnectionScreen() {
       candidatesToTry.push(normalized);
     };
 
-    // Connection order: Last URL → mDNS rovy.local → hotspot → known defaults
+    // Connection order: Last URL → known defaults → auto-discovered IPs
     // 1. Try last URL first (from storage)
     registerCandidate(normalizedBase);
-
-    // 2. Try mDNS rovy.local
-    const rovyLocalUrl = "http://rovy.local:8000";
-    registerCandidate(rovyLocalUrl);
-
-    // 3. Try hotspot (192.168.4.1)
-    const hotspotUrl = "http://192.168.4.1:8000";
-    registerCandidate(hotspotUrl);
-
-    // 4. Add default candidates
+    // 2. Add default candidates
     registerCandidate(canonicalizeUrl(DEFAULT_ROBOT_BASE_URL));
     autoDiscoveryCandidates.forEach(registerCandidate);
 
