@@ -863,11 +863,31 @@ export default function ConnectionScreen() {
           setBaseUrl(candidate);
         }
 
-        setConnectRobotSuccess(
-          `Robot responded successfully at ${candidate}. Connection details refreshed.`
-        );
+        console.log("Robot responded during auto-discovery", {
+          candidate,
+        });
 
-        await refreshStatus();
+        try {
+          console.log("Refreshing robot status after successful probe", {
+            candidate,
+          });
+          await refreshStatus();
+          console.log("Robot status refresh completed", { candidate });
+          setConnectRobotSuccess(
+            `Robot responded successfully at ${candidate}. Connection details refreshed.`
+          );
+        } catch (refreshError) {
+          console.warn("Failed to refresh status after successful probe", {
+            candidate,
+            error: refreshError,
+          });
+          setConnectRobotError(
+            refreshError instanceof Error
+              ? refreshError.message
+              : "Robot responded but status refresh failed. Try again."
+          );
+        }
+
         break;
       }
 
@@ -910,27 +930,28 @@ export default function ConnectionScreen() {
 
   useEffect(() => {
     if (connectRobotSuccess) {
-      // After successful connection, check if we need to pair
-      if (!controlToken) {
-        // First time connection - redirect to pairing
-        router.replace("/pairing");
-      } else {
-        // Already paired - go to main app
-        router.replace("/");
-      }
+      const hasToken = Boolean(controlToken);
+      const target = hasToken ? "/" : "/pairing";
+      console.log("Navigating after robot connection success", {
+        connectRobotSuccess,
+        hasToken,
+        target,
+      });
+      router.replace(target);
     }
   }, [connectRobotSuccess, router, controlToken]);
 
   useEffect(() => {
     if (status?.network?.ip) {
       // When robot status is available, check if we need to pair
-      if (!controlToken) {
-        // First time connection - redirect to pairing
-        router.replace("/pairing");
-      } else {
-        // Already paired - go to main app
-        router.replace("/");
-      }
+      const hasToken = Boolean(controlToken);
+      const target = hasToken ? "/" : "/pairing";
+      console.log("Navigating based on robot status", {
+        statusIp: status.network?.ip,
+        hasToken,
+        target,
+      });
+      router.replace(target);
     }
   }, [router, status?.network?.ip, controlToken]);
 
