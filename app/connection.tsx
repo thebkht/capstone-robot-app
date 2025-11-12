@@ -628,8 +628,8 @@ export default function ConnectionScreen() {
         const resolvedIp = selectPreferredIpv4([
           normalizedIp,
           netInfoState?.type === "wifi" &&
-          netInfoState.details &&
-          "ipAddress" in netInfoState.details
+            netInfoState.details &&
+            "ipAddress" in netInfoState.details
             ? (netInfoState.details.ipAddress as string)
             : null,
         ]);
@@ -825,7 +825,7 @@ export default function ConnectionScreen() {
 
     const derivedUrl = deriveRobotLanBaseUrl(deviceNetwork.ipAddress, {
       currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
-      statusIp: status.network.ip,
+      statusIp: status?.network?.ip,
     });
 
     if (!derivedUrl) {
@@ -845,6 +845,28 @@ export default function ConnectionScreen() {
     setBaseUrl,
     status?.network?.ip,
   ]);
+
+  useEffect(() => {
+    if (!status?.network?.ip) {
+      return;
+    }
+
+    const nextUrl = deriveRobotLanBaseUrl(deviceNetwork?.ipAddress, {
+      currentBaseUrl: baseUrl || DEFAULT_ROBOT_BASE_URL,
+      statusIp: status.network.ip,
+    });
+
+    if (!nextUrl) {
+      return;
+    }
+
+    const normalizedNext = canonicalizeUrl(nextUrl);
+    const normalizedBase = baseUrl ? canonicalizeUrl(baseUrl) : "";
+
+    if (normalizedNext !== normalizedBase) {
+      setBaseUrl(normalizedNext);
+    }
+  }, [baseUrl, deviceNetwork?.ipAddress, setBaseUrl, status?.network?.ip]);
 
   useEffect(() => {
     if (deviceNetwork?.isWifi) {
@@ -1056,10 +1078,10 @@ export default function ConnectionScreen() {
       label: "Unknown",
       details: [
         deviceNetworkError ??
-          (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ??
-          "Network name unavailable",
+        (statusNetwork?.wifiSsid && statusNetwork.wifiSsid.trim()) ??
+        "Network name unavailable",
         (statusNetwork?.ip && statusNetwork.ip.trim()) ||
-          "IP address unavailable",
+        "IP address unavailable",
       ],
       helper: deviceNetworkError
         ? null
