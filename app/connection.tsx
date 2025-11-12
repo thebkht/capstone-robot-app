@@ -334,7 +334,7 @@ type WifiStatusMeta = {
 
 export default function ConnectionScreen() {
   const router = useRouter();
-  const { baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling } =
+  const { baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling, controlToken } =
     useRobot();
   const mountedRef = useRef(true);
   const [deviceNetwork, setDeviceNetwork] =
@@ -617,11 +617,20 @@ export default function ConnectionScreen() {
       return;
     }
 
-    if (!candidateUrls.length || autoDiscoveryRef.current.running) {
+    // Build candidate list: last URL → mDNS rovy.local → hotspot → subnet probe
+    const allCandidates: string[] = [];
+    if (normalizedBase) {
+      allCandidates.push(normalizedBase);
+    }
+    allCandidates.push("http://rovy.local:8000");
+    allCandidates.push("http://192.168.4.1:8000");
+    allCandidates.push(...candidateUrls);
+
+    if (!allCandidates.length || autoDiscoveryRef.current.running) {
       return;
     }
 
-    const untriedCandidates = candidateUrls.filter((candidate) => {
+    const untriedCandidates = allCandidates.filter((candidate) => {
       const normalized = canonicalizeUrl(candidate);
       return (
         normalized !== normalizedBase &&
@@ -815,8 +824,20 @@ export default function ConnectionScreen() {
       candidatesToTry.push(normalized);
     };
 
-    registerCandidate(canonicalizeUrl(DEFAULT_ROBOT_BASE_URL));
+    // Connection order: Last URL → mDNS rovy.local → hotspot → subnet probe
+    // 1. Try last URL first (from storage)
     registerCandidate(normalizedBase);
+    
+    // 2. Try mDNS rovy.local
+    const rovyLocalUrl = "http://rovy.local:8000";
+    registerCandidate(rovyLocalUrl);
+    
+    // 3. Try hotspot (192.168.4.1)
+    const hotspotUrl = "http://192.168.4.1:8000";
+    registerCandidate(hotspotUrl);
+    
+    // 4. Add default and subnet probe candidates
+    registerCandidate(canonicalizeUrl(DEFAULT_ROBOT_BASE_URL));
     autoDiscoveryCandidates.forEach(registerCandidate);
 
     if (!candidatesToTry.length) {
@@ -887,15 +908,29 @@ export default function ConnectionScreen() {
 
   useEffect(() => {
     if (connectRobotSuccess) {
-      router.replace("/");
+      // After successful connection, check if we need to pair
+      if (!controlToken) {
+        // First time connection - redirect to pairing
+        router.replace("/pairing");
+      } else {
+        // Already paired - go to main app
+        router.replace("/");
+      }
     }
-  }, [connectRobotSuccess, router]);
+  }, [connectRobotSuccess, router, controlToken]);
 
   useEffect(() => {
     if (status?.network?.ip) {
-      router.replace("/");
+      // When robot status is available, check if we need to pair
+      if (!controlToken) {
+        // First time connection - redirect to pairing
+        router.replace("/pairing");
+      } else {
+        // Already paired - go to main app
+        router.replace("/");
+      }
     }
-  }, [router, status?.network?.ip]);
+  }, [router, status?.network?.ip, controlToken]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
@@ -1005,6 +1040,14 @@ export default function ConnectionScreen() {
                 Connect Robot
               </ThemedText>
             )}
+          </Pressable>
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={() => router.push("/pairing")}
+          >
+            <ThemedText style={styles.secondaryButtonText}>
+              Pair Robot
+            </ThemedText>
           </Pressable>
         </ThemedView>
       </ScrollView>

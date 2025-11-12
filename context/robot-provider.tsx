@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import React, {
   createContext,
   useCallback,
@@ -14,6 +15,7 @@ import {
   RobotStatus,
   createRobotApi,
 } from "@/services/robot-api";
+import { CONTROL_TOKEN_STORAGE_KEY } from "@/app/pairing";
 
 const isIpv4Address = (value: string | null | undefined) => {
   if (!value) {
@@ -54,6 +56,8 @@ interface RobotContextValue {
   isPolling: boolean;
   setIsPolling: (value: boolean) => void;
   refreshStatus: () => Promise<void>;
+  controlToken: string | null;
+  setControlToken: (token: string | null) => Promise<void>;
 }
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
@@ -67,8 +71,9 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
+  const [controlToken, setControlTokenState] = useState<string | null>(null);
 
-  const api = useMemo(() => createRobotApi(baseUrl), [baseUrl]);
+  const api = useMemo(() => createRobotApi(baseUrl, undefined, controlToken), [baseUrl, controlToken]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -169,6 +174,24 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       } catch (error) {
         console.warn("Failed to load stored robot base URL", error);
       }
+
+      try {
+        // Check if SecureStore is available (it may not be on web or in some dev environments)
+        if (SecureStore.isAvailableAsync && !(await SecureStore.isAvailableAsync())) {
+          console.warn("SecureStore is not available on this platform");
+        } else {
+          const storedToken = await SecureStore.getItemAsync(
+            CONTROL_TOKEN_STORAGE_KEY
+          );
+          if (storedToken && isMounted) {
+            console.log("Loaded stored control token");
+            setControlTokenState(storedToken);
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to load stored control token", error);
+        // Don't crash the app if SecureStore fails - it might not be available in dev mode
+      }
     })();
 
     return () => {
@@ -210,6 +233,30 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     [api, baseUrl]
   );
 
+  const setControlToken = useCallback(
+    async (token: string | null) => {
+      console.log("Updating control token", { hasToken: Boolean(token) });
+      api.setControlToken(token);
+      setControlTokenState(token);
+      try {
+        // Check if SecureStore is available
+        if (SecureStore.isAvailableAsync && !(await SecureStore.isAvailableAsync())) {
+          console.warn("SecureStore is not available, token will not persist");
+          return;
+        }
+        if (token) {
+          await SecureStore.setItemAsync(CONTROL_TOKEN_STORAGE_KEY, token);
+        } else {
+          await SecureStore.deleteItemAsync(CONTROL_TOKEN_STORAGE_KEY);
+        }
+      } catch (error) {
+        console.warn("Failed to persist control token", error);
+        // Don't throw - token is still set in memory even if storage fails
+      }
+    },
+    [api]
+  );
+
   const value = useMemo(
     () => ({
       api,
@@ -221,8 +268,10 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       isPolling,
       setIsPolling,
       refreshStatus,
+      controlToken,
+      setControlToken,
     }),
-    [api, baseUrl, isPolling, lastUpdated, refreshStatus, status, statusError]
+    [api, baseUrl, isPolling, lastUpdated, refreshStatus, status, statusError, controlToken, setControlToken]
   );
 
   return (

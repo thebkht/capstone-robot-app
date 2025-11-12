@@ -70,25 +70,47 @@ export interface WifiScanResponse {
   networks: string[];
 }
 
+export interface ClaimRequestResponse {
+  success?: boolean;
+  [key: string]: unknown;
+}
+
+export interface ClaimConfirmResponse {
+  success?: boolean;
+  controlToken?: string;
+  [key: string]: unknown;
+}
+
 export interface RobotApiOptions {
   baseUrl: string;
   fetchImpl?: typeof fetch;
   timeout?: number; // Timeout in milliseconds, default 5000
+  controlToken?: string | null; // Optional control token for authenticated requests
 }
 
 export class RobotAPI {
   private baseUrl: string;
   private fetchImpl: typeof fetch;
   private timeout: number;
+  private controlToken: string | null;
 
   constructor(options: RobotApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeout = options.timeout ?? 5000;
+    this.controlToken = options.controlToken ?? null;
   }
 
   public updateBaseUrl(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
+  }
+
+  public setControlToken(token: string | null) {
+    this.controlToken = token;
+  }
+
+  public getControlToken(): string | null {
+    return this.controlToken;
   }
 
   public get streamUrl() {
@@ -99,7 +121,7 @@ export class RobotAPI {
     return `${this.baseUrl}/camera/snapshot`;
   }
 
-  private async request<T>(path: string, method: HttpMethod = 'GET', body?: unknown): Promise<T> {
+  private async request<T>(path: string, method: HttpMethod = 'GET', body?: unknown, requireAuth: boolean = false): Promise<T> {
     if (!this.baseUrl) {
       throw new Error('Robot base URL is not configured.');
     }
@@ -107,13 +129,20 @@ export class RobotAPI {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+
+    // Add control token header for protected calls
+    if (requireAuth && this.controlToken) {
+      headers['x-control-token'] = this.controlToken;
+    }
+
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
@@ -178,17 +207,26 @@ export class RobotAPI {
     return this.request<WifiScanResponse>('/wifi/networks');
   }
 
+  public async requestClaim(): Promise<ClaimRequestResponse> {
+    return this.request<ClaimRequestResponse>('/claim/request', 'POST');
+  }
+
+  public async confirmClaim(pin: string): Promise<ClaimConfirmResponse> {
+    return this.request<ClaimConfirmResponse>('/claim/confirm', 'POST', { pin });
+  }
+
   public async move(payload: { linear: number; angular: number }) {
-    return this.request('/control/move', 'POST', payload);
+    return this.request('/control/move', 'POST', payload, true);
   }
 
   public async stop() {
-    return this.request('/control/stop', 'POST');
+    return this.request('/control/stop', 'POST', undefined, true);
   }
 
   public async moveHead(payload: { pan: number; tilt: number }) {
-    return this.request('/control/head', 'POST', payload);
+    return this.request('/control/head', 'POST', payload, true);
   }
 }
 
-export const createRobotApi = (baseUrl: string, timeout?: number) => new RobotAPI({ baseUrl, timeout });
+export const createRobotApi = (baseUrl: string, timeout?: number, controlToken?: string | null) => 
+  new RobotAPI({ baseUrl, timeout, controlToken });
