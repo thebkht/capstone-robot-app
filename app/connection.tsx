@@ -36,6 +36,14 @@ import {
 import { connectNearbyRobotsSocket } from "@/services/robot-directory";
 import type { CloudRobot, NearbyRobotSummary } from "@/types/cloud";
 
+type WifiManagerNativeModule = {
+  getCurrentWifiSSID?: () => Promise<string>;
+};
+
+const wifiManagerModule =
+  (WifiManager as unknown as WifiManagerNativeModule | null | undefined) ??
+  null;
+
 const ROBOT_AP_SSID = "Elara_AP";
 
 const TITLE_FONT_FAMILY = SerifFonts.bold;
@@ -563,17 +571,31 @@ export default function ConnectionScreen() {
                   permissionWarning =
                     "Grant location permission to display the Wi-Fi network name.";
                 } else {
-                  const wifiManagerSsid =
-                    await WifiManager.getCurrentWifiSSID();
-                  if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
-                    ssid = wifiManagerSsid;
+                  const wifiManagerGetCurrentSsid =
+                    wifiManagerModule?.getCurrentWifiSSID;
+                  if (typeof wifiManagerGetCurrentSsid === "function") {
+                    const wifiManagerSsid =
+                      await wifiManagerGetCurrentSsid();
+                    if (
+                      wifiManagerSsid &&
+                      wifiManagerSsid !== "<unknown ssid>"
+                    ) {
+                      ssid = wifiManagerSsid;
+                    }
                   }
                 }
               }
             } else {
-              const wifiManagerSsid = await WifiManager.getCurrentWifiSSID();
-              if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
-                ssid = wifiManagerSsid;
+              const wifiManagerGetCurrentSsid =
+                wifiManagerModule?.getCurrentWifiSSID;
+              if (typeof wifiManagerGetCurrentSsid === "function") {
+                const wifiManagerSsid = await wifiManagerGetCurrentSsid();
+                if (wifiManagerSsid && wifiManagerSsid !== "<unknown ssid>") {
+                  ssid = wifiManagerSsid;
+                } else if (Platform.OS === "ios") {
+                  permissionWarning =
+                    "iOS may hide the Wi-Fi network name without additional entitlements.";
+                }
               } else if (Platform.OS === "ios") {
                 permissionWarning =
                   "iOS may hide the Wi-Fi network name without additional entitlements.";
