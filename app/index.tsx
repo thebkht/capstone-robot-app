@@ -16,5 +16,5 @@ export default function Index() {
   }
 
   // Connected and paired - go to main app
-  return <Redirect href="/(tabs)/camera" />;
+  return <Redirect href="/(tabs)/home" />;
 }

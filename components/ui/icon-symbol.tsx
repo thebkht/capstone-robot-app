@@ -18,6 +18,16 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'camera.on.rectangle': 'camera',
+  gauge: 'speed',
+  gearshape: 'settings',
+  'battery.75': 'battery-std',
+  'antenna.radiowaves.left.and.right': 'rss-feed',
+  'bolt.fill': 'bolt',
+  sparkles: 'auto-awesome',
+  wifi: 'wifi',
+  'car.fill': 'directions-car',
+  'checkmark.circle.fill': 'check-circle',
 } as IconMapping;
 
 /**

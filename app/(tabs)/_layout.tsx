@@ -30,10 +30,10 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
       }}>
       <Tabs.Screen
-        name="camera"
+        name="home"
         options={{
-          title: 'Camera',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="camera.on.rectangle" color={color} />,
+          title: 'Home',
+          tabBarIcon: ({ color }) => <IconSymbol size={26} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
