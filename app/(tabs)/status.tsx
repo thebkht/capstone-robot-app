@@ -50,7 +50,7 @@ const memoryData = {
 
 export default function MemoryScreen() {
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <ThemedView style={styles.container}>
           <ThemedText type="title">Memory</ThemedText>
@@ -114,9 +114,10 @@ const styles = StyleSheet.create({
   card: {
     gap: 12,
     padding: 16,
-    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 0,
+    borderColor: '#1F2937',
+    backgroundColor: '#0F0F10',
   },
   rowBetween: {
     flexDirection: 'row',
