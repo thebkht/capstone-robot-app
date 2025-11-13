@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#111827',
-    borderRadius: 999,
+    borderRadius: 0,
     paddingVertical: 6,
     paddingHorizontal: 16,
   },
@@ -243,12 +243,12 @@ const styles = StyleSheet.create({
   headerDot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
+    borderRadius: 0,
     backgroundColor: '#374151',
   },
   robotCard: {
     backgroundColor: '#0B0B0B',
-    borderRadius: 28,
+    borderRadius: 0,
     padding: 24,
     overflow: 'hidden',
     borderWidth: 1,
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     right: -30,
     width: 160,
     height: 160,
-    borderRadius: 80,
+    borderRadius: 0,
     backgroundColor: 'rgba(59, 130, 246, 0.25)',
     shadowColor: '#60A5FA',
     shadowOffset: { width: 0, height: 0 },
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   robotBody: {
     width: 120,
     height: 120,
-    borderRadius: 30,
+    borderRadius: 0,
     backgroundColor: '#111827',
     alignItems: 'center',
     justifyContent: 'center',
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 0,
     backgroundColor: '#0B0F19',
     padding: 16,
     gap: 6,
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
   statIconWrapper: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 0,
     backgroundColor: '#111827',
     alignItems: 'center',
     justifyContent: 'center',
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderRadius: 16,
+    borderRadius: 0,
     paddingVertical: 14,
     backgroundColor: '#0B0F19',
     borderWidth: 1,
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   behaviorCard: {
-    borderRadius: 20,
+    borderRadius: 0,
     backgroundColor: '#0B0F19',
     padding: 16,
     borderWidth: 1,
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
   behaviorBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: 0,
     backgroundColor: '#111827',
   },
   behaviorBadgeText: {
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: 0,
     backgroundColor: '#0F172A',
   },
   behaviorStatusText: {
