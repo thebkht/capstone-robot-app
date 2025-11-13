@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -76,45 +77,32 @@ export default function HomeScreen() {
       icon: 'antenna.radiowaves.left.and.right' as const,
       iconColor: '#60A5FA',
     },
-    {
-      id: 'mode',
-      label: 'Mode',
-      value: isAgentic ? 'Agentic' : 'Manual',
-      caption: isAgentic ? 'Autonomy engaged' : 'Awaiting commands',
-      icon: isAgentic ? ('sparkles' as const) : ('bolt.fill' as const),
-      iconColor: '#F472B6',
-    },
   ];
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ThemedView style={styles.screen}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.headerRow}>
             <View>
-              <ThemedText type="subtitle" style={styles.missionLabel}>
+              <ThemedText type="title" style={styles.missionLabel}>
                 Mars
               </ThemedText>
-              <ThemedText style={styles.missionSubtitle}>Expedition Rover</ThemedText>
+              <View style={styles.headerStatus}>
+                <IconSymbol name="battery.75" color="#34D399" size={20} />
+                <ThemedText style={styles.headerStatusText}>{batteryLabel}</ThemedText>
+                <View style={styles.headerDot} />
+                <ThemedText style={styles.headerStatusMeta}>{healthLabel}</ThemedText>
+              </View>
             </View>
-            <View style={styles.headerStatus}>
-              <IconSymbol name="battery.75" color="#34D399" size={20} />
-              <ThemedText style={styles.headerStatusText}>{batteryLabel}</ThemedText>
-              <View style={styles.headerDot} />
-              <ThemedText style={styles.headerStatusMeta}>{healthLabel}</ThemedText>
-            </View>
+
           </View>
 
-          <View style={styles.robotCard}>
-            <View style={styles.robotGlow} />
-            <View style={styles.robotBody}>
-              <IconSymbol name="car.fill" color="#F4F4F5" size={52} />
-            </View>
-            <View style={styles.robotCopy}>
-              <ThemedText style={styles.robotTitle}>Mission ready</ThemedText>
-              <ThemedText style={styles.robotCaption}>All systems nominal</ThemedText>
-            </View>
-          </View>
+          <Image
+            source={require('@/assets/images/rovy.png')}
+            style={styles.robotImage}
+            contentFit="cover"
+          />
 
           <View style={styles.statGrid}>
             {stats.map((stat) => (
@@ -227,10 +215,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#111827',
-    borderRadius: 999,
     paddingVertical: 6,
-    paddingHorizontal: 16,
   },
   headerStatusText: {
     fontFamily: 'JetBrainsMono_600SemiBold',
@@ -243,49 +228,11 @@ const styles = StyleSheet.create({
   headerDot: {
     width: 4,
     height: 4,
-    borderRadius: 2,
     backgroundColor: '#374151',
   },
-  robotCard: {
-    backgroundColor: '#0B0B0B',
-    borderRadius: 28,
-    padding: 24,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#1F2937',
-  },
-  robotGlow: {
-    position: 'absolute',
-    top: -30,
-    right: -30,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(59, 130, 246, 0.25)',
-    shadowColor: '#60A5FA',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 40,
-  },
-  robotBody: {
-    width: 120,
-    height: 120,
-    borderRadius: 30,
-    backgroundColor: '#111827',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  robotCopy: {
-    gap: 4,
-  },
-  robotTitle: {
-    fontFamily: 'JetBrainsMono_600SemiBold',
-    fontSize: 18,
-    color: '#F9FAFB',
-  },
-  robotCaption: {
-    color: '#9CA3AF',
+  robotImage: {
+    width: '100%',
+    aspectRatio: 4 / 3,
   },
   statGrid: {
     flexDirection: 'row',
@@ -293,8 +240,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    borderRadius: 20,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#0F0F10',
     padding: 16,
     gap: 6,
     borderWidth: 1,
@@ -303,7 +249,6 @@ const styles = StyleSheet.create({
   statIconWrapper: {
     width: 32,
     height: 32,
-    borderRadius: 16,
     backgroundColor: '#111827',
     alignItems: 'center',
     justifyContent: 'center',
@@ -331,9 +276,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderRadius: 16,
     paddingVertical: 14,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#0F0F10',
     borderWidth: 1,
     borderColor: '#1F2937',
   },
@@ -363,8 +307,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   behaviorCard: {
-    borderRadius: 20,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#0F0F10',
     padding: 16,
     borderWidth: 1,
     borderColor: '#111827',
@@ -388,7 +331,6 @@ const styles = StyleSheet.create({
   behaviorBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
     backgroundColor: '#111827',
   },
   behaviorBadgeText: {
@@ -402,7 +344,6 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
     backgroundColor: '#0F172A',
   },
   behaviorStatusText: {
