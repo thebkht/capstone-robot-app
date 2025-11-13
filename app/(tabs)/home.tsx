@@ -86,7 +86,7 @@ export default function HomeScreen() {
           <View style={styles.headerRow}>
             <View>
               <ThemedText type="title" style={styles.missionLabel}>
-                Mars
+                ROVY
               </ThemedText>
               <View style={styles.headerStatus}>
                 <IconSymbol name="battery.75" color="#34D399" size={20} />
