@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -86,115 +87,121 @@ export default function HomeScreen() {
   ];
 
   return (
-    <ThemedView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.headerRow}>
-          <View>
-            <ThemedText type="subtitle" style={styles.missionLabel}>
-              Mars
-            </ThemedText>
-            <ThemedText style={styles.missionSubtitle}>Expedition Rover</ThemedText>
-          </View>
-          <View style={styles.headerStatus}>
-            <IconSymbol name="battery.75" color="#34D399" size={20} />
-            <ThemedText style={styles.headerStatusText}>{batteryLabel}</ThemedText>
-            <View style={styles.headerDot} />
-            <ThemedText style={styles.headerStatusMeta}>{healthLabel}</ThemedText>
-          </View>
-        </View>
-
-        <View style={styles.robotCard}>
-          <View style={styles.robotGlow} />
-          <View style={styles.robotBody}>
-            <IconSymbol name="car.fill" color="#F4F4F5" size={52} />
-          </View>
-          <View style={styles.robotCopy}>
-            <ThemedText style={styles.robotTitle}>Mission ready</ThemedText>
-            <ThemedText style={styles.robotCaption}>All systems nominal</ThemedText>
-          </View>
-        </View>
-
-        <View style={styles.statGrid}>
-          {stats.map((stat) => (
-            <View key={stat.id} style={styles.statCard}>
-              <View style={styles.statIconWrapper}>
-                <IconSymbol name={stat.icon} size={18} color={stat.iconColor} />
-              </View>
-              <ThemedText style={styles.statLabel}>{stat.label}</ThemedText>
-              <ThemedText style={styles.statValue}>{stat.value}</ThemedText>
-              <ThemedText style={styles.statCaption}>{stat.caption}</ThemedText>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <ThemedView style={styles.screen}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerRow}>
+            <View>
+              <ThemedText type="subtitle" style={styles.missionLabel}>
+                Mars
+              </ThemedText>
+              <ThemedText style={styles.missionSubtitle}>Expedition Rover</ThemedText>
             </View>
-          ))}
-        </View>
+            <View style={styles.headerStatus}>
+              <IconSymbol name="battery.75" color="#34D399" size={20} />
+              <ThemedText style={styles.headerStatusText}>{batteryLabel}</ThemedText>
+              <View style={styles.headerDot} />
+              <ThemedText style={styles.headerStatusMeta}>{healthLabel}</ThemedText>
+            </View>
+          </View>
 
-        <View style={styles.modeRow}>
-          {CONTROL_MODES.map((control) => {
-            const isActive = control.id === 'agentic' ? isAgentic : !isAgentic;
-            return (
+          <View style={styles.robotCard}>
+            <View style={styles.robotGlow} />
+            <View style={styles.robotBody}>
+              <IconSymbol name="car.fill" color="#F4F4F5" size={52} />
+            </View>
+            <View style={styles.robotCopy}>
+              <ThemedText style={styles.robotTitle}>Mission ready</ThemedText>
+              <ThemedText style={styles.robotCaption}>All systems nominal</ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.statGrid}>
+            {stats.map((stat) => (
+              <View key={stat.id} style={styles.statCard}>
+                <View style={styles.statIconWrapper}>
+                  <IconSymbol name={stat.icon} size={18} color={stat.iconColor} />
+                </View>
+                <ThemedText style={styles.statLabel}>{stat.label}</ThemedText>
+                <ThemedText style={styles.statValue}>{stat.value}</ThemedText>
+                <ThemedText style={styles.statCaption}>{stat.caption}</ThemedText>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.modeRow}>
+            {CONTROL_MODES.map((control) => {
+              const isActive = control.id === 'agentic' ? isAgentic : !isAgentic;
+              return (
+                <Pressable
+                  key={control.id}
+                  style={({ pressed }) => [
+                    styles.modeButton,
+                    isActive && styles.modeButtonActive,
+                    pressed && styles.modeButtonPressed,
+                  ]}
+                >
+                  <IconSymbol
+                    name={control.icon}
+                    size={18}
+                    color={isActive ? '#050505' : '#CBD5F5'}
+                  />
+                  <ThemedText
+                    style={[styles.modeButtonText, isActive && styles.modeButtonTextActive]}
+                  >
+                    {control.label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.behaviorHeader}>
+            <ThemedText type="subtitle" style={styles.behaviorTitle}>
+              Behaviors
+            </ThemedText>
+            <ThemedText type="link">View logs</ThemedText>
+          </View>
+
+          <View style={styles.behaviorList}>
+            {BEHAVIORS.map((behavior) => (
               <Pressable
-                key={control.id}
+                key={behavior.id}
                 style={({ pressed }) => [
-                  styles.modeButton,
-                  isActive && styles.modeButtonActive,
-                  pressed && styles.modeButtonPressed,
+                  styles.behaviorCard,
+                  pressed && styles.behaviorCardPressed,
                 ]}
               >
-                <IconSymbol
-                  name={control.icon}
-                  size={18}
-                  color={isActive ? '#050505' : '#CBD5F5'}
-                />
-                <ThemedText
-                  style={[styles.modeButtonText, isActive && styles.modeButtonTextActive]}
-                >
-                  {control.label}
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={styles.behaviorHeader}>
-          <ThemedText type="subtitle" style={styles.behaviorTitle}>
-            Behaviors
-          </ThemedText>
-          <ThemedText type="link">View logs</ThemedText>
-        </View>
-
-        <View style={styles.behaviorList}>
-          {BEHAVIORS.map((behavior) => (
-            <Pressable
-              key={behavior.id}
-              style={({ pressed }) => [
-                styles.behaviorCard,
-                pressed && styles.behaviorCardPressed,
-              ]}
-            >
-              <View style={styles.behaviorTextGroup}>
-                <View style={styles.behaviorMetaRow}>
-                  <View style={styles.behaviorBadge}>
-                    <ThemedText style={styles.behaviorBadgeText}>{behavior.tier}</ThemedText>
+                <View style={styles.behaviorTextGroup}>
+                  <View style={styles.behaviorMetaRow}>
+                    <View style={styles.behaviorBadge}>
+                      <ThemedText style={styles.behaviorBadgeText}>{behavior.tier}</ThemedText>
+                    </View>
+                    <View style={styles.behaviorStatusPill}>
+                      <IconSymbol name="checkmark.circle.fill" size={14} color={behavior.statusColor} />
+                      <ThemedText style={styles.behaviorStatusText}>{behavior.status}</ThemedText>
+                    </View>
                   </View>
-                  <View style={styles.behaviorStatusPill}>
-                    <IconSymbol name="checkmark.circle.fill" size={14} color={behavior.statusColor} />
-                    <ThemedText style={styles.behaviorStatusText}>{behavior.status}</ThemedText>
-                  </View>
+                  <ThemedText style={styles.behaviorName}>{behavior.name}</ThemedText>
+                  <ThemedText style={styles.behaviorDescription}>
+                    {behavior.description}
+                  </ThemedText>
                 </View>
-                <ThemedText style={styles.behaviorName}>{behavior.name}</ThemedText>
-                <ThemedText style={styles.behaviorDescription}>
-                  {behavior.description}
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color="#94A3B8" />
-            </Pressable>
-          ))}
-        </View>
-      </ScrollView>
-    </ThemedView>
+                <IconSymbol name="chevron.right" size={20} color="#94A3B8" />
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+      </ThemedView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#050505',
+  },
   screen: {
     flex: 1,
     backgroundColor: '#050505',
