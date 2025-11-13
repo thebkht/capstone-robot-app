@@ -28,6 +28,7 @@ const MAPPING = {
   wifi: 'wifi',
   'car.fill': 'directions-car',
   'checkmark.circle.fill': 'check-circle',
+  book: 'book',
 } as IconMapping;
 
 /**
