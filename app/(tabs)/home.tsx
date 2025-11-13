@@ -244,12 +244,12 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 6,
     borderWidth: 1,
-    borderColor: '#111827',
+    borderColor: '#1F2937',
   },
   statIconWrapper: {
     width: 32,
     height: 32,
-    backgroundColor: '#111827',
+    backgroundColor: '#1F2937',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F0F10',
     padding: 16,
     borderWidth: 1,
-    borderColor: '#111827',
+    borderColor: '#1F2937',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
   behaviorBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: '#111827',
+    backgroundColor: '#1F2937',
   },
   behaviorBadgeText: {
     fontSize: 12,
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#1F2937',
   },
   behaviorStatusText: {
     color: '#D1D5DB',
