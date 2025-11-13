@@ -39,8 +39,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="status"
         options={{
-          title: 'Status',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="gauge" color={color} />,
+          title: 'Memory',
+          tabBarIcon: ({ color }) => <IconSymbol size={26} name="book" color={color} />,
         }}
       />
       <Tabs.Screen
