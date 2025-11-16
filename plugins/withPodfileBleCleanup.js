@@ -4,9 +4,16 @@ const path = require("path");
 
 const SNIPPET_SENTINEL = "# Remove stray macOS resource-fork Podspecs that break CocoaPods.";
 
+const LEGACY_BLOCK_PATTERNS = [
+  /#\s*Exclude problematic podspec file[\s\S]*?^\s*end\s*$/m,
+  /installer\.pods_project\.targets\.each[\s\S]*?^\s*end\s*$/m,
+];
+
 function injectCleanupSnippet(contents) {
+  const cleaned = LEGACY_BLOCK_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, ""), contents);
+
   if (contents.includes(SNIPPET_SENTINEL)) {
-    return contents;
+    return cleaned;
   }
 
   const snippet = [
@@ -20,11 +27,11 @@ function injectCleanupSnippet(contents) {
   ].join("\n");
 
   const platformRegex = /(platform\s*:ios[^\n]*\n)/;
-  if (platformRegex.test(contents)) {
-    return contents.replace(platformRegex, `$1\n${snippet}`);
+  if (platformRegex.test(cleaned)) {
+    return cleaned.replace(platformRegex, `$1\n${snippet}`);
   }
 
-  return `${snippet}\n${contents}`;
+  return `${snippet}\n${cleaned}`;
 }
 
 module.exports = function withPodfileBleCleanup(config) {
