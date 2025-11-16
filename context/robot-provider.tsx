@@ -59,6 +59,7 @@ interface RobotContextValue {
   refreshStatus: () => Promise<void>;
   controlToken: string | null;
   setControlToken: (token: string | null) => Promise<void>;
+  clearConnection: () => Promise<void>;
 }
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
@@ -271,6 +272,38 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     [api]
   );
 
+  const clearConnection = useCallback(async () => {
+    console.log("Clearing robot connection");
+    // Clear status and error
+    setStatus(null);
+    setStatusError(null);
+    setLastUpdated(undefined);
+
+    // Reset base URL to default
+    setBaseUrlState(DEFAULT_ROBOT_BASE_URL);
+    api.updateBaseUrl(DEFAULT_ROBOT_BASE_URL);
+
+    // Clear control token
+    setControlTokenState(null);
+    api.setControlToken(null);
+
+    // Clear stored values
+    try {
+      await AsyncStorage.removeItem(ROBOT_BASE_URL_STORAGE_KEY);
+      await AsyncStorage.removeItem(ROBOT_CONTROL_TOKEN_STORAGE_KEY);
+    } catch (error) {
+      console.warn("Failed to clear stored base URL", error);
+    }
+
+    try {
+      if (SecureStore.isAvailableAsync && await SecureStore.isAvailableAsync()) {
+        await SecureStore.deleteItemAsync(CONTROL_TOKEN_STORAGE_KEY);
+      }
+    } catch (error) {
+      console.warn("Failed to clear stored control token", error);
+    }
+  }, [api]);
+
   const value = useMemo(
     () => ({
       api,
@@ -284,8 +317,9 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       refreshStatus,
       controlToken,
       setControlToken,
+      clearConnection,
     }),
-    [api, baseUrl, isPolling, lastUpdated, refreshStatus, status, statusError, setControlToken]
+    [api, baseUrl, isPolling, lastUpdated, refreshStatus, status, statusError, setControlToken, clearConnection]
   );
 
   return (

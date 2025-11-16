@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Alert, Pressable, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +8,8 @@ import { ThemedView } from '@/components/themed-view';
 import { useRobot } from '@/context/robot-provider';
 
 export default function SettingsScreen() {
-  const { baseUrl, setBaseUrl, refreshStatus } = useRobot();
+  const router = useRouter();
+  const { baseUrl, setBaseUrl, refreshStatus, clearConnection } = useRobot();
   const [draftUrl, setDraftUrl] = useState(baseUrl);
 
   const handleSave = useCallback(() => {
@@ -19,6 +21,29 @@ export default function SettingsScreen() {
     setBaseUrl(draftUrl);
     refreshStatus();
   }, [draftUrl, refreshStatus, setBaseUrl]);
+
+  const handleClearConnection = useCallback(() => {
+    Alert.alert(
+      'Clear Connection',
+      'This will reset the robot connection and pairing. You will need to reconnect and pair again.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            // Clear connection (status, baseUrl, controlToken, and stored values)
+            await clearConnection();
+            // Navigate back to connection screen
+            router.replace('/connection');
+          },
+        },
+      ]
+    );
+  }, [clearConnection, router]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -40,6 +65,16 @@ export default function SettingsScreen() {
           />
           <Pressable style={styles.primaryButton} onPress={handleSave}>
             <ThemedText style={styles.primaryText}>Save</ThemedText>
+          </Pressable>
+        </ThemedView>
+
+        <ThemedView style={styles.card}>
+          <ThemedText type="subtitle">Connection</ThemedText>
+          <ThemedText style={styles.description}>
+            Clear the current robot connection and pairing. You will need to reconnect and pair again.
+          </ThemedText>
+          <Pressable style={styles.dangerButton} onPress={handleClearConnection}>
+            <ThemedText style={styles.dangerText}>Clear Connection</ThemedText>
           </Pressable>
         </ThemedView>
 
@@ -99,5 +134,16 @@ const styles = StyleSheet.create({
   },
   meta: {
     color: '#6B7280',
+  },
+  dangerButton: {
+    backgroundColor: '#F87171',
+    borderRadius: 0,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  dangerText: {
+    color: '#04110B',
+    fontWeight: '600',
   },
 });

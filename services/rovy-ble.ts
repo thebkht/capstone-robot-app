@@ -7,8 +7,6 @@ import type {
 } from "react-native-ble-plx";
 import { BleManager } from "react-native-ble-plx";
 
-import { loadBleManager } from "./ble-manager-loader";
-
 // Wi-Fi service UUID
 const WIFI_SERVICE_UUID = "1234abcd-0000-1000-8000-00805f9b34fb";
 
@@ -45,14 +43,20 @@ export class RovyBleManager {
   private currentStatus: WifiStatus = "idle";
 
   constructor() {
-    const loadedManager = loadBleManager();
-    if (loadedManager) {
-      // Cast to BleManager since we know it's available
-      this.bleManager = loadedManager as unknown as BleManager;
-    } else {
-      console.warn(
-        "react-native-ble-plx not available. BLE functionality will not work."
-      );
+    try {
+      // Create BleManager directly since react-native-ble-plx is installed
+      // Skip on web platform
+      if (Platform.OS === "web") {
+        console.warn("BLE not available on web platform");
+        this.bleManager = null;
+        return;
+      }
+
+      this.bleManager = new BleManager();
+      console.log("BLE manager initialized successfully");
+    } catch (error) {
+      console.error("Error initializing BLE manager:", error);
+      this.bleManager = null;
     }
   }
 

@@ -11,19 +11,13 @@ import React, {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   PermissionsAndroid,
   Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
+  StyleSheet
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import WifiManager from "react-native-wifi-reborn";
 
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
+import { WifiProvisionScreen } from "@/components/WifiProvisionScreen";
 import { SerifFonts } from "@/constants/theme";
 import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 
@@ -310,7 +304,7 @@ type AutoDiscoveryContext = "robot-hotspot" | null;
 
 export default function ConnectionScreen() {
   const router = useRouter();
-  const { baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling, controlToken } =
+  const { baseUrl, setBaseUrl, status, statusError, refreshStatus, setIsPolling, controlToken, clearConnection } =
     useRobot();
   const mountedRef = useRef(true);
   const [deviceNetwork, setDeviceNetwork] =
@@ -887,8 +881,7 @@ export default function ConnectionScreen() {
             : `Tried ${visibleCandidates.length} addresses: ${visibleCandidates.join(", ")}.`
           : null;
         setConnectRobotError(
-          `Unable to reach the robot automatically. Ensure you are on the same network and try again.${
-            triedSummary ? ` ${triedSummary}` : ""
+          `Unable to reach the robot automatically. Ensure you are on the same network and try again.${triedSummary ? ` ${triedSummary}` : ""
           }`
         );
       }
@@ -910,153 +903,158 @@ export default function ConnectionScreen() {
     status?.network?.ip,
   ]);
 
-  useEffect(() => {
-    if (connectRobotSuccess) {
-      const hasToken = Boolean(controlToken);
-      const target = hasToken ? "/" : "/pairing";
-      console.log("Navigating after robot connection success", {
-        connectRobotSuccess,
-        hasToken,
-        target,
-      });
-      router.replace(target);
-    }
-  }, [connectRobotSuccess, router, controlToken]);
+  // Disabled auto-redirect to allow Bluetooth testing
+  // Users can manually navigate after successful connection if needed
+  // useEffect(() => {
+  //   if (connectRobotSuccess) {
+  //     const hasToken = Boolean(controlToken);
+  //     const target = hasToken ? "/" : "/pairing";
+  //     console.log("Navigating after robot connection success", {
+  //       connectRobotSuccess,
+  //       hasToken,
+  //       target,
+  //     });
+  //     router.replace(target);
+  //   }
+  // }, [connectRobotSuccess, router, controlToken]);
 
-  useEffect(() => {
-    if (status?.network?.ip) {
-      // When robot status is available, check if we need to pair
-      const hasToken = Boolean(controlToken);
-      const target = hasToken ? "/" : "/pairing";
-      console.log("Navigating based on robot status", {
-        statusIp: status.network?.ip,
-        hasToken,
-        target,
-      });
-      router.replace(target);
-    }
-  }, [router, status?.network?.ip, controlToken]);
+  // Disabled auto-redirect to allow Bluetooth testing
+  // When testing Bluetooth, users should be able to stay on the connection screen
+  // useEffect(() => {
+  //   if (status?.network?.ip) {
+  //     // When robot status is available, check if we need to pair
+  //     const hasToken = Boolean(controlToken);
+  //     const target = hasToken ? "/" : "/pairing";
+  //     console.log("Navigating based on robot status", {
+  //       statusIp: status.network?.ip,
+  //       hasToken,
+  //       target,
+  //     });
+  //     router.replace(target);
+  //   }
+  // }, [router, status?.network?.ip, controlToken]);
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <ThemedView style={styles.container}>
-          <ThemedText type="title" style={styles.heading}>
-            Connect to Robot
-          </ThemedText>
-          <ThemedText style={styles.subheading}>
-            If you are on Wi-Fi, the app will try to find the robot on your
-            network. Otherwise, connect this device to the same Wi-Fi as the
-            robot or join the {ROBOT_AP_SSID} hotspot to start setup. If this
-            device is running a hotspot, temporarily disable it so the Wi-Fi
-            connection stays active.
-          </ThemedText>
+    // <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+    //   <ScrollView
+    //     style={styles.scrollView}
+    //     contentContainerStyle={styles.scrollContent}
+    //     keyboardShouldPersistTaps="handled"
+    //   >
+    //     <ThemedView style={styles.container}>
+    //       <ThemedText type="title" style={styles.heading}>
+    //         Connect to Robot
+    //       </ThemedText>
+    //       <ThemedText style={styles.subheading}>
+    //         If you are on Wi-Fi, the app will try to find the robot on your
+    //         network. Otherwise, connect this device to the same Wi-Fi as the
+    //         robot or join the {ROBOT_AP_SSID} hotspot to start setup. If this
+    //         device is running a hotspot, temporarily disable it so the Wi-Fi
+    //         connection stays active.
+    //       </ThemedText>
 
-          <ThemedView style={styles.statusCard}>
-            <ThemedText type="subtitle" style={styles.statusTitle}>
-              Connection Info
-            </ThemedText>
-            <View style={styles.infoGroup}>
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.infoLabel}>
-                  WiFi Connection:
-                </ThemedText>
-                <View style={styles.infoValueContainer}>
-                  <ThemedText style={styles.infoValue}>
-                    {wifiStatusMeta.label}
-                  </ThemedText>
-                  <View
-                    style={[
-                      styles.statusIndicator,
-                      { backgroundColor: wifiStatusMeta.color },
-                    ]}
-                  />
-                </View>
-              </View>
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.infoLabel}>Network Name:</ThemedText>
-                <ThemedText style={styles.infoValue}>
-                  {wifiStatusMeta.details[0]}
-                </ThemedText>
-              </View>
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.infoLabel}>IP Address:</ThemedText>
-                <ThemedText style={styles.infoValue}>
-                  {wifiStatusMeta.details[1]}
-                </ThemedText>
-              </View>
-            </View>
-            {wifiStatusMeta.helper ? (
-              <ThemedText style={styles.statusWarning}>
-                {wifiStatusMeta.helper}
-              </ThemedText>
-            ) : null}
-            {deviceNetwork?.isWifi ? (
-              <ThemedText style={styles.statusHint}>
-                Tip:{" "}
-                {deviceIpPrefix
-                  ? `The robot's address typically shares the first three numbers of this device's IP (${deviceIpPrefix}.x).`
-                  : "The robot's address typically shares the first three numbers of this device's IP."}
-                {" "}Use that prefix when entering the robot IP and turn off
-                any hotspot while connecting.
-              </ThemedText>
-            ) : null}
-            {statusError ? (
-              <ThemedText style={styles.statusError}>
-                Unable to reach the robot. Make sure your device and the robot
-                are on the same Wi-Fi network or join the {ROBOT_AP_SSID}
-                hotspot. Temporarily disable any personal hotspot so your
-                device stays on Wi-Fi.
-              </ThemedText>
-            ) : null}
-            <Pressable
-              style={styles.secondaryButton}
-              onPress={handleStatusRefresh}
-            >
-              <ThemedText style={styles.secondaryButtonText}>
-                Refresh network info
-              </ThemedText>
-            </Pressable>
-          </ThemedView>
+    //       <ThemedView style={styles.statusCard}>
+    //         <ThemedText type="subtitle" style={styles.statusTitle}>
+    //           Connection Info
+    //         </ThemedText>
+    //         <View style={styles.infoGroup}>
+    //           <View style={styles.infoRow}>
+    //             <ThemedText style={styles.infoLabel}>
+    //               WiFi Connection:
+    //             </ThemedText>
+    //             <View style={styles.infoValueContainer}>
+    //               <ThemedText style={styles.infoValue}>
+    //                 {wifiStatusMeta.label}
+    //               </ThemedText>
+    //               <View
+    //                 style={[
+    //                   styles.statusIndicator,
+    //                   { backgroundColor: wifiStatusMeta.color },
+    //                 ]}
+    //               />
+    //             </View>
+    //           </View>
+    //           <View style={styles.infoRow}>
+    //             <ThemedText style={styles.infoLabel}>Network Name:</ThemedText>
+    //             <ThemedText style={styles.infoValue}>
+    //               {wifiStatusMeta.details[0]}
+    //             </ThemedText>
+    //           </View>
+    //           <View style={styles.infoRow}>
+    //             <ThemedText style={styles.infoLabel}>IP Address:</ThemedText>
+    //             <ThemedText style={styles.infoValue}>
+    //               {wifiStatusMeta.details[1]}
+    //             </ThemedText>
+    //           </View>
+    //         </View>
+    //         {wifiStatusMeta.helper ? (
+    //           <ThemedText style={styles.statusWarning}>
+    //             {wifiStatusMeta.helper}
+    //           </ThemedText>
+    //         ) : null}
+    //         {deviceNetwork?.isWifi ? (
+    //           <ThemedText style={styles.statusHint}>
+    //             Tip:{" "}
+    //             {deviceIpPrefix
+    //               ? `The robot's address typically shares the first three numbers of this device's IP (${deviceIpPrefix}.x).`
+    //               : "The robot's address typically shares the first three numbers of this device's IP."}
+    //             {" "}Use that prefix when entering the robot IP and turn off
+    //             any hotspot while connecting.
+    //           </ThemedText>
+    //         ) : null}
+    //         {statusError ? (
+    //           <ThemedText style={styles.statusError}>
+    //             Unable to reach the robot. Make sure your device and the robot
+    //             are on the same Wi-Fi network or join the {ROBOT_AP_SSID}
+    //             hotspot. Temporarily disable any personal hotspot so your
+    //             device stays on Wi-Fi.
+    //           </ThemedText>
+    //         ) : null}
+    //         <Pressable
+    //           style={styles.secondaryButton}
+    //           onPress={handleStatusRefresh}
+    //         >
+    //           <ThemedText style={styles.secondaryButtonText}>
+    //             Refresh network info
+    //           </ThemedText>
+    //         </Pressable>
+    //       </ThemedView>
 
-          {connectRobotError ? (
-            <ThemedView style={styles.connectCard}>
-              <ThemedText style={styles.connectError}>
-                {connectRobotError}
-              </ThemedText>
-            </ThemedView>
-          ) : null}
-          <Pressable
-            style={[
-              styles.primaryButton,
-              isConnectingRobot && styles.disabledPrimary,
-            ]}
-            onPress={handleConnectRobotPress}
-            disabled={isConnectingRobot}
-          >
-            {isConnectingRobot ? (
-              <ActivityIndicator color="#04110B" />
-            ) : (
-              <ThemedText style={styles.primaryButtonText}>
-                Connect Robot
-              </ThemedText>
-            )}
-          </Pressable>
-          <Pressable
-            style={styles.secondaryButton}
-            onPress={() => router.push("/pairing")}
-          >
-            <ThemedText style={styles.secondaryButtonText}>
-              Pair Robot
-            </ThemedText>
-          </Pressable>
-        </ThemedView>
-      </ScrollView>
-    </SafeAreaView>
+    //       {connectRobotError ? (
+    //         <ThemedView style={styles.connectCard}>
+    //           <ThemedText style={styles.connectError}>
+    //             {connectRobotError}
+    //           </ThemedText>
+    //         </ThemedView>
+    //       ) : null}
+    //       <Pressable
+    //         style={[
+    //           styles.primaryButton,
+    //           isConnectingRobot && styles.disabledPrimary,
+    //         ]}
+    //         onPress={handleConnectRobotPress}
+    //         disabled={isConnectingRobot}
+    //       >
+    //         {isConnectingRobot ? (
+    //           <ActivityIndicator color="#04110B" />
+    //         ) : (
+    //           <ThemedText style={styles.primaryButtonText}>
+    //             Connect Robot
+    //           </ThemedText>
+    //         )}
+    //       </Pressable>
+    //       <Pressable
+    //         style={styles.secondaryButton}
+    //         onPress={() => router.push("/pairing")}
+    //       >
+    //         <ThemedText style={styles.secondaryButtonText}>
+    //           Pair Robot
+    //         </ThemedText>
+    //       </Pressable>
+    //     </ThemedView>
+    //   </ScrollView>
+    // </SafeAreaView>
+    <WifiProvisionScreen />
   );
 }
 
