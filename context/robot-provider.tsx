@@ -65,7 +65,7 @@ const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
 export const ROBOT_BASE_URL_STORAGE_KEY = "robot_base_url";
 export const ROBOT_CONTROL_TOKEN_STORAGE_KEY = "robot_control_token";
-export const DEFAULT_ROBOT_BASE_URL = "https://tegra-ubuntu.tail535f32.ts.net";
+export const DEFAULT_ROBOT_BASE_URL = "https://rovy.tail535f32.ts.net";
 
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [baseUrl, setBaseUrlState] = useState<string>(DEFAULT_ROBOT_BASE_URL);
