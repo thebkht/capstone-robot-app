@@ -70,7 +70,8 @@
           }
         }
       ],
-      "./plugins/withAndroidBlePermissions"
+      "./plugins/withAndroidBlePermissions",
+      "./plugins/withPodfileBleCleanup"
     ],
     "experiments": {
       "typedRoutes": true,
