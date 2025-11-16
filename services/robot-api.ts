@@ -97,7 +97,6 @@ export class RobotAPI {
   private fetchImpl: typeof fetch;
   private timeout: number;
   private controlToken: string | null;
-  private controlToken: string | null;
 
   constructor(options: RobotApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
@@ -153,7 +152,6 @@ export class RobotAPI {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method,
-        headers,
         headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,

@@ -1,7 +1,8 @@
+import { Image } from 'expo-image';
+import { Link } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -116,6 +117,21 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
+
+          <Link href="/camera" asChild>
+            <Pressable
+              style={({ pressed }) => [
+                styles.cameraButton,
+                pressed && styles.cameraButtonPressed,
+              ]}
+            >
+              <View style={styles.cameraButtonContent}>
+                <IconSymbol name="camera.fill" size={20} color="#1DD1A1" />
+                <ThemedText style={styles.cameraButtonText}>View Camera</ThemedText>
+                <IconSymbol name="chevron.right" size={18} color="#94A3B8" />
+              </View>
+            </Pressable>
+          </Link>
 
           <View style={styles.modeRow}>
             {CONTROL_MODES.map((control) => {
@@ -359,5 +375,26 @@ const styles = StyleSheet.create({
   behaviorDescription: {
     color: '#9CA3AF',
     fontSize: 14,
+  },
+  cameraButton: {
+    backgroundColor: '#0F0F10',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#1F2937',
+  },
+  cameraButtonPressed: {
+    borderColor: '#1DD1A1',
+    opacity: 0.9,
+  },
+  cameraButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cameraButtonText: {
+    flex: 1,
+    color: '#F9FAFB',
+    fontFamily: 'JetBrainsMono_600SemiBold',
+    fontSize: 16,
   },
 });
