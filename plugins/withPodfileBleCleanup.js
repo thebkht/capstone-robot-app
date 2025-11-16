@@ -4,9 +4,26 @@ const path = require("path");
 
 const SNIPPET_SENTINEL = "# Remove stray macOS resource-fork Podspecs that break CocoaPods.";
 
+const RUBY_CLEANUP_HELPER = [
+  SNIPPET_SENTINEL,
+  "def delete_stray_podspecs!",
+  "  Dir.glob(File.join(__dir__, '..', 'node_modules', '**', '._*.podspec')).each do |file|",
+  "    File.delete(file) if File.file?(file)",
+  "  end",
+  "end",
+  "",
+  "delete_stray_podspecs!",
+  "",
+  "pre_install do",
+  "  delete_stray_podspecs!",
+  "end",
+  "",
+].join("\n");
+
 const LEGACY_BLOCK_PATTERNS = [
   /#\s*Exclude problematic podspec file[\s\S]*?^\s*end\s*$/m,
   /installer\.pods_project\.targets\.each[\s\S]*?^\s*end\s*$/m,
+  /#\s*Remove stray macOS resource-fork Podspecs that break CocoaPods\.[\s\S]*?(^\s*pre_install[\s\S]*?^\s*end\s*$)?/m,
 ];
 
 function injectCleanupSnippet(contents) {
@@ -16,15 +33,7 @@ function injectCleanupSnippet(contents) {
     return cleaned;
   }
 
-  const snippet = [
-    SNIPPET_SENTINEL,
-    "pre_install do",
-    "  Dir.glob(File.join(__dir__, '..', 'node_modules', '**', '._*.podspec')).each do |file|",
-    "    File.delete(file) if File.file?(file)",
-    "  end",
-    "end",
-    "",
-  ].join("\n");
+  const snippet = `${RUBY_CLEANUP_HELPER}\n`;
 
   const platformRegex = /(platform\s*:ios[^\n]*\n)/;
   if (platformRegex.test(cleaned)) {
