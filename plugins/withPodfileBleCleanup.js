@@ -1,40 +1,43 @@
-const { withPodfile } = require("@expo/config-plugins");
+const { withDangerousMod } = require("@expo/config-plugins");
+const fs = require("fs");
+const path = require("path");
 
-const RESOURCE_FORK_SENTINEL = "._*.podspec";
+const SNIPPET_SENTINEL = "# Remove stray macOS resource-fork Podspecs that break CocoaPods.";
 
 function injectCleanupSnippet(contents) {
-  if (contents.includes(RESOURCE_FORK_SENTINEL)) {
+  if (contents.includes(SNIPPET_SENTINEL)) {
     return contents;
   }
 
-  const regex = /(\s*)use_expo_modules!\b/;
-  const match = contents.match(regex);
-  if (!match) {
-    return contents;
-  }
-
-  const indent = match[1] ?? "";
   const snippet = [
-    `${indent}# Remove stray macOS resource-fork Podspecs that break CocoaPods.`,
-    `${indent}Dir.glob(File.join(__dir__, '..', 'node_modules', '**', '._*.podspec')).each do |path|`,
-    `${indent}  File.delete(path) if File.file?(path)`,
-    `${indent}end`,
+    SNIPPET_SENTINEL,
+    "pre_install do",
+    "  Dir.glob(File.join(__dir__, '..', 'node_modules', '**', '._*.podspec')).each do |file|",
+    "    File.delete(file) if File.file?(file)",
+    "  end",
+    "end",
     "",
   ].join("\n");
 
-  return contents.replace(regex, `${snippet}$&`);
+  const platformRegex = /(platform\s*:ios[^\n]*\n)/;
+  if (platformRegex.test(contents)) {
+    return contents.replace(platformRegex, `$1\n${snippet}`);
+  }
+
+  return `${snippet}\n${contents}`;
 }
 
 module.exports = function withPodfileBleCleanup(config) {
-  return withPodfile(config, (config) => {
-    const podfile = config.modResults;
+  return withDangerousMod(config, ["ios", (config) => {
+    const podfilePath = path.join(config.modRequest.platformProjectRoot, "Podfile");
 
-    if (podfile.language !== "ruby" || typeof podfile.contents !== "string") {
+    if (!fs.existsSync(podfilePath)) {
       return config;
     }
 
-    podfile.contents = injectCleanupSnippet(podfile.contents);
+    const contents = fs.readFileSync(podfilePath, "utf8");
+    fs.writeFileSync(podfilePath, injectCleanupSnippet(contents));
 
     return config;
-  });
+  }]);
 };
