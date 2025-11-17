@@ -1,3 +1,5 @@
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
+
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type RobotConnectionState =
@@ -99,29 +101,39 @@ export interface ClaimConfirmResponse {
 
 export interface RobotApiOptions {
   baseUrl: string;
-  fetchImpl?: typeof fetch;
   timeout?: number; // Timeout in milliseconds, default 5000
   controlToken?: string | null; // Optional control token for authenticated requests
   sessionId?: string | null; // Optional session ID for authenticated requests
+  axiosInstance?: AxiosInstance;
 }
 
 export class RobotAPI {
   private baseUrl: string;
-  private fetchImpl: typeof fetch;
+  private axiosInstance: AxiosInstance;
   private timeout: number;
   private controlToken: string | null;
   private sessionId: string | null;
 
   constructor(options: RobotApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
-    this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeout = options.timeout ?? 5000;
     this.controlToken = options.controlToken ?? null;
     this.sessionId = options.sessionId ?? null;
+
+    this.axiosInstance =
+      options.axiosInstance ??
+      axios.create({
+        baseURL: this.baseUrl,
+        timeout: this.timeout,
+        headers: {
+          Accept: "application/json",
+        },
+      });
   }
 
   public updateBaseUrl(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.axiosInstance.defaults.baseURL = this.baseUrl;
   }
 
   public setControlToken(token: string | null) {
@@ -177,44 +189,51 @@ export class RobotAPI {
 
     try {
       const normalizedMethod = method.toUpperCase() as HttpMethod;
-      const requestInit: RequestInit = {
+      const config: AxiosRequestConfig = {
+        url: path,
         method: normalizedMethod,
         headers,
         signal: controller.signal,
       };
 
       if (normalizedMethod !== "GET") {
-        requestInit.body = JSON.stringify(body ?? {});
+        config.data = body ?? {};
       }
 
-      const response = await this.fetchImpl(
-        `${this.baseUrl}${path}`,
-        requestInit
-      );
+      const response = await this.axiosInstance.request<T>(config);
 
       clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Robot request failed (${response.status}): ${text}`);
-      }
 
       if (response.status === 204) {
         return {} as T;
       }
 
-      const contentType = response.headers.get("content-type");
-      if (contentType?.includes("application/json")) {
-        return (await response.json()) as T;
-      }
-
-      return (await response.text()) as unknown as T;
+      return response.data;
     } catch (error) {
       clearTimeout(timeoutId);
-      if (error instanceof Error && error.name === "AbortError") {
+
+      if (
+        axios.isCancel(error) ||
+        (error as AxiosError)?.code === "ERR_CANCELED"
+      ) {
         throw new Error(`Network request timed out after ${this.timeout}ms`);
       }
-      throw error;
+
+      if (axios.isAxiosError(error) && error.response) {
+        const responseData =
+          typeof error.response.data === "string"
+            ? error.response.data
+            : JSON.stringify(error.response.data);
+        throw new Error(
+          `Robot request failed (${error.response.status}): ${responseData}`
+        );
+      }
+
+      if (error instanceof Error) {
+        throw error;
+      }
+
+      throw new Error(String(error));
     }
   }
 
