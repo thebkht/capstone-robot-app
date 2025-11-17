@@ -174,11 +174,10 @@ export default function CameraScreen() {
           <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
                <ThemedView style={styles.container}>
                     <View style={styles.headerRow}>
-                         <ThemedText type="title">Camera</ThemedText>
                          <Pressable style={styles.backButton} onPress={() => router.back()}>
-                              <IconSymbol name="chevron.left" size={16} color="#1DD1A1" />
-                              <ThemedText style={styles.backButtonText}>Go back</ThemedText>
+                              <IconSymbol name="chevron.left" size={16} color="#E5E7EB" />
                          </Pressable>
+                         <ThemedText type="title">Camera</ThemedText>
                     </View>
 
                     {/* {wsUrl && (
@@ -272,17 +271,15 @@ const styles = StyleSheet.create({
      headerRow: {
           flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          gap: 8
      },
      backButton: {
           flexDirection: 'row',
           alignItems: 'center',
           gap: 6,
-          paddingVertical: 8,
-          paddingHorizontal: 12,
+          padding: 8,
           borderWidth: 1,
           borderColor: '#202020',
-          borderRadius: 999,
           backgroundColor: '#1C1C1C',
      },
      backButtonText: {

@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   headerDot: {
     width: 4,
     height: 4,
-    backgroundColor: '#202020',
+    backgroundColor: '#1C1C1C',
   },
   robotImage: {
     width: '100%',
