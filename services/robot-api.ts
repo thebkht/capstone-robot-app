@@ -176,12 +176,17 @@ export class RobotAPI {
     }
 
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      const requestInit: RequestInit = {
         method,
         headers,
-        body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
-      });
+      };
+
+      if (method !== "GET") {
+        requestInit.body = JSON.stringify(body ?? {});
+      }
+
+      const response = await this.fetchImpl(`${this.baseUrl}${path}`, requestInit);
 
       clearTimeout(timeoutId);
 
