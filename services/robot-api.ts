@@ -201,7 +201,7 @@ export class RobotAPI {
   }
 
   public async fetchNetworkInfo(): Promise<RobotNetworkInfo> {
-    return this.request<RobotNetworkInfo>("/network-info");
+    return this.request<RobotNetworkInfo>("/wifi/status");
   }
 
   public async fetchTelemetry(): Promise<RobotTelemetry> {

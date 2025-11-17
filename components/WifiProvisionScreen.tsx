@@ -29,6 +29,7 @@ import {
 } from "@/context/robot-provider";
 import { useRovyBle } from "@/hooks/use-rovy-ble";
 import type { RovyDevice } from "@/services/rovy-ble";
+import { Image } from "expo-image";
 
 const deriveHost = (value: string | null | undefined) => {
   if (!value) {
@@ -452,7 +453,7 @@ export function WifiProvisionScreen() {
   const wifiIpAddress = status?.network?.ip || "Unavailable";
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -730,8 +731,8 @@ export function WifiProvisionScreen() {
           </ThemedView> */}
 
         </ThemedView>
-      </ScrollView>
 
+      </ScrollView>
       <View style={styles.bottomActionContainer}>
         <Pressable
           style={styles.connectIpButton}
@@ -744,6 +745,11 @@ export function WifiProvisionScreen() {
             Connect to a specific IP
           </ThemedText>
         </Pressable>
+        <Image
+          source={require('@/assets/images/head.png')}
+          style={styles.robotImage}
+          contentFit="contain"
+        />
       </View>
 
       <Modal
@@ -823,10 +829,15 @@ export function WifiProvisionScreen() {
 }
 
 const styles = StyleSheet.create({
+  robotImage: {
+    width: '100%',
+    aspectRatio: 375 / 100,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: "#161616",
     padding: 24,
+    paddingBottom: 0
   },
   scrollView: {
     flex: 1,
@@ -837,6 +848,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     gap: 24,
+    marginVertical: "auto",
     backgroundColor: "#161616",
   },
   header: {
@@ -1045,8 +1057,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   bottomActionContainer: {
+    position: "fixed",
+    bottom: 0,
     paddingTop: 12,
     backgroundColor: "#161616",
+    gap: 36
   },
   connectIpButton: {
     borderWidth: 1,

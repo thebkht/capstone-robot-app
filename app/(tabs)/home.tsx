@@ -54,7 +54,7 @@ export default function HomeScreen() {
         ? 'Low'
         : 'Critical';
 
-  const wifiLabel = status?.network?.wifiSsid ?? status?.network?.ssid ?? 'Offline';
+  const wifiLabel = status?.network?.network_name ?? status?.network?.wifiSsid ?? status?.network?.ssid ?? 'Offline';
   const ipAddress = status?.network?.ip;
   const ipLabel = ipAddress ? `IP ${ipAddress}` : 'Awaiting link';
 
