@@ -12,15 +12,19 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.rovy.rovycontroller",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "Rovy Controller uses Bluetooth to securely provision and connect to your Rovy."
+        "NSBluetoothAlwaysUsageDescription": "Rovy Controller uses Bluetooth to securely provision and connect to your Rovy.",
+        "icon": {
+          "dark": "./assets/images/icons/ios-dark.png",
+          "light": "./assets/images/icons/ios-light.png",
+          "tinted": "./assets/images/icons/ios-tinted.png"
+        }
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#352CF4",
+        "foregroundImage": "./assets/images/icons/adaptive-icon.png",
+        "monochromeImage": "./assets/images/icons/adaptive-icon.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -43,12 +47,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/icons/splash-icon-light.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#161616",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#161616"
           }
         }
       ],
