@@ -1,4 +1,4 @@
-import { NativeModules, PermissionsAndroid, Platform } from "react-native";
+import { PermissionsAndroid, Platform } from "react-native";
 import type {
   BleError,
   Characteristic,
@@ -45,7 +45,6 @@ export class RovyBleManager {
 
   constructor() {
     try {
-      // Create BleManager directly since react-native-ble-plx is installed
       // Skip on web platform
       if (Platform.OS === "web") {
         this.bleUnavailableReason =
@@ -55,17 +54,8 @@ export class RovyBleManager {
         return;
       }
 
-      const { BleClientManager } =
-        NativeModules as { BleClientManager?: object };
-
-      if (!BleClientManager) {
-        this.bleUnavailableReason =
-          "Bluetooth provisioning requires a native build with BLE support. Rebuild the app with `expo run:ios` or `expo run:android`.";
-        console.warn(this.bleUnavailableReason);
-        this.bleManager = null;
-        return;
-      }
-
+      // Create BleManager directly - react-native-ble-plx handles native module linking
+      // If the native module isn't available, this will throw an error which we catch below
       this.bleManager = new BleManager();
       this.bleUnavailableReason = null;
       console.log("BLE manager initialized successfully");
@@ -75,8 +65,21 @@ export class RovyBleManager {
         error instanceof Error
           ? error.message
           : "Unknown Bluetooth initialization error";
-      this.bleUnavailableReason =
-        "Failed to initialize Bluetooth manager: " + message;
+
+      // Check if this is a native module not found or not linked error
+      if (
+        message.includes("Native module") ||
+        message.includes("not found") ||
+        message.includes("Cannot find module") ||
+        message.includes("NativeEventEmitter") ||
+        message.includes("requires a non-null argument")
+      ) {
+        this.bleUnavailableReason =
+          "Bluetooth provisioning requires a native build with BLE support. Rebuild the app with `expo run:ios` or `expo run:android`.";
+      } else {
+        this.bleUnavailableReason =
+          "Failed to initialize Bluetooth manager: " + message;
+      }
       this.bleManager = null;
     }
   }

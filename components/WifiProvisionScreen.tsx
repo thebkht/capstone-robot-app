@@ -459,10 +459,6 @@ export function WifiProvisionScreen() {
             <ThemedText type="title" style={styles.title}>
               Connect to a robot
             </ThemedText>
-            <ThemedText style={styles.subtitle}>
-              Power on your robot, keep Bluetooth enabled, and make sure your
-              phone is on Wi-Fi.
-            </ThemedText>
           </View>
 
           {error ? (
@@ -481,9 +477,6 @@ export function WifiProvisionScreen() {
             <View style={styles.sectionHeader}>
               <View>
                 <ThemedText style={styles.sectionTitle}>Bluetooth</ThemedText>
-                <ThemedText style={styles.sectionHint}>
-                  Connect via Bluetooth to share Wi-Fi details.
-                </ThemedText>
               </View>
               <StatusPill
                 color={bluetoothStatus.color}
@@ -567,7 +560,7 @@ export function WifiProvisionScreen() {
             ) : null}
           </ThemedView>
 
-          <ThemedView style={styles.sectionCard}>
+          {/* <ThemedView style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <View>
                 <ThemedText style={styles.sectionTitle}>Wi-Fi</ThemedText>
@@ -730,7 +723,7 @@ export function WifiProvisionScreen() {
                 label={getStatusText()}
               />
             </View>
-          </ThemedView>
+          </ThemedView> */}
 
           <Pressable
             style={styles.connectIpButton}
@@ -853,7 +846,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: "#F87171",
-    borderRadius: 12,
     backgroundColor: "#1F1A1A",
   },
   errorText: {
@@ -861,7 +853,6 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     padding: 20,
-    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#1F2937",
     backgroundColor: "#0F0F10",
@@ -906,7 +897,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: "#1F2937",
-    borderRadius: 12,
     backgroundColor: "#0A0A0B",
     flexDirection: "row",
     justifyContent: "space-between",
@@ -935,8 +925,8 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: "#1DD1A1",
-    borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 12,
+    paddingInline: 16,
     alignItems: "center",
   },
   disabledPrimary: {
@@ -948,8 +938,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   secondaryButton: {
-    borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    paddingInline: 16,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -972,7 +962,6 @@ const styles = StyleSheet.create({
   statusBoard: {
     borderWidth: 1,
     borderColor: "#1F2937",
-    borderRadius: 12,
     backgroundColor: "#0A0A0B",
     padding: 16,
     gap: 12,
@@ -998,11 +987,10 @@ const styles = StyleSheet.create({
   statusIndicator: {
     width: 10,
     height: 10,
-    borderRadius: 5,
   },
   infoCard: {
     padding: 16,
-    borderRadius: 12,
+
     backgroundColor: "#1F2937",
   },
   infoText: {
@@ -1021,7 +1009,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F0F10",
     borderWidth: 1,
     borderColor: "#1F2937",
-    borderRadius: 12,
+
     padding: 16,
     color: "#F9FAFB",
     fontSize: 16,
@@ -1039,7 +1027,6 @@ const styles = StyleSheet.create({
   previousDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
     backgroundColor: "#4B5563",
   },
   previousText: {
@@ -1053,7 +1040,7 @@ const styles = StyleSheet.create({
   connectIpButton: {
     borderWidth: 1,
     borderColor: "#374151",
-    borderRadius: 12,
+
     paddingVertical: 16,
     alignItems: "center",
     backgroundColor: "#0A0A0B",
@@ -1068,13 +1055,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 999,
     backgroundColor: "#1F2937",
   },
   statusDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
   },
   statusPillText: {
     color: "#F9FAFB",
@@ -1093,7 +1078,6 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     padding: 20,
-    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#1F2937",
     backgroundColor: "#050505",
@@ -1119,7 +1103,6 @@ const styles = StyleSheet.create({
   },
   overlayCard: {
     padding: 24,
-    borderRadius: 16,
     backgroundColor: "#050505",
     borderWidth: 1,
     borderColor: "#1F2937",
