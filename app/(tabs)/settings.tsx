@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -46,8 +46,8 @@ export default function SettingsScreen() {
   }, [clearConnection, router]);
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ThemedView style={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <ThemedText type="title">Configuration</ThemedText>
         <ThemedText style={styles.description}>
           Set the robot address and communication preferences.
@@ -85,7 +85,7 @@ export default function SettingsScreen() {
           </ThemedText>
           <ThemedText style={styles.meta}>Version 0.1.0</ThemedText>
         </ThemedView>
-      </ThemedView>
+      </ScrollView>
     </SafeAreaView>
   );
 }
