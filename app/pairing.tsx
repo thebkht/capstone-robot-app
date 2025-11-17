@@ -38,6 +38,7 @@ export default function PairingScreen() {
           setSuccess(null);
 
           try {
+               console.log(api.requestClaim());
                const response = await api.requestClaim();
                console.log("Pairing request successful", response);
                setShowPinInput(true);
