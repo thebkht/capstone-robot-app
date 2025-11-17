@@ -28,6 +28,7 @@ export default function CameraScreen() {
      const [isStreaming, setIsStreaming] = useState(false);
      const [isConnecting, setIsConnecting] = useState(false);
      const [isAdjustingLights, setIsAdjustingLights] = useState(false);
+     const hasControlSession = Boolean(controlToken && sessionId);
      const wsRef = useRef<WebSocket | null>(null);
 
      // WebSocket URL
@@ -242,6 +243,8 @@ export default function CameraScreen() {
                          onToggleStream={handleToggleStream}
                          onSetLights={handleSetLights}
                          isAdjustingLights={isAdjustingLights}
+                         hasControlSession={hasControlSession}
+                         onRequestPairing={() => router.push('/pairing')}
                     />
 
                     <View style={styles.row}>
