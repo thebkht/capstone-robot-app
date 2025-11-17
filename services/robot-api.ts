@@ -189,18 +189,36 @@ export class RobotAPI {
 
     try {
       const normalizedMethod = method.toUpperCase() as HttpMethod;
-      const config: AxiosRequestConfig = {
-        url: path,
-        method: normalizedMethod,
-        headers,
-        signal: controller.signal,
-      };
+      let response;
 
-      if (normalizedMethod !== "GET") {
-        config.data = body ?? {};
+      if (normalizedMethod === "GET") {
+        response = await this.axiosInstance.get<T>(path, {
+          headers,
+          signal: controller.signal,
+        });
+      } else if (normalizedMethod === "POST") {
+        response = await this.axiosInstance.post<T>(
+          path,
+          body ?? {},
+          {
+            headers,
+            signal: controller.signal,
+          }
+        );
+      } else {
+        const config: AxiosRequestConfig = {
+          url: path,
+          method: normalizedMethod,
+          headers,
+          signal: controller.signal,
+        };
+
+        if (normalizedMethod !== "GET") {
+          config.data = body ?? {};
+        }
+
+        response = await this.axiosInstance.request<T>(config);
       }
-
-      const response = await this.axiosInstance.request<T>(config);
 
       clearTimeout(timeoutId);
 
