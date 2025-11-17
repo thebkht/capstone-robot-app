@@ -7,14 +7,19 @@ import {
      View
 } from 'react-native';
 
+import { useRouter } from 'expo-router';
+
+import { CameraVideo } from '@/components/camera-video';
 import { Joystick } from '@/components/joystick';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useRobot } from '@/context/robot-provider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function CameraScreen() {
      const { api, baseUrl } = useRobot();
+     const router = useRouter();
      const [joystick, setJoystick] = useState({ x: 0, y: 0 });
      const [error, setError] = useState<string | null>(null);
      const [isCapturing, setIsCapturing] = useState(false);
@@ -168,7 +173,12 @@ export default function CameraScreen() {
      return (
           <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
                <ThemedView style={styles.container}>
-                    <ThemedText type="title">Camera</ThemedText>
+                    <View style={styles.headerRow}>
+                         <Pressable style={styles.backButton} onPress={() => router.back()}>
+                              <IconSymbol name="chevron.left" size={16} color="#E5E7EB" />
+                         </Pressable>
+                         <ThemedText type="title">Camera</ThemedText>
+                    </View>
 
                     {/* {wsUrl && (
                          <View style={styles.statusBar}>
@@ -197,60 +207,14 @@ export default function CameraScreen() {
                          </View>
                     )} */}
 
-                    <View style={styles.cameraFrame}>
-                         {wsUrl ? (
-                              <>
-                                   {currentFrame ? (
-                                        <Image
-                                             source={{ uri: currentFrame }}
-                                             style={styles.camera}
-                                             contentFit="contain"
-                                             cachePolicy="none"
-                                             transition={null}
-                                        />
-                                   ) : (
-                                        <View style={styles.placeholderContainer}>
-                                             {isConnecting ? (
-                                                  <>
-                                                       <ActivityIndicator size="large" color="#1DD1A1" />
-                                                       <ThemedText style={styles.placeholderText}>
-                                                            Connecting to camera...
-                                                       </ThemedText>
-                                                  </>
-                                             ) : (
-                                                  <ThemedText style={styles.placeholderText}>
-                                                       Press Start to begin streaming
-                                                  </ThemedText>
-                                             )}
-                                        </View>
-                                   )}
-
-                                   {error && (
-                                        <View style={styles.errorOverlay}>
-                                             <ThemedText style={styles.errorText}>{error}</ThemedText>
-                                             <ThemedText style={styles.errorSubtext}>
-                                                  WebSocket: {wsUrl}
-                                             </ThemedText>
-                                             <Pressable
-                                                  style={styles.retryButton}
-                                                  onPress={handleToggleStream}
-                                             >
-                                                  <ThemedText style={styles.retryButtonText}>
-                                                       Retry Connection
-                                                  </ThemedText>
-                                             </Pressable>
-                                        </View>
-                                   )}
-                              </>
-                         ) : (
-                              <View style={styles.loadingContainer}>
-                                   <ActivityIndicator size="large" color="#1DD1A1" />
-                                   <ThemedText style={styles.loadingText}>
-                                        No stream available. Configure the robot IP first.
-                                   </ThemedText>
-                              </View>
-                         )}
-                    </View>
+                    <CameraVideo
+                         wsUrl={wsUrl}
+                         currentFrame={currentFrame}
+                         isConnecting={isConnecting}
+                         isStreaming={isStreaming}
+                         error={error}
+                         onToggleStream={handleToggleStream}
+                    />
 
                     <View style={styles.row}>
                          <Pressable
@@ -304,111 +268,22 @@ const styles = StyleSheet.create({
           gap: 16,
           backgroundColor: '#161616',
      },
-     statusBar: {
+     headerRow: {
           flexDirection: 'row',
-          justifyContent: 'space-between',
           alignItems: 'center',
-          padding: 12,
+          gap: 8
+     },
+     backButton: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          padding: 8,
+          borderWidth: 1,
+          borderColor: '#202020',
           backgroundColor: '#1C1C1C',
-          borderRadius: 4,
-          borderWidth: 1,
-          borderColor: '#202020',
      },
-     statusText: {
-          flex: 1,
-          fontSize: 11,
-          color: '#67686C',
-          fontFamily: 'JetBrainsMono_400Regular',
-     },
-     streamButton: {
-          paddingVertical: 6,
-          paddingHorizontal: 12,
-          backgroundColor: '#1DD1A1',
-          borderRadius: 4,
-          minWidth: 60,
-          alignItems: 'center',
-     },
-     streamButtonActive: {
-          backgroundColor: '#EF4444',
-     },
-     streamButtonConnecting: {
-          backgroundColor: '#F59E0B',
-     },
-     streamButtonText: {
-          color: '#04110B',
-          fontSize: 12,
-          fontWeight: '600',
-     },
-     cameraFrame: {
-          borderRadius: 0,
-          overflow: 'hidden',
-          borderWidth: 1,
-          borderColor: '#202020',
-          aspectRatio: 4 / 3,
-          backgroundColor: '#1B1B1B',
-          alignItems: 'center',
-          justifyContent: 'center',
-     },
-     camera: {
-          width: '100%',
-          height: '100%',
-     },
-     placeholderContainer: {
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 16,
-     },
-     placeholderText: {
-          color: '#6B7280',
-          fontSize: 14,
-          textAlign: 'center',
-     },
-     loadingContainer: {
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 16,
-     },
-     loadingText: {
-          color: '#67686C',
-          textAlign: 'center',
-          paddingHorizontal: 24,
-     },
-     errorOverlay: {
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 24,
-          gap: 12,
-     },
-     errorText: {
-          color: '#EF4444',
-          fontSize: 16,
-          textAlign: 'center',
-     },
-     errorSubtext: {
-          color: '#67686C',
-          fontSize: 10,
-          textAlign: 'center',
-          fontFamily: 'JetBrainsMono_400Regular',
-     },
-     retryButton: {
-          marginTop: 8,
-          paddingVertical: 8,
-          paddingHorizontal: 16,
-          backgroundColor: '#1DD1A1',
-          borderRadius: 4,
-     },
-     retryButtonText: {
-          color: '#04110B',
-          fontSize: 14,
-          fontWeight: '600',
+     backButtonText: {
+          color: '#E5E7EB',
      },
      row: {
           flexDirection: 'row',
