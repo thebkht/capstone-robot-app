@@ -29,9 +29,21 @@ export default function CameraScreen() {
           if (!baseUrl) {
                return undefined;
           }
-          // Convert http:// to ws:// or https:// to wss://
-          const url = baseUrl.replace(/^http/, 'ws');
-          return `${url}/camera/ws`;
+
+          try {
+               const parsedUrl = new URL(
+                    baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
+               );
+
+               parsedUrl.protocol = 'wss:';
+               parsedUrl.pathname = `${parsedUrl.pathname.replace(/\/$/, '')}/camera/ws`;
+               parsedUrl.search = '';
+
+               return parsedUrl.toString();
+          } catch (err) {
+               console.warn('Invalid base URL for WebSocket', err);
+               return undefined;
+          }
      }, [baseUrl]);
 
 
