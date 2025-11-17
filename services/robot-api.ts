@@ -1,4 +1,9 @@
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
+} from "axios";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -127,6 +132,7 @@ export class RobotAPI {
         timeout: this.timeout,
         headers: {
           Accept: "application/json",
+          "Content-Type": "application/json",
         },
       });
   }
@@ -160,6 +166,54 @@ export class RobotAPI {
     return `${this.baseUrl}/camera/snapshot`;
   }
 
+  private buildHeaders(requireAuth: boolean): Record<string, string> {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+
+    if (requireAuth && this.controlToken) {
+      headers["x-control-token"] = this.controlToken;
+    }
+
+    if (requireAuth && this.sessionId) {
+      headers["session-id"] = this.sessionId;
+    }
+
+    return headers;
+  }
+
+  private handleResponse<T>(response: AxiosResponse<T>) {
+    if (response.status === 204) {
+      return {} as T;
+    }
+
+    return response.data;
+  }
+
+  private handleError(error: unknown): never {
+    if (axios.isCancel(error) || (error as AxiosError)?.code === "ERR_CANCELED") {
+      throw new Error(`Network request timed out after ${this.timeout}ms`);
+    }
+
+    if (axios.isAxiosError(error) && error.response) {
+      const responseData =
+        typeof error.response.data === "string"
+          ? error.response.data
+          : JSON.stringify(error.response.data);
+
+      throw new Error(
+        `Robot request failed (${error.response.status}): ${responseData}`
+      );
+    }
+
+    if (error instanceof Error) {
+      throw error;
+    }
+
+    throw new Error(String(error));
+  }
+
   private async request<T>(
     path: string,
     method: HttpMethod = "GET",
@@ -173,85 +227,28 @@ export class RobotAPI {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    };
-
-    // Add control token header for protected calls
-    if (requireAuth && this.controlToken) {
-      headers["x-control-token"] = this.controlToken;
-    }
-
-    if (requireAuth && this.sessionId) {
-      headers["session-id"] = this.sessionId;
-    }
-
     try {
       const normalizedMethod = method.toUpperCase() as HttpMethod;
-      let response;
+      const config: AxiosRequestConfig = {
+        url: path,
+        method: normalizedMethod,
+        headers: this.buildHeaders(requireAuth),
+        signal: controller.signal,
+      };
 
-      if (normalizedMethod === "GET") {
-        response = await this.axiosInstance.get<T>(path, {
-          headers,
-          signal: controller.signal,
-        });
-      } else if (normalizedMethod === "POST") {
-        response = await this.axiosInstance.post<T>(
-          path,
-          body ?? {},
-          {
-            headers,
-            signal: controller.signal,
-          }
-        );
-      } else {
-        const config: AxiosRequestConfig = {
-          url: path,
-          method: normalizedMethod,
-          headers,
-          signal: controller.signal,
-        };
-
-        if (normalizedMethod !== "GET") {
-          config.data = body ?? {};
-        }
-
-        response = await this.axiosInstance.request<T>(config);
+      if (normalizedMethod !== "GET" && normalizedMethod !== "HEAD") {
+        config.data = body ?? {};
       }
+
+      const response = await this.axiosInstance.request<T>(config);
 
       clearTimeout(timeoutId);
 
-      if (response.status === 204) {
-        return {} as T;
-      }
-
-      return response.data;
+      return this.handleResponse<T>(response);
     } catch (error) {
       clearTimeout(timeoutId);
 
-      if (
-        axios.isCancel(error) ||
-        (error as AxiosError)?.code === "ERR_CANCELED"
-      ) {
-        throw new Error(`Network request timed out after ${this.timeout}ms`);
-      }
-
-      if (axios.isAxiosError(error) && error.response) {
-        const responseData =
-          typeof error.response.data === "string"
-            ? error.response.data
-            : JSON.stringify(error.response.data);
-        throw new Error(
-          `Robot request failed (${error.response.status}): ${responseData}`
-        );
-      }
-
-      if (error instanceof Error) {
-        throw error;
-      }
-
-      throw new Error(String(error));
+      this.handleError(error);
     }
   }
 
