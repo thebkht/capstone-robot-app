@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import * as Network from "expo-network";
 import React, {
   useCallback,
@@ -95,6 +96,8 @@ export function WifiProvisionScreen() {
     baseUrl,
     setBaseUrl,
   } = useRobot();
+
+  const router = useRouter();
 
   const [devices, setDevices] = useState<RovyDevice[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<RovyDevice | null>(
@@ -318,6 +321,7 @@ export function WifiProvisionScreen() {
       setBaseUrl(formatted);
       await refreshStatus();
       setIsManualModalVisible(false);
+      router.replace("/wifi");
     } catch (error) {
       setManualConnectError(
         error instanceof Error
@@ -327,7 +331,7 @@ export function WifiProvisionScreen() {
     } finally {
       setIsManualConnecting(false);
     }
-  }, [manualIpInput, refreshStatus, setBaseUrl]);
+  }, [manualIpInput, refreshStatus, router, setBaseUrl]);
 
   // Refresh phone network on mount (only once)
   useEffect(() => {
