@@ -264,7 +264,7 @@ export class RobotAPI {
   }
 
   public async requestClaim(): Promise<ClaimRequestResponse> {
-    return this.request<ClaimRequestResponse>("/claim/request", "POST");
+    return this.request<ClaimRequestResponse>("/claim/request", "POST", {});
   }
 
   public async confirmClaim(pin: string): Promise<ClaimConfirmResponse> {
