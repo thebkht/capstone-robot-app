@@ -24,27 +24,27 @@ export default function CameraScreen() {
      const [isConnecting, setIsConnecting] = useState(false);
      const wsRef = useRef<WebSocket | null>(null);
 
-    // WebSocket URL
-    const wsUrl = useMemo(() => {
-         if (!baseUrl) {
-              return undefined;
-         }
+     // WebSocket URL
+     const wsUrl = useMemo(() => {
+          if (!baseUrl) {
+               return undefined;
+          }
 
-         try {
-              const parsedUrl = new URL(
-                   baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
-              );
+          try {
+               const parsedUrl = new URL(
+                    baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
+               );
 
-              parsedUrl.protocol = parsedUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-              parsedUrl.pathname = `${parsedUrl.pathname.replace(/\/$/, '')}/camera/ws`;
-              parsedUrl.search = '';
+               parsedUrl.protocol = 'wss:';
+               parsedUrl.pathname = `${parsedUrl.pathname.replace(/\/$/, '')}/camera/ws`;
+               parsedUrl.search = '';
 
-              return parsedUrl.toString();
-         } catch (err) {
-              console.warn('Invalid base URL for WebSocket', err);
-              return undefined;
-         }
-    }, [baseUrl]);
+               return parsedUrl.toString();
+          } catch (err) {
+               console.warn('Invalid base URL for WebSocket', err);
+               return undefined;
+          }
+     }, [baseUrl]);
 
 
      const connectWebSocket = useCallback(() => {
