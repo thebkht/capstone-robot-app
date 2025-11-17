@@ -69,7 +69,7 @@ const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 export const ROBOT_BASE_URL_STORAGE_KEY = "robot_base_url";
 export const ROBOT_CONTROL_TOKEN_STORAGE_KEY = "robot_control_token";
 export const ROBOT_SESSION_ID_STORAGE_KEY = "robot_session_id";
-export const DEFAULT_ROBOT_BASE_URL = "https://rovy.tail535f32.ts.net";
+export const DEFAULT_ROBOT_BASE_URL = "http://192.168.200.123:8000";
 
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [baseUrl, setBaseUrlState] = useState<string>(DEFAULT_ROBOT_BASE_URL);

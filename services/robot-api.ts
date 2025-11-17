@@ -1,4 +1,11 @@
-import axios, { AxiosError, AxiosInstance, AxiosResponse } from "axios";
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
+} from "axios";
+
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type RobotConnectionState =
   | "disconnected"
@@ -143,12 +150,26 @@ export class RobotAPI {
     // Request interceptor to add auth headers
     this.axiosInstance.interceptors.request.use(
       (config) => {
+        console.log(
+          "Request interceptor - Method:",
+          config.method,
+          "URL:",
+          config.url
+        );
+
+        // CRITICAL: Ensure method is preserved and uppercase
+        if (config.method) {
+          config.method = config.method.toUpperCase() as any;
+        }
+
         if (this.controlToken) {
           config.headers["x-control-token"] = this.controlToken;
         }
         if (this.sessionId) {
           config.headers["session-id"] = this.sessionId;
         }
+
+        console.log("Request interceptor - Final method:", config.method);
         return config;
       },
       (error) => {
@@ -159,9 +180,20 @@ export class RobotAPI {
     // Response interceptor for error handling
     this.axiosInstance.interceptors.response.use(
       (response: AxiosResponse) => {
+        console.log("Response received:", {
+          status: response.status,
+          method: response.config.method,
+          url: response.config.url,
+        });
         return response;
       },
       (error: AxiosError) => {
+        console.log("Response error:", {
+          status: error.response?.status,
+          method: error.config?.method,
+          url: error.config?.url,
+          data: error.config?.data,
+        });
         if (error.response?.status === 401) {
           console.log("Unauthorized - Control token may be invalid");
         }
@@ -244,6 +276,7 @@ export class RobotAPI {
   // Generic HTTP methods
   private async get<T = any>(endpoint: string): Promise<ApiResponse<T>> {
     try {
+      console.log("GET request to:", endpoint);
       const response = await this.axiosInstance.get<T>(endpoint);
       return this.handleResponse(response);
     } catch (error) {
@@ -256,9 +289,25 @@ export class RobotAPI {
     data?: any
   ): Promise<ApiResponse<T>> {
     try {
-      const response = await this.axiosInstance.post<T>(endpoint, data);
+      console.log("POST request to:", endpoint, "with data:", data);
+
+      // CRITICAL for React Native: Always send data object, even if empty
+      // React Native's XMLHttpRequest may convert POST to GET if no body is present
+      const requestData = data !== undefined ? data : {};
+
+      const response = await this.axiosInstance({
+        method: "post",
+        url: endpoint,
+        data: requestData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      console.log("POST response:", response.status, response.data);
       return this.handleResponse(response);
     } catch (error) {
+      console.error("POST error:", error);
       return this.handleError(error as AxiosError<ErrorResponse>);
     }
   }
@@ -268,7 +317,12 @@ export class RobotAPI {
     data?: any
   ): Promise<ApiResponse<T>> {
     try {
-      const response = await this.axiosInstance.put<T>(endpoint, data);
+      console.log("PUT request to:", endpoint, "with data:", data);
+      const response = await this.axiosInstance.request<T>({
+        method: "PUT",
+        url: endpoint,
+        data: data || {},
+      });
       return this.handleResponse(response);
     } catch (error) {
       return this.handleError(error as AxiosError<ErrorResponse>);
@@ -277,7 +331,11 @@ export class RobotAPI {
 
   private async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      const response = await this.axiosInstance.delete<T>(endpoint);
+      console.log("DELETE request to:", endpoint);
+      const response = await this.axiosInstance.request<T>({
+        method: "DELETE",
+        url: endpoint,
+      });
       return this.handleResponse(response);
     } catch (error) {
       return this.handleError(error as AxiosError<ErrorResponse>);
@@ -371,11 +429,72 @@ export class RobotAPI {
   }
 
   public async requestClaim(): Promise<ClaimRequestResponse> {
-    const response = await this.post<ClaimRequestResponse>("/claim/request");
-    if (response.error) {
-      throw new Error(response.error);
+    try {
+      console.log("=== REQUEST CLAIM DEBUG START ===");
+      console.log("Base URL:", this.baseUrl);
+
+      const url = `${this.baseUrl}/claim/request`;
+      console.log("Full URL:", url);
+
+      // Test if the URL is reachable with a simple GET first
+      try {
+        console.log("Testing GET request to /health...");
+        const healthResponse = await fetch(`${this.baseUrl}/health`, {
+          method: "GET",
+        });
+        console.log("Health check status:", healthResponse.status);
+      } catch (healthErr) {
+        console.error("Health check failed:", healthErr);
+      }
+
+      // Now try the POST
+      console.log("Attempting POST request...");
+      console.log("Method: POST");
+      console.log("URL:", url);
+      console.log("Body:", JSON.stringify({}));
+
+      const requestOptions = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({}),
+      };
+
+      console.log("Request options:", JSON.stringify(requestOptions, null, 2));
+
+      const response = await fetch(url, requestOptions);
+
+      console.log("Response received:");
+      console.log("  Status:", response.status);
+      console.log("  Status Text:", response.statusText);
+      console.log(
+        "  Headers:",
+        JSON.stringify(Object.fromEntries(response.headers.entries()))
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Error response body:", errorText);
+        console.log("=== REQUEST CLAIM DEBUG END (ERROR) ===");
+        throw new Error(
+          `Request failed with status ${response.status}: ${errorText}`
+        );
+      }
+
+      const data = await response.json();
+      console.log("Response data:", data);
+      console.log("=== REQUEST CLAIM DEBUG END (SUCCESS) ===");
+      return data as ClaimRequestResponse;
+    } catch (error) {
+      console.error("=== REQUEST CLAIM DEBUG END (EXCEPTION) ===");
+      console.error("Exception:", error);
+      if (error instanceof Error) {
+        throw new Error(`Request failed: ${error.message}`);
+      }
+      throw error;
     }
-    return response.data!;
   }
 
   public async confirmClaim(pin: string): Promise<ClaimConfirmResponse> {

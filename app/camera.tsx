@@ -42,7 +42,7 @@ export default function CameraScreen() {
                     baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
                );
 
-               parsedUrl.protocol = 'wss:';
+               parsedUrl.protocol = 'ws:';
                parsedUrl.pathname = `${parsedUrl.pathname.replace(/\/$/, '')}/camera/ws`;
                parsedUrl.search = '';
 
