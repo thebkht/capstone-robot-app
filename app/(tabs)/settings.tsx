@@ -93,13 +93,13 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#050505',
+    backgroundColor: '#161616',
   },
   container: {
     flex: 1,
     padding: 24,
     gap: 20,
-    backgroundColor: '#050505',
+    backgroundColor: '#161616',
   },
   description: {
     color: '#D1D5DB',
@@ -109,16 +109,16 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#1F2937',
-    backgroundColor: '#0F0F10',
+    borderColor: '#202020',
+    backgroundColor: '#1C1C1C',
   },
   input: {
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#1F2937',
-    backgroundColor: '#0A0A0B',
+    borderColor: '#202020',
+    backgroundColor: '#1B1B1B',
     color: '#F9FAFB',
     fontFamily: 'JetBrainsMono_400Regular',
     letterSpacing: 0.25,

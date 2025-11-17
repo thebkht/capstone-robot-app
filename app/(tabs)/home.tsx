@@ -148,7 +148,7 @@ export default function HomeScreen() {
                   <IconSymbol
                     name={control.icon}
                     size={18}
-                    color={isActive ? '#050505' : '#CBD5F5'}
+                    color={isActive ? '#161616' : '#CBD5F5'}
                   />
                   <ThemedText
                     style={[styles.modeButtonText, isActive && styles.modeButtonTextActive]}
@@ -204,11 +204,11 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#050505',
+    backgroundColor: '#161616',
   },
   screen: {
     flex: 1,
-    backgroundColor: '#050505',
+    backgroundColor: '#161616',
   },
   content: {
     padding: 24,
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     color: '#F9FAFB',
   },
   missionSubtitle: {
-    color: '#9CA3AF',
+    color: '#67686C',
     marginTop: 4,
   },
   headerStatus: {
@@ -238,13 +238,13 @@ const styles = StyleSheet.create({
     color: '#F9FAFB',
   },
   headerStatusMeta: {
-    color: '#9CA3AF',
+    color: '#67686C',
     fontSize: 14,
   },
   headerDot: {
     width: 4,
     height: 4,
-    backgroundColor: '#374151',
+    backgroundColor: '#202020',
   },
   robotImage: {
     width: '100%',
@@ -256,21 +256,21 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#0F0F10',
+    backgroundColor: '#1C1C1C',
     padding: 16,
     gap: 6,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#202020',
   },
   statIconWrapper: {
     width: 32,
     height: 32,
-    backgroundColor: '#1F2937',
+    backgroundColor: '#202020',
     alignItems: 'center',
     justifyContent: 'center',
   },
   statLabel: {
-    color: '#9CA3AF',
+    color: '#67686C',
     fontSize: 14,
   },
   statValue: {
@@ -293,9 +293,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
-    backgroundColor: '#0F0F10',
+    backgroundColor: '#1C1C1C',
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#202020',
   },
   modeButtonActive: {
     backgroundColor: '#F8FAFC',
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     fontFamily: 'JetBrainsMono_600SemiBold',
   },
   modeButtonTextActive: {
-    color: '#050505',
+    color: '#161616',
   },
   behaviorHeader: {
     flexDirection: 'row',
@@ -323,10 +323,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   behaviorCard: {
-    backgroundColor: '#0F0F10',
+    backgroundColor: '#1C1C1C',
     padding: 16,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#202020',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -347,11 +347,11 @@ const styles = StyleSheet.create({
   behaviorBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: '#1F2937',
+    backgroundColor: '#202020',
   },
   behaviorBadgeText: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#67686C',
     fontFamily: 'JetBrainsMono_600SemiBold',
   },
   behaviorStatusPill: {
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: '#1F2937',
+    backgroundColor: '#202020',
   },
   behaviorStatusText: {
     color: '#D1D5DB',
@@ -373,14 +373,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   behaviorDescription: {
-    color: '#9CA3AF',
+    color: '#67686C',
     fontSize: 14,
   },
   cameraButton: {
-    backgroundColor: '#0F0F10',
+    backgroundColor: '#1C1C1C',
     padding: 16,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#202020',
   },
   cameraButtonPressed: {
     borderColor: '#1DD1A1',

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
      ActivityIndicator,
      Pressable,
@@ -284,28 +284,28 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
      safeArea: {
           flex: 1,
-          backgroundColor: "#050505",
+          backgroundColor: "#161616",
      },
      container: {
           flex: 1,
           padding: 24,
           gap: 16,
-          backgroundColor: '#050505',
+          backgroundColor: '#161616',
      },
      statusBar: {
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: 12,
-          backgroundColor: '#0F0F10',
+          backgroundColor: '#1C1C1C',
           borderRadius: 4,
           borderWidth: 1,
-          borderColor: '#1F2937',
+          borderColor: '#202020',
      },
      statusText: {
           flex: 1,
           fontSize: 11,
-          color: '#9CA3AF',
+          color: '#67686C',
           fontFamily: 'JetBrainsMono_400Regular',
      },
      streamButton: {
@@ -331,9 +331,9 @@ const styles = StyleSheet.create({
           borderRadius: 0,
           overflow: 'hidden',
           borderWidth: 1,
-          borderColor: '#1F2937',
+          borderColor: '#202020',
           aspectRatio: 4 / 3,
-          backgroundColor: '#0A0A0B',
+          backgroundColor: '#1B1B1B',
           alignItems: 'center',
           justifyContent: 'center',
      },
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
           gap: 16,
      },
      loadingText: {
-          color: '#9CA3AF',
+          color: '#67686C',
           textAlign: 'center',
           paddingHorizontal: 24,
      },
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
           textAlign: 'center',
      },
      errorSubtext: {
-          color: '#9CA3AF',
+          color: '#67686C',
           fontSize: 10,
           textAlign: 'center',
           fontFamily: 'JetBrainsMono_400Regular',
@@ -419,16 +419,16 @@ const styles = StyleSheet.create({
           paddingVertical: 16,
           alignItems: 'center',
           borderWidth: 1,
-          borderColor: '#1F2937',
-          backgroundColor: '#0A0A0B',
+          borderColor: '#202020',
+          backgroundColor: '#1B1B1B',
      },
      snapshotCard: {
           gap: 16,
           padding: 20,
           borderRadius: 0,
           borderWidth: 1,
-          borderColor: '#1F2937',
-          backgroundColor: '#0F0F10',
+          borderColor: '#202020',
+          backgroundColor: '#1C1C1C',
      },
      snapshot: {
           width: '100%',
@@ -440,8 +440,8 @@ const styles = StyleSheet.create({
           padding: 20,
           borderRadius: 0,
           borderWidth: 1,
-          borderColor: '#1F2937',
-          backgroundColor: '#0F0F10',
+          borderColor: '#202020',
+          backgroundColor: '#1C1C1C',
           alignItems: 'center',
      },
      joystickValue: {

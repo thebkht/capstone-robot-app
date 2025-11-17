@@ -1,4 +1,5 @@
 import * as Network from "expo-network";
+import { useRouter } from "expo-router";
 import React, {
   useCallback,
   useEffect,
@@ -95,6 +96,8 @@ export function WifiProvisionScreen() {
     baseUrl,
     setBaseUrl,
   } = useRobot();
+
+  const router = useRouter();
 
   const [devices, setDevices] = useState<RovyDevice[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<RovyDevice | null>(
@@ -318,6 +321,7 @@ export function WifiProvisionScreen() {
       setBaseUrl(formatted);
       await refreshStatus();
       setIsManualModalVisible(false);
+      router.replace("/wifi");
     } catch (error) {
       setManualConnectError(
         error instanceof Error
@@ -327,7 +331,7 @@ export function WifiProvisionScreen() {
     } finally {
       setIsManualConnecting(false);
     }
-  }, [manualIpInput, refreshStatus, setBaseUrl]);
+  }, [manualIpInput, refreshStatus, router, setBaseUrl]);
 
   // Refresh phone network on mount (only once)
   useEffect(() => {
@@ -364,7 +368,7 @@ export function WifiProvisionScreen() {
   const getStatusColor = (): string => {
     switch (wifiStatus) {
       case "idle":
-        return "#9CA3AF";
+        return "#67686C";
       case "connecting":
         return "#FBBF24";
       case "connected":
@@ -372,7 +376,7 @@ export function WifiProvisionScreen() {
       case "failed":
         return "#F87171";
       default:
-        return "#9CA3AF";
+        return "#67686C";
     }
   };
 
@@ -725,19 +729,21 @@ export function WifiProvisionScreen() {
             </View>
           </ThemedView> */}
 
-          <Pressable
-            style={styles.connectIpButton}
-            onPress={() => {
-              setManualConnectError(null);
-              setIsManualModalVisible(true);
-            }}
-          >
-            <ThemedText style={styles.connectIpText}>
-              Connect to a specific IP
-            </ThemedText>
-          </Pressable>
+
         </ThemedView>
       </ScrollView>
+
+      <Pressable
+        style={styles.connectIpButton}
+        onPress={() => {
+          setManualConnectError(null);
+          setIsManualModalVisible(true);
+        }}
+      >
+        <ThemedText style={styles.connectIpText}>
+          Connect to a specific IP
+        </ThemedText>
+      </Pressable>
 
       <Modal
         visible={isManualModalVisible}
@@ -818,7 +824,8 @@ export function WifiProvisionScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#050505",
+    backgroundColor: "#161616",
+    padding: 24,
   },
   scrollView: {
     flex: 1,
@@ -828,9 +835,8 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 24,
     gap: 24,
-    backgroundColor: "#050505",
+    backgroundColor: "#161616",
   },
   header: {
     gap: 12,
@@ -840,7 +846,7 @@ const styles = StyleSheet.create({
     lineHeight: 36,
   },
   subtitle: {
-    color: "#9CA3AF",
+    color: "#67686C",
   },
   errorCard: {
     padding: 16,
@@ -854,8 +860,8 @@ const styles = StyleSheet.create({
   sectionCard: {
     padding: 20,
     borderWidth: 1,
-    borderColor: "#1F2937",
-    backgroundColor: "#0F0F10",
+    borderColor: "#202020",
+    backgroundColor: "#1C1C1C",
     gap: 20,
   },
   sectionHeader: {
@@ -869,7 +875,7 @@ const styles = StyleSheet.create({
     color: "#F9FAFB",
   },
   sectionHint: {
-    color: "#9CA3AF",
+    color: "#67686C",
     marginTop: 4,
     fontSize: 14,
   },
@@ -896,8 +902,8 @@ const styles = StyleSheet.create({
   deviceItem: {
     padding: 16,
     borderWidth: 1,
-    borderColor: "#1F2937",
-    backgroundColor: "#0A0A0B",
+    borderColor: "#202020",
+    backgroundColor: "#1B1B1B",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -920,7 +926,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   emptyStateText: {
-    color: "#9CA3AF",
+    color: "#67686C",
     fontStyle: "italic",
   },
   primaryButton: {
@@ -949,7 +955,7 @@ const styles = StyleSheet.create({
   },
   outlineButton: {
     borderWidth: 1,
-    borderColor: "#1F2937",
+    borderColor: "#202020",
     backgroundColor: "transparent",
   },
   outlineButtonText: {
@@ -961,8 +967,8 @@ const styles = StyleSheet.create({
   },
   statusBoard: {
     borderWidth: 1,
-    borderColor: "#1F2937",
-    backgroundColor: "#0A0A0B",
+    borderColor: "#202020",
+    backgroundColor: "#1B1B1B",
     padding: 16,
     gap: 12,
   },
@@ -972,7 +978,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statusLabel: {
-    color: "#9CA3AF",
+    color: "#67686C",
     fontSize: 14,
   },
   statusValue: {
@@ -991,7 +997,7 @@ const styles = StyleSheet.create({
   infoCard: {
     padding: 16,
 
-    backgroundColor: "#1F2937",
+    backgroundColor: "#202020",
   },
   infoText: {
     color: "#E5E7EB",
@@ -1006,9 +1012,9 @@ const styles = StyleSheet.create({
     fontFamily: "JetBrainsMono_600SemiBold",
   },
   input: {
-    backgroundColor: "#0F0F10",
+    backgroundColor: "#1C1C1C",
     borderWidth: 1,
-    borderColor: "#1F2937",
+    borderColor: "#202020",
 
     padding: 16,
     color: "#F9FAFB",
@@ -1039,11 +1045,10 @@ const styles = StyleSheet.create({
   },
   connectIpButton: {
     borderWidth: 1,
-    borderColor: "#374151",
-
+    borderColor: "#202020",
     paddingVertical: 16,
     alignItems: "center",
-    backgroundColor: "#0A0A0B",
+    backgroundColor: "#1B1B1B",
   },
   connectIpText: {
     color: "#E5E7EB",
@@ -1055,7 +1060,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: "#1F2937",
+    backgroundColor: "#202020",
   },
   statusDot: {
     width: 8,
@@ -1079,8 +1084,8 @@ const styles = StyleSheet.create({
   modalCard: {
     padding: 20,
     borderWidth: 1,
-    borderColor: "#1F2937",
-    backgroundColor: "#050505",
+    borderColor: "#202020",
+    backgroundColor: "#161616",
     gap: 16,
   },
   modalTitle: {
@@ -1088,7 +1093,7 @@ const styles = StyleSheet.create({
     color: "#F9FAFB",
   },
   modalHint: {
-    color: "#9CA3AF",
+    color: "#67686C",
   },
   modalActions: {
     flexDirection: "row",
@@ -1103,9 +1108,9 @@ const styles = StyleSheet.create({
   },
   overlayCard: {
     padding: 24,
-    backgroundColor: "#050505",
+    backgroundColor: "#161616",
     borderWidth: 1,
-    borderColor: "#1F2937",
+    borderColor: "#202020",
     alignItems: "center",
     gap: 16,
   },

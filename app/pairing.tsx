@@ -208,7 +208,7 @@ export default function PairingScreen() {
 const styles = StyleSheet.create({
      safeArea: {
           flex: 1,
-          backgroundColor: "#050505",
+          backgroundColor: "#161616",
      },
      scrollView: {
           flex: 1,
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
           flex: 1,
           padding: 24,
           gap: 24,
-          backgroundColor: "#050505",
+          backgroundColor: "#161616",
      },
      heading: {
           fontFamily: TITLE_FONT_FAMILY,
@@ -234,8 +234,8 @@ const styles = StyleSheet.create({
           padding: 20,
           borderRadius: 0,
           borderWidth: 1,
-          borderColor: "#1F2937",
-          backgroundColor: "#0F0F10",
+          borderColor: "#202020",
+          backgroundColor: "#1C1C1C",
      },
      errorText: {
           color: "#F87171",
@@ -250,21 +250,21 @@ const styles = StyleSheet.create({
           padding: 20,
           borderRadius: 0,
           borderWidth: 1,
-          borderColor: "#1F2937",
-          backgroundColor: "#0F0F10",
+          borderColor: "#202020",
+          backgroundColor: "#1C1C1C",
      },
      pinTitle: {
           color: "#F9FAFB",
           fontFamily: SUBTITLE_FONT_FAMILY,
      },
      pinHint: {
-          color: "#9CA3AF",
+          color: "#67686C",
           fontFamily: MONO_REGULAR_FONT_FAMILY,
      },
      pinInput: {
-          backgroundColor: "#050505",
+          backgroundColor: "#161616",
           borderWidth: 1,
-          borderColor: "#1F2937",
+          borderColor: "#202020",
           borderRadius: 0,
           padding: 16,
           color: "#F9FAFB",
@@ -288,11 +288,11 @@ const styles = StyleSheet.create({
      },
      secondaryButton: {
           borderWidth: 1,
-          borderColor: "#1F2937",
+          borderColor: "#202020",
           paddingVertical: 16,
           alignItems: "center",
           borderRadius: 0,
-          backgroundColor: "#0A0A0B",
+          backgroundColor: "#1B1B1B",
      },
      secondaryButtonText: {
           color: "#E5E7EB",
