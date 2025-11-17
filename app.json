@@ -61,7 +61,10 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
-          "modes": ["peripheral", "central"],
+          "modes": [
+            "peripheral",
+            "central"
+          ],
           "bluetoothAlwaysPermission": "Allow Rovy Controller to connect to bluetooth devices"
         }
       ],
@@ -72,6 +75,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "84365424-b8dc-4997-ad48-d883e582aadf"
+      }
     }
   }
 }
