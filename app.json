@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "robot-controller",
-    "slug": "robot-controller",
+    "name": "Rovy Controller",
+    "slug": "Rovy Controller",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "robotcontroller",
+    "scheme": "rovycontroller",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.thefalsenet.robotcontroller",
+      "bundleIdentifier": "com.rovy.rovycontroller",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "Robot Controller uses Bluetooth to securely provision and connect to your robot."
+        "NSBluetoothAlwaysUsageDescription": "Rovy Controller uses Bluetooth to securely provision and connect to your Rovy."
       }
     },
     "android": {
@@ -32,7 +32,7 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "minSdkVersion": 23,
-      "package": "com.thefalsenet.robotcontroller"
+      "package": "com.thefalsenet.Rovycontroller"
     },
     "web": {
       "output": "static",
@@ -58,7 +58,7 @@
         {
           "isBackgroundEnabled": true,
           "modes": ["peripheral", "central"],
-          "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to bluetooth devices"
+          "bluetoothAlwaysPermission": "Allow Rovy Controller to connect to bluetooth devices"
         }
       ],
       "./plugins/withAndroidBlePermissions",
