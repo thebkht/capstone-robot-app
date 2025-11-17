@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.thefalsenet.robotcontroller"
+      "bundleIdentifier": "com.thefalsenet.robotcontroller",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Robot Controller uses Bluetooth to securely provision and connect to your robot."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +24,14 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_FINE_LOCATION"],
+      "permissions": [
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "minSdkVersion": 23,
       "package": "com.thefalsenet.robotcontroller"
     },
     "web": {
@@ -50,7 +60,10 @@
           "modes": ["peripheral", "central"],
           "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to bluetooth devices"
         }
-      ]
+      ],
+      "./plugins/withAndroidBlePermissions",
+      "./plugins/withAndroidBuildGradleTweaks",
+      "./plugins/withPodfileBleCleanup"
     ],
     "experiments": {
       "typedRoutes": true,

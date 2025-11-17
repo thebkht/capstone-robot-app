@@ -15,6 +15,8 @@ export interface RobotNetworkInfo {
   ip?: string;
   ssid?: string;
   wifiSsid?: string;
+  network_name?: string;
+  connected?: boolean;
   signalStrength?: number;
   availableNetworks?: string[];
   mode?: string;
@@ -70,8 +72,15 @@ export interface RobotStatus {
   [key: string]: unknown;
 }
 
+export interface WifiNetwork {
+  ssid: string;
+  signal_strength?: number;
+  security?: string;
+  frequency?: number;
+}
+
 export interface WifiScanResponse {
-  networks: string[];
+  networks: WifiNetwork[] | string[];
 }
 
 export interface ClaimRequestResponse {
@@ -227,6 +236,14 @@ export class RobotAPI {
 
   public async listWifiNetworks(): Promise<WifiScanResponse> {
     return this.request<WifiScanResponse>("/wifi/networks");
+  }
+
+  public async fetchWifiStatus(): Promise<RobotNetworkInfo> {
+    return this.request<RobotNetworkInfo>("/wifi/status");
+  }
+
+  public async scanWifiNetworks(): Promise<WifiScanResponse> {
+    return this.request<WifiScanResponse>("/wifi/scan");
   }
 
   public async requestClaim(): Promise<ClaimRequestResponse> {

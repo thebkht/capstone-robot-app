@@ -41,23 +41,54 @@ export class RovyBleManager {
   private statusChangeCallbacks: Set<StatusChangeCallback> = new Set();
   private statusSubscription: { remove: () => void } | null = null;
   private currentStatus: WifiStatus = "idle";
+  private bleUnavailableReason: string | null = null;
 
   constructor() {
     try {
-      // Create BleManager directly since react-native-ble-plx is installed
       // Skip on web platform
       if (Platform.OS === "web") {
-        console.warn("BLE not available on web platform");
+        this.bleUnavailableReason =
+          "Bluetooth provisioning is not supported in the web preview. Please run the mobile app on iOS or Android.";
+        console.warn(this.bleUnavailableReason);
         this.bleManager = null;
         return;
       }
 
+      // Create BleManager directly - react-native-ble-plx handles native module linking
+      // If the native module isn't available, this will throw an error which we catch below
       this.bleManager = new BleManager();
+      this.bleUnavailableReason = null;
       console.log("BLE manager initialized successfully");
     } catch (error) {
       console.error("Error initializing BLE manager:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unknown Bluetooth initialization error";
+
+      // Check if this is a native module not found or not linked error
+      if (
+        message.includes("Native module") ||
+        message.includes("not found") ||
+        message.includes("Cannot find module") ||
+        message.includes("NativeEventEmitter") ||
+        message.includes("requires a non-null argument")
+      ) {
+        this.bleUnavailableReason =
+          "Bluetooth provisioning requires a native build with BLE support. Rebuild the app with `expo run:ios` or `expo run:android`.";
+      } else {
+        this.bleUnavailableReason =
+          "Failed to initialize Bluetooth manager: " + message;
+      }
       this.bleManager = null;
     }
+  }
+
+  private getAvailabilityError(): Error {
+    const reason =
+      this.bleUnavailableReason ||
+      "Bluetooth manager not available. Restart the app to re-initialize BLE.";
+    return new Error(reason);
   }
 
   /**
@@ -145,7 +176,7 @@ export class RovyBleManager {
    */
   private async ensureBleReady(): Promise<void> {
     if (!this.bleManager) {
-      throw new Error("BLE manager not available");
+      throw this.getAvailabilityError();
     }
 
     // Check BLE state
@@ -179,7 +210,7 @@ export class RovyBleManager {
     console.log("Starting scan for ROVY devices...");
 
     if (!this.bleManager) {
-      throw new Error("BLE manager not available");
+      throw this.getAvailabilityError();
     }
 
     // Check permissions
@@ -193,7 +224,7 @@ export class RovyBleManager {
 
     return new Promise((resolve, reject) => {
       if (!this.bleManager) {
-        reject(new Error("BLE manager not available"));
+        reject(this.getAvailabilityError());
         return;
       }
 
@@ -247,7 +278,7 @@ export class RovyBleManager {
     console.log("Connecting to ROVY device:", deviceId);
 
     if (!this.bleManager) {
-      throw new Error("BLE manager not available");
+      throw this.getAvailabilityError();
     }
 
     // Ensure BLE is ready
@@ -553,6 +584,13 @@ export class RovyBleManager {
    */
   getCurrentStatus(): WifiStatus {
     return this.currentStatus;
+  }
+
+  /**
+   * Provide reason why BLE is unavailable (if any)
+   */
+  getBleUnavailableReason(): string | null {
+    return this.bleUnavailableReason;
   }
 
   /**

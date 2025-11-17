@@ -22,12 +22,7 @@ export default function CameraScreen() {
      const [currentFrame, setCurrentFrame] = useState<string | null>(null);
      const [isStreaming, setIsStreaming] = useState(false);
      const [isConnecting, setIsConnecting] = useState(false);
-     const [fps, setFps] = useState(0);
-     const [frameCount, setFrameCount] = useState(0);
      const wsRef = useRef<WebSocket | null>(null);
-     const fpsIntervalRef = useRef<NodeJS.Timeout | null>(null);
-     const frameCountRef = useRef(0);
-     const startTimeRef = useRef(0);
 
      // WebSocket URL
      const wsUrl = useMemo(() => {
@@ -39,29 +34,6 @@ export default function CameraScreen() {
           return `${url}/camera/ws`;
      }, [baseUrl]);
 
-     // Calculate FPS
-     useEffect(() => {
-          if (!isStreaming) {
-               return;
-          }
-
-          startTimeRef.current = Date.now();
-          frameCountRef.current = 0;
-
-          fpsIntervalRef.current = setInterval(() => {
-               const elapsed = (Date.now() - startTimeRef.current) / 1000;
-               if (elapsed > 0) {
-                    setFps(frameCountRef.current / elapsed);
-                    setFrameCount(frameCountRef.current);
-               }
-          }, 1000);
-
-          return () => {
-               if (fpsIntervalRef.current) {
-                    clearInterval(fpsIntervalRef.current);
-               }
-          };
-     }, [isStreaming]);
 
      const connectWebSocket = useCallback(() => {
           if (!wsUrl) {
@@ -97,7 +69,6 @@ export default function CameraScreen() {
                     if (data.frame) {
                          // Update frame with base64 data
                          setCurrentFrame(`data:image/jpeg;base64,${data.frame}`);
-                         frameCountRef.current += 1;
                     }
                } catch (err) {
                     console.error('Error parsing WebSocket message:', err);

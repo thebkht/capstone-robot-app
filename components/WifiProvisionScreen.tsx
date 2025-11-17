@@ -1,8 +1,17 @@
 import * as Network from "expo-network";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,20 +22,57 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { useRobot } from "@/context/robot-provider";
+import {
+  DEFAULT_ROBOT_BASE_URL,
+  useRobot,
+} from "@/context/robot-provider";
 import { useRovyBle } from "@/hooks/use-rovy-ble";
 import type { RovyDevice } from "@/services/rovy-ble";
 
+const deriveHost = (value: string | null | undefined) => {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value.includes("://") ? value : `http://${value}`);
+    return parsed.host || parsed.hostname || null;
+  } catch (error) {
+    console.warn("Unable to parse host from value", value, error);
+    return value;
+  }
+};
+
+const formatBaseUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/\/$/, "");
+  }
+
+  return `http://${trimmed.replace(/\/$/, "")}`;
+};
+
+const StatusPill = ({
+  color,
+  label,
+}: {
+  color: string;
+  label: string;
+}) => (
+  <View style={styles.statusPill}>
+    <View style={[styles.statusDot, { backgroundColor: color }]} />
+    <ThemedText style={styles.statusPillText}>{label}</ThemedText>
+  </View>
+);
+
 /**
  * Wi-Fi Provision Screen Component
- * Example UI for configuring ROVY robot Wi-Fi via BLE
- *
- * Flow:
- * 1. Scan for ROVY devices
- * 2. Press on robot to connect via Bluetooth
- * 3. Check if robot is on same network as phone
- * 4. If yes: Show "Connect" button
- * 5. If no: Show "Change Robot WiFi" to configure Wi-Fi
+ * Guides the user through finding the robot over BLE and
+ * managing the Wi-Fi connection.
  */
 export function WifiProvisionScreen() {
   const {
@@ -42,7 +88,13 @@ export function WifiProvisionScreen() {
     disconnect,
   } = useRovyBle();
 
-  const { refreshStatus } = useRobot();
+  const {
+    refreshStatus,
+    status,
+    statusError,
+    baseUrl,
+    setBaseUrl,
+  } = useRobot();
 
   const [devices, setDevices] = useState<RovyDevice[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<RovyDevice | null>(
@@ -53,6 +105,15 @@ export function WifiProvisionScreen() {
   const [showWifiConfig, setShowWifiConfig] = useState(false);
   const [isCheckingNetwork, setIsCheckingNetwork] = useState(false);
   const [isOnSameNetwork, setIsOnSameNetwork] = useState<boolean | null>(null);
+  const [isRobotConnecting, setIsRobotConnecting] = useState(false);
+  const [isManualModalVisible, setIsManualModalVisible] = useState(false);
+  const [manualIpInput, setManualIpInput] = useState("");
+  const [manualIpEdited, setManualIpEdited] = useState(false);
+  const [manualConnectError, setManualConnectError] = useState<string | null>(
+    null
+  );
+  const [isManualConnecting, setIsManualConnecting] = useState(false);
+
   const isCheckingNetworkRef = useRef(false);
   const refreshStatusRef = useRef(refreshStatus);
 
@@ -60,6 +121,21 @@ export function WifiProvisionScreen() {
   useEffect(() => {
     refreshStatusRef.current = refreshStatus;
   }, [refreshStatus]);
+
+  useEffect(() => {
+    if (manualIpEdited) {
+      return;
+    }
+
+    const fallback =
+      status?.network?.ip ||
+      deriveHost(baseUrl) ||
+      deriveHost(DEFAULT_ROBOT_BASE_URL);
+
+    if (fallback) {
+      setManualIpInput(fallback);
+    }
+  }, [baseUrl, manualIpEdited, status?.network?.ip]);
 
   /**
    * Step 1: Scan for ROVY devices
@@ -95,14 +171,12 @@ export function WifiProvisionScreen() {
         ipAddress && ipAddress !== "0.0.0.0" ? ipAddress : null;
 
       // Try to get SSID (may not be available on all platforms)
-      let ssid: string | null = null;
+      let ssidValue: string | null = null;
       if (networkState.type === "WIFI") {
-        // SSID might not be available without additional permissions
-        // This is okay - we'll check network connectivity instead
+        ssidValue = null;
       }
 
-      // Network info retrieved (stored for potential future use)
-      console.log("Phone network:", { ssid, ipAddress: resolvedIp });
+      console.log("Phone network:", { ssidValue, ipAddress: resolvedIp });
     } catch (error) {
       console.warn("Failed to get phone network info:", error);
     }
@@ -112,7 +186,6 @@ export function WifiProvisionScreen() {
    * Check if robot is on the same network as phone
    */
   const checkSameNetwork = useCallback(async () => {
-    // Prevent multiple simultaneous calls
     if (isCheckingNetworkRef.current) {
       return;
     }
@@ -122,27 +195,21 @@ export function WifiProvisionScreen() {
     setIsOnSameNetwork(null);
 
     try {
-      // Try to refresh robot status via network API
-      // If this succeeds, the robot is reachable on the network
-      // Use ref to avoid dependency on refreshStatus changing
       await refreshStatusRef.current();
 
-      // Give a small delay for status to update, then check
       setTimeout(() => {
-        // If refreshStatus succeeded without throwing, robot is reachable
         setIsOnSameNetwork(true);
         setShowWifiConfig(false);
         setIsCheckingNetwork(false);
         isCheckingNetworkRef.current = false;
       }, 500);
     } catch (error) {
-      // Robot not reachable via network
       console.log("Robot not on same network:", error);
       setIsOnSameNetwork(false);
       setIsCheckingNetwork(false);
       isCheckingNetworkRef.current = false;
     }
-  }, []); // No dependencies - uses ref
+  }, []);
 
   /**
    * Step 2: Connect to selected device via Bluetooth
@@ -154,7 +221,6 @@ export function WifiProvisionScreen() {
         setShowWifiConfig(false);
         setIsOnSameNetwork(null);
         await connectToRovy(device.id);
-        // After BLE connection, check if robot is on same network
         await refreshPhoneNetwork();
         await checkSameNetwork();
       } catch (err) {
@@ -173,10 +239,8 @@ export function WifiProvisionScreen() {
    */
   const handleNetworkConnect = useCallback(async () => {
     try {
-      // Refresh status to ensure we have latest info
+      setIsRobotConnecting(true);
       await refreshStatus();
-      // Navigation or connection handling would happen here
-      // For now, just show success
       Alert.alert(
         "Connected",
         "Robot is connected on the same network. You can now control it."
@@ -185,6 +249,8 @@ export function WifiProvisionScreen() {
       const message =
         err instanceof Error ? err.message : "Failed to connect to robot";
       Alert.alert("Connection Error", message);
+    } finally {
+      setIsRobotConnecting(false);
     }
   }, [refreshStatus]);
 
@@ -206,8 +272,6 @@ export function WifiProvisionScreen() {
 
     try {
       await sendWifiConfig(ssid.trim(), password);
-      // Status updates will come via notifications
-      // After successful connection, check network again
       setTimeout(async () => {
         if (wifiStatus === "connected") {
           await checkSameNetwork();
@@ -240,6 +304,31 @@ export function WifiProvisionScreen() {
     }
   }, [disconnect]);
 
+  const handleManualConnect = useCallback(async () => {
+    const formatted = formatBaseUrl(manualIpInput);
+    if (!formatted) {
+      setManualConnectError("Enter a valid IP address or URL.");
+      return;
+    }
+
+    setManualConnectError(null);
+    setIsManualConnecting(true);
+
+    try {
+      setBaseUrl(formatted);
+      await refreshStatus();
+      setIsManualModalVisible(false);
+    } catch (error) {
+      setManualConnectError(
+        error instanceof Error
+          ? error.message
+          : "Failed to reach the robot. Double-check the IP and try again."
+      );
+    } finally {
+      setIsManualConnecting(false);
+    }
+  }, [manualIpInput, refreshStatus, setBaseUrl]);
+
   // Refresh phone network on mount (only once)
   useEffect(() => {
     let mounted = true;
@@ -255,12 +344,8 @@ export function WifiProvisionScreen() {
     return () => {
       mounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run once on mount
+  }, [refreshPhoneNetwork]);
 
-  /**
-   * Get status display text
-   */
   const getStatusText = (): string => {
     switch (wifiStatus) {
       case "idle":
@@ -276,9 +361,6 @@ export function WifiProvisionScreen() {
     }
   };
 
-  /**
-   * Get status color
-   */
   const getStatusColor = (): string => {
     switch (wifiStatus) {
       case "idle":
@@ -294,6 +376,77 @@ export function WifiProvisionScreen() {
     }
   };
 
+  const bluetoothStatus = useMemo(() => {
+    if (error) {
+      return { label: "Error", color: "#F87171" };
+    }
+    if (isConnecting) {
+      return { label: "Connecting", color: "#FBBF24" };
+    }
+    if (isConnected) {
+      return { label: "Connected", color: "#1DD1A1" };
+    }
+    return { label: "ON", color: "#5CC8FF" };
+  }, [error, isConnecting, isConnected]);
+
+  const wifiConnectionStatus = useMemo(() => {
+    if (status?.network?.ip) {
+      return { label: "Connected", color: "#1DD1A1" };
+    }
+    if (statusError) {
+      return { label: "Offline", color: "#F87171" };
+    }
+    return { label: "Pending", color: "#FBBF24" };
+  }, [status?.network?.ip, statusError]);
+
+  const previousNetworks = useMemo(() => {
+    const seen = new Set<string>();
+    const candidates = [
+      status?.network?.wifiSsid,
+      status?.network?.ssid,
+      status?.health?.network?.wifiSsid,
+      status?.health?.network?.ssid,
+    ];
+    for (const candidate of candidates) {
+      if (candidate && candidate.trim()) {
+        seen.add(candidate.trim());
+      }
+    }
+    return Array.from(seen);
+  }, [status]);
+
+  const overlayVisible =
+    isConnecting ||
+    isManualConnecting ||
+    isRobotConnecting ||
+    isCheckingNetwork ||
+    isSendingConfig;
+
+  const overlayMessage = (() => {
+    if (isManualConnecting) {
+      return "Establishing connection to your robot";
+    }
+    if (isRobotConnecting) {
+      return "Refreshing robot status";
+    }
+    if (isSendingConfig) {
+      return "Sending Wi-Fi credentials";
+    }
+    if (isCheckingNetwork) {
+      return "Checking network connection";
+    }
+    return "Connecting to device";
+  })();
+
+  const wifiNetworkName =
+    status?.network?.wifiSsid ||
+    status?.network?.ssid ||
+    status?.health?.network?.wifiSsid ||
+    status?.health?.network?.ssid ||
+    "Unknown network";
+
+  const wifiIpAddress = status?.network?.ip || "Unavailable";
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <ScrollView
@@ -302,27 +455,85 @@ export function WifiProvisionScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <ThemedView style={styles.container}>
-          <ThemedText type="title" style={styles.title}>
-            ROVY Wi-Fi Setup
-          </ThemedText>
+          <View style={styles.header}>
+            <ThemedText type="title" style={styles.title}>
+              Connect to a robot
+            </ThemedText>
+          </View>
 
-          {/* Error Display */}
-          {error && (
+          {error ? (
             <ThemedView style={styles.errorCard}>
               <ThemedText style={styles.errorText}>{error}</ThemedText>
             </ThemedView>
-          )}
+          ) : null}
 
-          {/* Step 1: Scan for Devices */}
-          <ThemedView style={styles.section}>
-            <ThemedText type="subtitle" style={styles.sectionTitle}>
-              Scan for ROVY
-            </ThemedText>
+          {statusError ? (
+            <ThemedView style={styles.errorCard}>
+              <ThemedText style={styles.errorText}>{statusError}</ThemedText>
+            </ThemedView>
+          ) : null}
+
+          <ThemedView style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <ThemedText style={styles.sectionTitle}>Bluetooth</ThemedText>
+              </View>
+              <StatusPill
+                color={bluetoothStatus.color}
+                label={bluetoothStatus.label}
+              />
+            </View>
+
+            <View style={styles.blockHeader}>
+              <ThemedText style={styles.blockTitle}>Nearby devices</ThemedText>
+              {isScanning ? (
+                <View style={styles.inlineStatus}>
+                  <ActivityIndicator size="small" color="#1DD1A1" />
+                  <ThemedText style={styles.statusLabelText}>
+                    Scanning for devices...
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.deviceList}>
+              {devices.length === 0 && !isScanning ? (
+                <ThemedText style={styles.emptyStateText}>
+                  {isConnected
+                    ? "Connected to a robot. Disconnect to scan again."
+                    : "No nearby robots detected yet."}
+                </ThemedText>
+              ) : (
+                devices.map((device) => (
+                  <Pressable
+                    key={device.id}
+                    style={[
+                      styles.deviceItem,
+                      selectedDevice?.id === device.id && styles.deviceSelected,
+                    ]}
+                    onPress={() => handleConnect(device)}
+                    disabled={isConnecting}
+                  >
+                    <View>
+                      <ThemedText style={styles.deviceName}>
+                        {device.name || "ROVY"}
+                      </ThemedText>
+                      <ThemedText style={styles.deviceId}>{device.id}</ThemedText>
+                    </View>
+                    {selectedDevice?.id === device.id && isConnected ? (
+                      <ThemedText style={styles.connectedBadge}>
+                        Connected
+                      </ThemedText>
+                    ) : null}
+                  </Pressable>
+                ))
+              )}
+            </View>
+
             <Pressable
               style={[
-                styles.button,
                 styles.primaryButton,
-                (isScanning || isConnecting) && styles.buttonDisabled,
+                (isScanning || isConnecting) && styles.disabledPrimary,
               ]}
               onPress={handleScan}
               disabled={isScanning || isConnecting}
@@ -336,194 +547,270 @@ export function WifiProvisionScreen() {
               )}
             </Pressable>
 
-            {/* Device List */}
-            {devices.length > 0 && (
-              <ThemedView style={styles.deviceList}>
-                {devices.map((device) => (
-                  <Pressable
-                    key={device.id}
-                    style={[
-                      styles.deviceItem,
-                      selectedDevice?.id === device.id &&
-                      styles.deviceItemSelected,
-                    ]}
-                    onPress={() => handleConnect(device)}
-                    disabled={isConnecting || isConnected}
-                  >
-                    <ThemedText style={styles.deviceName}>
-                      {device.name}
-                    </ThemedText>
-                    <ThemedText style={styles.deviceId}>{device.id}</ThemedText>
-                  </Pressable>
-                ))}
-              </ThemedView>
-            )}
+            {isConnected ? (
+              <Pressable
+                style={[styles.secondaryButton, styles.outlineButton]}
+                onPress={handleDisconnect}
+                disabled={isSendingConfig}
+              >
+                <ThemedText style={styles.outlineButtonText}>
+                  Disconnect
+                </ThemedText>
+              </Pressable>
+            ) : null}
           </ThemedView>
 
-          {/* Connection Status */}
-          {isConnecting && (
-            <ThemedView style={styles.statusCard}>
-              <ActivityIndicator size="small" color="#1DD1A1" />
-              <ThemedText style={styles.statusText}>
-                Connecting via Bluetooth...
-              </ThemedText>
-            </ThemedView>
-          )}
+          {/* <ThemedView style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <ThemedText style={styles.sectionTitle}>Wi-Fi</ThemedText>
+                <ThemedText style={styles.sectionHint}>
+                  Make sure the robot joins the same Wi-Fi network as your phone.
+                </ThemedText>
+              </View>
+              <StatusPill
+                color={wifiConnectionStatus.color}
+                label={wifiConnectionStatus.label}
+              />
+            </View>
 
-          {/* Checking Network Status */}
-          {isConnected && isCheckingNetwork && (
-            <ThemedView style={styles.statusCard}>
-              <ActivityIndicator size="small" color="#FBBF24" />
-              <ThemedText style={styles.statusText}>
-                Checking network connection...
-              </ThemedText>
-            </ThemedView>
-          )}
-
-          {/* Connected - Same Network */}
-          {isConnected &&
-            !isCheckingNetwork &&
-            isOnSameNetwork === true &&
-            !showWifiConfig && (
-              <ThemedView style={styles.section}>
-                <ThemedView style={styles.successCard}>
-                  <ThemedText style={styles.successText}>
-                    ✓ Robot is on the same network as your phone
+            <View style={styles.statusBoard}>
+              <View style={styles.statusRow}>
+                <ThemedText style={styles.statusLabel}>Wi-Fi connection</ThemedText>
+                <View style={styles.statusValueRow}>
+                  <View
+                    style={[
+                      styles.statusIndicator,
+                      { backgroundColor: wifiConnectionStatus.color },
+                    ]}
+                  />
+                  <ThemedText style={styles.statusValue}>
+                    {wifiConnectionStatus.label}
                   </ThemedText>
-                </ThemedView>
+                </View>
+              </View>
+              <View style={styles.statusRow}>
+                <ThemedText style={styles.statusLabel}>Network name</ThemedText>
+                <ThemedText style={styles.statusValue}>
+                  {wifiNetworkName}
+                </ThemedText>
+              </View>
+              <View style={styles.statusRow}>
+                <ThemedText style={styles.statusLabel}>IP address</ThemedText>
+                <ThemedText style={styles.statusValue}>{wifiIpAddress}</ThemedText>
+              </View>
+            </View>
+
+            {isConnected && isOnSameNetwork === false && !showWifiConfig ? (
+              <ThemedView style={styles.infoCard}>
+                <ThemedText style={styles.infoText}>
+                  The robot is not on the same Wi-Fi network. Send updated Wi-Fi
+                  credentials below.
+                </ThemedText>
+              </ThemedView>
+            ) : null}
+
+            {previousNetworks.length ? (
+              <View style={styles.blockHeader}>
+                <ThemedText style={styles.blockTitle}>
+                  Previously connected
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {previousNetworks.map((network) => (
+              <View key={network} style={styles.previousItem}>
+                <View style={styles.previousDot} />
+                <ThemedText style={styles.previousText}>{network}</ThemedText>
+              </View>
+            ))}
+
+            {showWifiConfig ? (
+              <View style={styles.form}>
+                <ThemedText style={styles.label}>Network Name (SSID)</ThemedText>
+                <TextInput
+                  style={styles.input}
+                  value={ssid}
+                  onChangeText={setSsid}
+                  placeholder="Enter Wi-Fi network name"
+                  placeholderTextColor="#6B7280"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isSendingConfig}
+                />
+
+                <ThemedText style={styles.label}>Password</ThemedText>
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter Wi-Fi password (optional)"
+                  placeholderTextColor="#6B7280"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isSendingConfig}
+                />
+
                 <Pressable
-                  style={[styles.button, styles.primaryButton]}
-                  onPress={handleNetworkConnect}
+                  style={[
+                    styles.primaryButton,
+                    (isSendingConfig || !ssid.trim()) && styles.disabledPrimary,
+                  ]}
+                  onPress={handleSendConfig}
+                  disabled={isSendingConfig || !ssid.trim()}
                 >
-                  <ThemedText style={styles.primaryButtonText}>
-                    Connect
-                  </ThemedText>
+                  {isSendingConfig ? (
+                    <ActivityIndicator color="#04110B" />
+                  ) : (
+                    <ThemedText style={styles.primaryButtonText}>
+                      Connect Wi-Fi
+                    </ThemedText>
+                  )}
                 </Pressable>
+
                 <Pressable
-                  style={[styles.button, styles.secondaryButton]}
+                  style={[styles.secondaryButton, styles.outlineButton]}
+                  onPress={() => {
+                    setShowWifiConfig(false);
+                    setSsid("");
+                    setPassword("");
+                  }}
+                >
+                  <ThemedText style={styles.outlineButtonText}>Cancel</ThemedText>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Pressable
+                  style={[
+                    styles.primaryButton,
+                    isRobotConnecting && styles.disabledPrimary,
+                  ]}
+                  onPress={handleNetworkConnect}
+                  disabled={isRobotConnecting}
+                >
+                  {isRobotConnecting ? (
+                    <ActivityIndicator color="#04110B" />
+                  ) : (
+                    <ThemedText style={styles.primaryButtonText}>
+                      Connect to Robot
+                    </ThemedText>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.secondaryButton,
+                    (!isConnected || isSendingConfig) && styles.buttonDisabled,
+                  ]}
                   onPress={handleChangeWifi}
+                  disabled={!isConnected || isSendingConfig}
                 >
                   <ThemedText style={styles.secondaryButtonText}>
                     Change Robot WiFi
                   </ThemedText>
                 </Pressable>
-              </ThemedView>
+              </>
             )}
 
-          {/* Connected - Different Network or Change WiFi Selected */}
-          {isConnected &&
-            !isCheckingNetwork &&
-            (isOnSameNetwork === false || showWifiConfig) && (
-              <ThemedView style={styles.section}>
-                <ThemedText type="subtitle" style={styles.sectionTitle}>
-                  {showWifiConfig
-                    ? "Change Robot WiFi"
-                    : "Robot is not on the same network"}
-                </ThemedText>
-
-                {!showWifiConfig && (
-                  <ThemedView style={styles.infoCard}>
-                    <ThemedText style={styles.infoText}>
-                      The robot is not on the same network as your phone. Configure
-                      it to connect to your Wi-Fi network.
-                    </ThemedText>
-                  </ThemedView>
-                )}
-
-                {showWifiConfig && (
-                  <ThemedView style={styles.form}>
-                    <ThemedText style={styles.label}>
-                      Network Name (SSID)
-                    </ThemedText>
-                    <TextInput
-                      style={styles.input}
-                      value={ssid}
-                      onChangeText={setSsid}
-                      placeholder="Enter Wi-Fi network name"
-                      placeholderTextColor="#6B7280"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      editable={!isSendingConfig}
-                    />
-
-                    <ThemedText style={styles.label}>Password</ThemedText>
-                    <TextInput
-                      style={styles.input}
-                      value={password}
-                      onChangeText={setPassword}
-                      placeholder="Enter Wi-Fi password (optional)"
-                      placeholderTextColor="#6B7280"
-                      secureTextEntry
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      editable={!isSendingConfig}
-                    />
-
-                    <Pressable
-                      style={[
-                        styles.button,
-                        styles.primaryButton,
-                        isSendingConfig && styles.buttonDisabled,
-                      ]}
-                      onPress={handleSendConfig}
-                      disabled={isSendingConfig || !ssid.trim()}
-                    >
-                      {isSendingConfig ? (
-                        <ActivityIndicator color="#04110B" />
-                      ) : (
-                        <ThemedText style={styles.primaryButtonText}>
-                          Connect Wi-Fi
-                        </ThemedText>
-                      )}
-                    </Pressable>
-                  </ThemedView>
-                )}
-
-                {!showWifiConfig && (
-                  <Pressable
-                    style={[styles.button, styles.primaryButton]}
-                    onPress={handleChangeWifi}
-                  >
-                    <ThemedText style={styles.primaryButtonText}>
-                      Change Robot WiFi
-                    </ThemedText>
-                  </Pressable>
-                )}
-              </ThemedView>
-            )}
-
-          {/* Wi-Fi Status Display */}
-          {isConnected && (
-            <ThemedView style={styles.statusCard}>
-              <ThemedText style={styles.statusLabel}>Wi-Fi Status:</ThemedText>
-              <View style={styles.statusRow}>
-                <View
-                  style={[
-                    styles.statusIndicator,
-                    { backgroundColor: getStatusColor() },
-                  ]}
-                />
-                <ThemedText style={styles.statusText}>
-                  {getStatusText()}
-                </ThemedText>
-              </View>
-            </ThemedView>
-          )}
-
-          {/* Disconnect Button */}
-          {isConnected && (
-            <Pressable
-              style={[styles.button, styles.secondaryButton]}
-              onPress={handleDisconnect}
-              disabled={isSendingConfig}
-            >
-              <ThemedText style={styles.secondaryButtonText}>
-                Disconnect
+            <View style={styles.provisionStatusRow}>
+              <ThemedText style={styles.statusLabel}>
+                Setup status ({selectedDevice?.name || "Bluetooth"})
               </ThemedText>
-            </Pressable>
-          )}
+              <StatusPill
+                color={getStatusColor()}
+                label={getStatusText()}
+              />
+            </View>
+          </ThemedView> */}
+
+          <Pressable
+            style={styles.connectIpButton}
+            onPress={() => {
+              setManualConnectError(null);
+              setIsManualModalVisible(true);
+            }}
+          >
+            <ThemedText style={styles.connectIpText}>
+              Connect to a specific IP
+            </ThemedText>
+          </Pressable>
         </ThemedView>
       </ScrollView>
+
+      <Modal
+        visible={isManualModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsManualModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={styles.modalWrapper}
+          >
+            <ThemedView style={styles.modalCard}>
+              <ThemedText type="subtitle" style={styles.modalTitle}>
+                Connect to a specific IP
+              </ThemedText>
+              <ThemedText style={styles.modalHint}>
+                Enter the robot’s IP address or base URL.
+              </ThemedText>
+              <TextInput
+                style={styles.input}
+                value={manualIpInput}
+                onChangeText={(text) => {
+                  setManualIpInput(text);
+                  setManualIpEdited(true);
+                  setManualConnectError(null);
+                }}
+                placeholder="10.0.0.5 or https://robot.local"
+                placeholderTextColor="#6B7280"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {manualConnectError ? (
+                <ThemedText style={styles.errorText}>
+                  {manualConnectError}
+                </ThemedText>
+              ) : null}
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={[styles.secondaryButton, styles.outlineButton]}
+                  onPress={() => setIsManualModalVisible(false)}
+                  disabled={isManualConnecting}
+                >
+                  <ThemedText style={styles.outlineButtonText}>Cancel</ThemedText>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.primaryButton,
+                    isManualConnecting && styles.disabledPrimary,
+                  ]}
+                  onPress={handleManualConnect}
+                  disabled={isManualConnecting}
+                >
+                  {isManualConnecting ? (
+                    <ActivityIndicator color="#04110B" />
+                  ) : (
+                    <ThemedText style={styles.primaryButtonText}>Connect</ThemedText>
+                  )}
+                </Pressable>
+              </View>
+            </ThemedView>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      <Modal visible={overlayVisible} transparent animationType="fade">
+        <View style={styles.overlayBackdrop}>
+          <View style={styles.overlayCard}>
+            <ActivityIndicator size="large" color="#1DD1A1" />
+            <ThemedText style={styles.overlayText}>{overlayMessage}</ThemedText>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -545,159 +832,286 @@ const styles = StyleSheet.create({
     gap: 24,
     backgroundColor: "#050505",
   },
+  header: {
+    gap: 12,
+  },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 8,
+    fontSize: 32,
+    lineHeight: 36,
   },
-  section: {
-    gap: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  button: {
-    borderRadius: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 52,
-  },
-  primaryButton: {
-    backgroundColor: "#1DD1A1",
-  },
-  primaryButtonText: {
-    color: "#04110B",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: "#1F2937",
-    backgroundColor: "#0A0A0B",
-  },
-  secondaryButtonText: {
-    color: "#E5E7EB",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  deviceList: {
-    gap: 12,
-    marginTop: 12,
-  },
-  deviceItem: {
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#1F2937",
-    borderRadius: 8,
-    backgroundColor: "#0F0F10",
-  },
-  deviceItemSelected: {
-    borderColor: "#1DD1A1",
-    backgroundColor: "#0A1F18",
-  },
-  deviceName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#F9FAFB",
-    marginBottom: 4,
-  },
-  deviceId: {
-    fontSize: 12,
+  subtitle: {
     color: "#9CA3AF",
-    fontFamily: "monospace",
-  },
-  form: {
-    gap: 16,
-    marginTop: 12,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#D1D5DB",
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: "#0F0F10",
-    borderWidth: 1,
-    borderColor: "#1F2937",
-    borderRadius: 8,
-    padding: 16,
-    color: "#F9FAFB",
-    fontSize: 16,
-    fontFamily: "monospace",
-  },
-  statusCard: {
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#1F2937",
-    borderRadius: 8,
-    backgroundColor: "#0F0F10",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  statusLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#9CA3AF",
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  statusText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#F9FAFB",
   },
   errorCard: {
     padding: 16,
     borderWidth: 1,
     borderColor: "#F87171",
-    borderRadius: 8,
     backgroundColor: "#1F1A1A",
   },
   errorText: {
     color: "#F87171",
-    fontSize: 14,
   },
-  successCard: {
-    padding: 16,
+  sectionCard: {
+    padding: 20,
     borderWidth: 1,
-    borderColor: "#1DD1A1",
-    borderRadius: 8,
-    backgroundColor: "#0A1F18",
-    marginBottom: 16,
+    borderColor: "#1F2937",
+    backgroundColor: "#0F0F10",
+    gap: 20,
   },
-  successText: {
-    color: "#1DD1A1",
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: "JetBrainsMono_600SemiBold",
+    color: "#F9FAFB",
+  },
+  sectionHint: {
+    color: "#9CA3AF",
+    marginTop: 4,
     fontSize: 14,
-    fontWeight: "500",
   },
-  infoCard: {
+  blockHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  blockTitle: {
+    fontSize: 14,
+    color: "#D1D5DB",
+    fontFamily: "JetBrainsMono_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  inlineStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  deviceList: {
+    gap: 12,
+  },
+  deviceItem: {
     padding: 16,
     borderWidth: 1,
     borderColor: "#1F2937",
-    borderRadius: 8,
-    backgroundColor: "#0F0F10",
-    marginBottom: 16,
+    backgroundColor: "#0A0A0B",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  infoText: {
-    color: "#D1D5DB",
+  deviceSelected: {
+    borderColor: "#1DD1A1",
+  },
+  deviceName: {
+    color: "#F9FAFB",
+    fontSize: 16,
+    fontFamily: "JetBrainsMono_600SemiBold",
+  },
+  deviceId: {
+    color: "#6B7280",
+    fontSize: 12,
+  },
+  connectedBadge: {
+    color: "#1DD1A1",
+    fontFamily: "JetBrainsMono_600SemiBold",
     fontSize: 14,
   },
-});
+  emptyStateText: {
+    color: "#9CA3AF",
+    fontStyle: "italic",
+  },
+  primaryButton: {
+    backgroundColor: "#1DD1A1",
+    paddingVertical: 12,
+    paddingInline: 16,
+    alignItems: "center",
+  },
+  disabledPrimary: {
+    opacity: 0.5,
+  },
+  primaryButtonText: {
+    color: "#04110B",
+    fontFamily: "JetBrainsMono_600SemiBold",
+    fontSize: 16,
+  },
+  secondaryButton: {
+    paddingVertical: 12,
+    paddingInline: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryButtonText: {
+    color: "#E5E7EB",
+    fontSize: 16,
+  },
+  outlineButton: {
+    borderWidth: 1,
+    borderColor: "#1F2937",
+    backgroundColor: "transparent",
+  },
+  outlineButtonText: {
+    color: "#E5E7EB",
+    fontFamily: "JetBrainsMono_600SemiBold",
+  },
+  buttonDisabled: {
+    opacity: 0.4,
+  },
+  statusBoard: {
+    borderWidth: 1,
+    borderColor: "#1F2937",
+    backgroundColor: "#0A0A0B",
+    padding: 16,
+    gap: 12,
+  },
+  statusRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  statusLabel: {
+    color: "#9CA3AF",
+    fontSize: 14,
+  },
+  statusValue: {
+    color: "#F9FAFB",
+    fontFamily: "JetBrainsMono_600SemiBold",
+  },
+  statusValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  statusIndicator: {
+    width: 10,
+    height: 10,
+  },
+  infoCard: {
+    padding: 16,
 
+    backgroundColor: "#1F2937",
+  },
+  infoText: {
+    color: "#E5E7EB",
+    fontSize: 14,
+  },
+  form: {
+    gap: 16,
+  },
+  label: {
+    fontSize: 14,
+    color: "#D1D5DB",
+    fontFamily: "JetBrainsMono_600SemiBold",
+  },
+  input: {
+    backgroundColor: "#0F0F10",
+    borderWidth: 1,
+    borderColor: "#1F2937",
+
+    padding: 16,
+    color: "#F9FAFB",
+    fontSize: 16,
+    fontFamily: "monospace",
+  },
+  statusLabelText: {
+    color: "#D1D5DB",
+    fontSize: 12,
+  },
+  previousItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  previousDot: {
+    width: 6,
+    height: 6,
+    backgroundColor: "#4B5563",
+  },
+  previousText: {
+    color: "#D1D5DB",
+  },
+  provisionStatusRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  connectIpButton: {
+    borderWidth: 1,
+    borderColor: "#374151",
+
+    paddingVertical: 16,
+    alignItems: "center",
+    backgroundColor: "#0A0A0B",
+  },
+  connectIpText: {
+    color: "#E5E7EB",
+    fontFamily: "JetBrainsMono_600SemiBold",
+  },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#1F2937",
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+  },
+  statusPillText: {
+    color: "#F9FAFB",
+    fontSize: 12,
+    fontFamily: "JetBrainsMono_600SemiBold",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalWrapper: {
+    width: "100%",
+  },
+  modalCard: {
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#1F2937",
+    backgroundColor: "#050505",
+    gap: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    color: "#F9FAFB",
+  },
+  modalHint: {
+    color: "#9CA3AF",
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  overlayBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  overlayCard: {
+    padding: 24,
+    backgroundColor: "#050505",
+    borderWidth: 1,
+    borderColor: "#1F2937",
+    alignItems: "center",
+    gap: 16,
+  },
+  overlayText: {
+    color: "#F9FAFB",
+    fontSize: 16,
+    textAlign: "center",
+  },
+});

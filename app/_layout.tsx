@@ -73,6 +73,7 @@ export default function RootLayout() {
             <Stack.Screen name="connection" options={{ headerShown: false }} />
             <Stack.Screen name="camera" options={{ headerShown: false }} />
             <Stack.Screen name="pairing" options={{ headerShown: false }} />
+            <Stack.Screen name="wifi" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
           </Stack>

@@ -24,6 +24,11 @@ export function useRovyBle() {
   useEffect(() => {
     managerRef.current = getRovyBleManager();
 
+    const availabilityError = managerRef.current.getBleUnavailableReason();
+    if (availabilityError) {
+      setError(availabilityError);
+    }
+
     // Subscribe to status changes
     const statusCallback: StatusChangeCallback = (status) => {
       setWifiStatus(status);
