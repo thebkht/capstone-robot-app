@@ -176,17 +176,21 @@ export class RobotAPI {
     }
 
     try {
+      const normalizedMethod = method.toUpperCase() as HttpMethod;
       const requestInit: RequestInit = {
-        method,
+        method: normalizedMethod,
         headers,
         signal: controller.signal,
       };
 
-      if (method !== "GET") {
+      if (normalizedMethod !== "GET") {
         requestInit.body = JSON.stringify(body ?? {});
       }
 
-      const response = await this.fetchImpl(`${this.baseUrl}${path}`, requestInit);
+      const response = await this.fetchImpl(
+        `${this.baseUrl}${path}`,
+        requestInit
+      );
 
       clearTimeout(timeoutId);
 
