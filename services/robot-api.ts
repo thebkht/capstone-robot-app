@@ -91,6 +91,9 @@ export interface ClaimRequestResponse {
 export interface ClaimConfirmResponse {
   success?: boolean;
   controlToken?: string;
+  sessionId?: string;
+  session_id?: string;
+  session?: string;
   [key: string]: unknown;
 }
 
@@ -99,6 +102,7 @@ export interface RobotApiOptions {
   fetchImpl?: typeof fetch;
   timeout?: number; // Timeout in milliseconds, default 5000
   controlToken?: string | null; // Optional control token for authenticated requests
+  sessionId?: string | null; // Optional session ID for authenticated requests
 }
 
 export class RobotAPI {
@@ -106,13 +110,14 @@ export class RobotAPI {
   private fetchImpl: typeof fetch;
   private timeout: number;
   private controlToken: string | null;
+  private sessionId: string | null;
 
   constructor(options: RobotApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeout = options.timeout ?? 5000;
     this.controlToken = options.controlToken ?? null;
-    this.controlToken = options.controlToken ?? null;
+    this.sessionId = options.sessionId ?? null;
   }
 
   public updateBaseUrl(baseUrl: string) {
@@ -125,6 +130,14 @@ export class RobotAPI {
 
   public getControlToken(): string | null {
     return this.controlToken;
+  }
+
+  public setSessionId(sessionId: string | null) {
+    this.sessionId = sessionId;
+  }
+
+  public getSessionId(): string | null {
+    return this.sessionId;
   }
 
   public get streamUrl() {
@@ -156,6 +169,10 @@ export class RobotAPI {
     // Add control token header for protected calls
     if (requireAuth && this.controlToken) {
       headers["x-control-token"] = this.controlToken;
+    }
+
+    if (requireAuth && this.sessionId) {
+      headers["session-id"] = this.sessionId;
     }
 
     try {
@@ -267,10 +284,27 @@ export class RobotAPI {
   public async moveHead(payload: { pan: number; tilt: number }) {
     return this.request("/control/head", "POST", payload, true);
   }
+
+  public async controlLights(payload: { pwmA: number; pwmB: number }) {
+    return this.request("/control/lights", "POST", payload, true);
+  }
+
+  public async nod(
+    payload: {
+      times?: number;
+      center_tilt?: number;
+      delta?: number;
+      pan?: number;
+      delay?: number;
+    } = {}
+  ) {
+    return this.request("/control/nod", "POST", payload, true);
+  }
 }
 
 export const createRobotApi = (
   baseUrl: string,
   timeout?: number,
-  controlToken?: string | null
-) => new RobotAPI({ baseUrl, timeout, controlToken });
+  controlToken?: string | null,
+  sessionId?: string | null
+) => new RobotAPI({ baseUrl, timeout, controlToken, sessionId });

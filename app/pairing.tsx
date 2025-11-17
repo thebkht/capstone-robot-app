@@ -23,7 +23,7 @@ export const CONTROL_TOKEN_STORAGE_KEY = "robot_control_token";
 
 export default function PairingScreen() {
      const router = useRouter();
-     const { api, setControlToken, status } = useRobot();
+     const { api, setControlToken, setSessionId, status } = useRobot();
      const [isRequestingPairing, setIsRequestingPairing] = useState(false);
      const [showPinInput, setShowPinInput] = useState(false);
      const [pin, setPin] = useState("");
@@ -81,6 +81,12 @@ export default function PairingScreen() {
 
                if (response.controlToken) {
                     await setControlToken(response.controlToken);
+                    const sessionId =
+                         response.sessionId || response.session_id || response.session;
+
+                    if (sessionId) {
+                         await setSessionId(sessionId);
+                    }
                     setSuccess("Robot paired successfully! Redirecting...");
                     setTimeout(() => {
                          router.replace("/");
