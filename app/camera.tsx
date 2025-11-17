@@ -18,7 +18,7 @@ import { useRobot } from '@/context/robot-provider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function CameraScreen() {
-     const { api, baseUrl } = useRobot();
+     const { api, baseUrl, controlToken, sessionId } = useRobot();
      const router = useRouter();
      const [joystick, setJoystick] = useState({ x: 0, y: 0 });
      const [error, setError] = useState<string | null>(null);
@@ -27,6 +27,8 @@ export default function CameraScreen() {
      const [currentFrame, setCurrentFrame] = useState<string | null>(null);
      const [isStreaming, setIsStreaming] = useState(false);
      const [isConnecting, setIsConnecting] = useState(false);
+     const [isAdjustingLights, setIsAdjustingLights] = useState(false);
+     const hasControlSession = Boolean(controlToken && sessionId);
      const wsRef = useRef<WebSocket | null>(null);
 
      // WebSocket URL
@@ -40,7 +42,7 @@ export default function CameraScreen() {
                     baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
                );
 
-               parsedUrl.protocol = 'wss:';
+               parsedUrl.protocol = 'ws:';
                parsedUrl.pathname = `${parsedUrl.pathname.replace(/\/$/, '')}/camera/ws`;
                parsedUrl.search = '';
 
@@ -71,6 +73,12 @@ export default function CameraScreen() {
                setIsConnecting(false);
                setIsStreaming(true);
                setError(null);
+
+               if (controlToken && sessionId) {
+                    void api
+                         .nod({ times: 1, delta: 10, delay: 0.3 })
+                         .catch((nodError) => console.warn('Failed to trigger nod', nodError));
+               }
           };
 
           ws.onmessage = (event) => {
@@ -108,7 +116,7 @@ export default function CameraScreen() {
                     setError(`Connection closed unexpectedly (${event.code})`);
                }
           };
-     }, [wsUrl]);
+     }, [api, controlToken, sessionId, wsUrl]);
 
      const disconnectWebSocket = useCallback(() => {
           if (wsRef.current) {
@@ -170,6 +178,25 @@ export default function CameraScreen() {
           }
      }, [api, resolveSnapshotUrl]);
 
+     const handleSetLights = useCallback(
+          async (pwmA: number, pwmB: number) => {
+               if (!controlToken || !sessionId) {
+                    console.warn('Lighting controls require a claimed session.');
+                    return;
+               }
+
+               setIsAdjustingLights(true);
+               try {
+                    await api.controlLights({ pwmA, pwmB });
+               } catch (lightError) {
+                    console.warn('Failed to set lights', lightError);
+               } finally {
+                    setIsAdjustingLights(false);
+               }
+          },
+          [api, controlToken, sessionId]
+     );
+
      return (
           <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
                <ThemedView style={styles.container}>
@@ -214,6 +241,10 @@ export default function CameraScreen() {
                          isStreaming={isStreaming}
                          error={error}
                          onToggleStream={handleToggleStream}
+                         onSetLights={handleSetLights}
+                         isAdjustingLights={isAdjustingLights}
+                         hasControlSession={hasControlSession}
+                         onRequestPairing={() => router.push('/pairing')}
                     />
 
                     <View style={styles.row}>

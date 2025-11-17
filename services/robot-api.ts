@@ -1,3 +1,10 @@
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
+} from "axios";
+
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type RobotConnectionState =
@@ -91,32 +98,113 @@ export interface ClaimRequestResponse {
 export interface ClaimConfirmResponse {
   success?: boolean;
   controlToken?: string;
+  sessionId?: string;
+  session_id?: string;
+  session?: string;
   [key: string]: unknown;
 }
 
 export interface RobotApiOptions {
   baseUrl: string;
-  fetchImpl?: typeof fetch;
-  timeout?: number; // Timeout in milliseconds, default 5000
-  controlToken?: string | null; // Optional control token for authenticated requests
+  timeout?: number;
+  controlToken?: string | null;
+  sessionId?: string | null;
+  axiosInstance?: AxiosInstance;
+}
+
+interface ApiResponse<T = any> {
+  data?: T;
+  error?: string;
+  status: number;
+}
+
+interface ErrorResponse {
+  message?: string;
+  error?: string;
 }
 
 export class RobotAPI {
   private baseUrl: string;
-  private fetchImpl: typeof fetch;
+  private axiosInstance: AxiosInstance;
   private timeout: number;
   private controlToken: string | null;
+  private sessionId: string | null;
 
   constructor(options: RobotApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
-    this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeout = options.timeout ?? 5000;
     this.controlToken = options.controlToken ?? null;
-    this.controlToken = options.controlToken ?? null;
+    this.sessionId = options.sessionId ?? null;
+
+    this.axiosInstance =
+      options.axiosInstance ??
+      axios.create({
+        baseURL: this.baseUrl,
+        timeout: this.timeout,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      });
+
+    // Request interceptor to add auth headers
+    this.axiosInstance.interceptors.request.use(
+      (config) => {
+        console.log(
+          "Request interceptor - Method:",
+          config.method,
+          "URL:",
+          config.url
+        );
+
+        // CRITICAL: Ensure method is preserved and uppercase
+        if (config.method) {
+          config.method = config.method.toUpperCase() as any;
+        }
+
+        if (this.controlToken) {
+          config.headers["x-control-token"] = this.controlToken;
+        }
+        if (this.sessionId) {
+          config.headers["session-id"] = this.sessionId;
+        }
+
+        console.log("Request interceptor - Final method:", config.method);
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
+      }
+    );
+
+    // Response interceptor for error handling
+    this.axiosInstance.interceptors.response.use(
+      (response: AxiosResponse) => {
+        console.log("Response received:", {
+          status: response.status,
+          method: response.config.method,
+          url: response.config.url,
+        });
+        return response;
+      },
+      (error: AxiosError) => {
+        console.log("Response error:", {
+          status: error.response?.status,
+          method: error.config?.method,
+          url: error.config?.url,
+          data: error.config?.data,
+        });
+        if (error.response?.status === 401) {
+          console.log("Unauthorized - Control token may be invalid");
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   public updateBaseUrl(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.axiosInstance.defaults.baseURL = this.baseUrl;
   }
 
   public setControlToken(token: string | null) {
@@ -127,6 +215,14 @@ export class RobotAPI {
     return this.controlToken;
   }
 
+  public setSessionId(sessionId: string | null) {
+    this.sessionId = sessionId;
+  }
+
+  public getSessionId(): string | null {
+    return this.sessionId;
+  }
+
   public get streamUrl() {
     return `${this.baseUrl}/camera/stream`;
   }
@@ -135,142 +231,377 @@ export class RobotAPI {
     return `${this.baseUrl}/camera/snapshot`;
   }
 
-  private async request<T>(
-    path: string,
-    method: HttpMethod = "GET",
-    body?: unknown,
-    requireAuth: boolean = false
-  ): Promise<T> {
-    if (!this.baseUrl) {
-      throw new Error("Robot base URL is not configured.");
+  private handleResponse<T>(response: AxiosResponse<T>): ApiResponse<T> {
+    if (response.status === 204) {
+      return {
+        data: {} as T,
+        status: response.status,
+      };
     }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Accept: "application/json",
+    return {
+      data: response.data,
+      status: response.status,
     };
+  }
 
-    // Add control token header for protected calls
-    if (requireAuth && this.controlToken) {
-      headers["x-control-token"] = this.controlToken;
+  private handleError(error: AxiosError<ErrorResponse>): ApiResponse {
+    if (axios.isCancel(error) || error.code === "ECONNABORTED") {
+      return {
+        error: `Network request timed out after ${this.timeout}ms`,
+        status: 0,
+      };
     }
 
+    if (error.response) {
+      const errorData = error.response.data;
+      const errorMessage =
+        errorData?.message || errorData?.error || "Request failed";
+      return {
+        error: errorMessage,
+        status: error.response.status,
+      };
+    } else if (error.request) {
+      return {
+        error: "Network error - No response from robot",
+        status: 0,
+      };
+    } else {
+      return {
+        error: error.message || "Unknown error",
+        status: 0,
+      };
+    }
+  }
+
+  // Generic HTTP methods
+  private async get<T = any>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
+      console.log("GET request to:", endpoint);
+      const response = await this.axiosInstance.get<T>(endpoint);
+      return this.handleResponse(response);
+    } catch (error) {
+      return this.handleError(error as AxiosError<ErrorResponse>);
+    }
+  }
+
+  private async post<T = any>(
+    endpoint: string,
+    data?: any
+  ): Promise<ApiResponse<T>> {
+    try {
+      console.log("POST request to:", endpoint, "with data:", data);
+
+      // CRITICAL for React Native: Always send data object, even if empty
+      // React Native's XMLHttpRequest may convert POST to GET if no body is present
+      const requestData = data !== undefined ? data : {};
+
+      const response = await this.axiosInstance({
+        method: "post",
+        url: endpoint,
+        data: requestData,
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
 
-      clearTimeout(timeoutId);
+      console.log("POST response:", response.status, response.data);
+      return this.handleResponse(response);
+    } catch (error) {
+      console.error("POST error:", error);
+      return this.handleError(error as AxiosError<ErrorResponse>);
+    }
+  }
+
+  private async put<T = any>(
+    endpoint: string,
+    data?: any
+  ): Promise<ApiResponse<T>> {
+    try {
+      console.log("PUT request to:", endpoint, "with data:", data);
+      const response = await this.axiosInstance.request<T>({
+        method: "PUT",
+        url: endpoint,
+        data: data || {},
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      return this.handleError(error as AxiosError<ErrorResponse>);
+    }
+  }
+
+  private async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    try {
+      console.log("DELETE request to:", endpoint);
+      const response = await this.axiosInstance.request<T>({
+        method: "DELETE",
+        url: endpoint,
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      return this.handleError(error as AxiosError<ErrorResponse>);
+    }
+  }
+
+  // Public API methods
+  public async ping(): Promise<RobotHealth> {
+    const response = await this.get<RobotHealth>("/health");
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async fetchHealth(): Promise<RobotHealth> {
+    const response = await this.get<RobotHealth>("/health");
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async fetchNetworkInfo(): Promise<RobotNetworkInfo> {
+    const response = await this.get<RobotNetworkInfo>("/wifi/status");
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async fetchTelemetry(): Promise<RobotTelemetry> {
+    const response = await this.get<RobotTelemetry>("/status");
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async fetchMode(): Promise<RobotModeState> {
+    const response = await this.get<RobotModeState>("/mode");
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async connectWifi(
+    credentials: WifiCredentials
+  ): Promise<{ success: boolean }> {
+    const response = await this.post<{ success: boolean }>(
+      "/wifi/connect",
+      credentials
+    );
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async capturePhoto(): Promise<CameraCaptureMetadata> {
+    const response = await this.post<CameraCaptureMetadata>("/camera/capture");
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async listWifiNetworks(): Promise<WifiScanResponse> {
+    const response = await this.get<WifiScanResponse>("/wifi/networks");
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async fetchWifiStatus(): Promise<RobotNetworkInfo> {
+    const response = await this.get<RobotNetworkInfo>("/wifi/status");
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async scanWifiNetworks(): Promise<WifiScanResponse> {
+    const response = await this.get<WifiScanResponse>("/wifi/scan");
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async requestClaim(): Promise<ClaimRequestResponse> {
+    try {
+      console.log("=== REQUEST CLAIM DEBUG START ===");
+      console.log("Base URL:", this.baseUrl);
+
+      const url = `${this.baseUrl}/claim/request`;
+      console.log("Full URL:", url);
+
+      // Test if the URL is reachable with a simple GET first
+      try {
+        console.log("Testing GET request to /health...");
+        const healthResponse = await fetch(`${this.baseUrl}/health`, {
+          method: "GET",
+        });
+        console.log("Health check status:", healthResponse.status);
+      } catch (healthErr) {
+        console.error("Health check failed:", healthErr);
+      }
+
+      // Now try the POST
+      console.log("Attempting POST request...");
+      console.log("Method: POST");
+      console.log("URL:", url);
+      console.log("Body:", JSON.stringify({}));
+
+      const requestOptions = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({}),
+      };
+
+      console.log("Request options:", JSON.stringify(requestOptions, null, 2));
+
+      const response = await fetch(url, requestOptions);
+
+      console.log("Response received:");
+      console.log("  Status:", response.status);
+      console.log("  Status Text:", response.statusText);
+      console.log(
+        "  Headers:",
+        JSON.stringify(Object.fromEntries(response.headers.entries()))
+      );
 
       if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Robot request failed (${response.status}): ${text}`);
+        const errorText = await response.text();
+        console.error("Error response body:", errorText);
+        console.log("=== REQUEST CLAIM DEBUG END (ERROR) ===");
+        throw new Error(
+          `Request failed with status ${response.status}: ${errorText}`
+        );
       }
 
-      if (response.status === 204) {
-        return {} as T;
-      }
-
-      const contentType = response.headers.get("content-type");
-      if (contentType?.includes("application/json")) {
-        return (await response.json()) as T;
-      }
-
-      return (await response.text()) as unknown as T;
+      const data = await response.json();
+      console.log("Response data:", data);
+      console.log("=== REQUEST CLAIM DEBUG END (SUCCESS) ===");
+      return data as ClaimRequestResponse;
     } catch (error) {
-      clearTimeout(timeoutId);
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new Error(`Network request timed out after ${this.timeout}ms`);
+      console.error("=== REQUEST CLAIM DEBUG END (EXCEPTION) ===");
+      console.error("Exception:", error);
+      if (error instanceof Error) {
+        throw new Error(`Request failed: ${error.message}`);
       }
       throw error;
     }
   }
 
-  public async ping(): Promise<RobotHealth> {
-    return this.request<RobotHealth>("/health");
-  }
-
-  public async fetchHealth(): Promise<RobotHealth> {
-    return this.request<RobotHealth>("/health");
-  }
-
-  public async fetchNetworkInfo(): Promise<RobotNetworkInfo> {
-    return this.request<RobotNetworkInfo>("/wifi/status");
-  }
-
-  public async fetchTelemetry(): Promise<RobotTelemetry> {
-    return this.request<RobotTelemetry>("/status");
-  }
-
-  public async fetchMode(): Promise<RobotModeState> {
-    return this.request<RobotModeState>("/mode");
-  }
-
-  public async connectWifi(
-    credentials: WifiCredentials
-  ): Promise<{ success: boolean }>;
-  public async connectWifi(
-    credentials: WifiCredentials,
-    options?: { force: boolean }
-  ): Promise<{ success: boolean }>;
-  public async connectWifi(
-    credentials: WifiCredentials,
-    _options?: { force: boolean }
-  ) {
-    return this.request<{ success: boolean }>(
-      "/wifi/connect",
-      "POST",
-      credentials
-    );
-  }
-
-  public async capturePhoto(): Promise<CameraCaptureMetadata> {
-    return this.request<CameraCaptureMetadata>("/camera/capture", "POST");
-  }
-
-  public async listWifiNetworks(): Promise<WifiScanResponse> {
-    return this.request<WifiScanResponse>("/wifi/networks");
-  }
-
-  public async fetchWifiStatus(): Promise<RobotNetworkInfo> {
-    return this.request<RobotNetworkInfo>("/wifi/status");
-  }
-
-  public async scanWifiNetworks(): Promise<WifiScanResponse> {
-    return this.request<WifiScanResponse>("/wifi/scan");
-  }
-
-  public async requestClaim(): Promise<ClaimRequestResponse> {
-    return this.request<ClaimRequestResponse>("/claim/request", "POST");
-  }
-
   public async confirmClaim(pin: string): Promise<ClaimConfirmResponse> {
-    return this.request<ClaimConfirmResponse>("/claim/confirm", "POST", {
+    const response = await this.post<ClaimConfirmResponse>("/claim/confirm", {
       pin,
     });
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
   }
 
   public async move(payload: { linear: number; angular: number }) {
-    return this.request("/control/move", "POST", payload, true);
+    const response = await this.post("/control/move", payload);
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
   }
 
   public async stop() {
-    return this.request("/control/stop", "POST", undefined, true);
+    const response = await this.post("/control/stop");
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
   }
 
   public async moveHead(payload: { pan: number; tilt: number }) {
-    return this.request("/control/head", "POST", payload, true);
+    const response = await this.post("/control/head", payload);
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
   }
+
+  public async controlLights(payload: { pwmA: number; pwmB: number }) {
+    const response = await this.post("/control/lights", payload);
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  public async nod(
+    payload: {
+      times?: number;
+      center_tilt?: number;
+      delta?: number;
+      pan?: number;
+      delay?: number;
+    } = {}
+  ) {
+    const response = await this.post("/control/nod", payload);
+    if (response.error) {
+      throw new Error(response.error);
+    }
+    return response.data!;
+  }
+
+  // Utility methods
+  public setHeader(key: string, value: string) {
+    this.axiosInstance.defaults.headers.common[key] = value;
+  }
+
+  public removeHeader(key: string) {
+    delete this.axiosInstance.defaults.headers.common[key];
+  }
+
+  public getAxiosInstance(): AxiosInstance {
+    return this.axiosInstance;
+  }
+
+  // Organized namespace methods (optional, similar to your ApiClient)
+  public camera = {
+    capture: () => this.capturePhoto(),
+    getStreamUrl: () => this.streamUrl,
+    getSnapshotUrl: () => this.snapshotUrl,
+  };
+
+  public wifi = {
+    connect: (credentials: WifiCredentials) => this.connectWifi(credentials),
+    listNetworks: () => this.listWifiNetworks(),
+    scan: () => this.scanWifiNetworks(),
+    getStatus: () => this.fetchWifiStatus(),
+  };
+
+  public control = {
+    move: (payload: { linear: number; angular: number }) => this.move(payload),
+    stop: () => this.stop(),
+    moveHead: (payload: { pan: number; tilt: number }) =>
+      this.moveHead(payload),
+    lights: (payload: { pwmA: number; pwmB: number }) =>
+      this.controlLights(payload),
+    nod: (payload?: {
+      times?: number;
+      center_tilt?: number;
+      delta?: number;
+      pan?: number;
+      delay?: number;
+    }) => this.nod(payload),
+  };
 }
 
 export const createRobotApi = (
   baseUrl: string,
   timeout?: number,
-  controlToken?: string | null
-) => new RobotAPI({ baseUrl, timeout, controlToken });
+  controlToken?: string | null,
+  sessionId?: string | null
+) => new RobotAPI({ baseUrl, timeout, controlToken, sessionId });

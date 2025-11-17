@@ -59,6 +59,8 @@ interface RobotContextValue {
   refreshStatus: () => Promise<void>;
   controlToken: string | null;
   setControlToken: (token: string | null) => Promise<void>;
+  sessionId: string | null;
+  setSessionId: (sessionId: string | null) => Promise<void>;
   clearConnection: () => Promise<void>;
 }
 
@@ -66,7 +68,8 @@ const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
 export const ROBOT_BASE_URL_STORAGE_KEY = "robot_base_url";
 export const ROBOT_CONTROL_TOKEN_STORAGE_KEY = "robot_control_token";
-export const DEFAULT_ROBOT_BASE_URL = "https://rovy.tail535f32.ts.net";
+export const ROBOT_SESSION_ID_STORAGE_KEY = "robot_session_id";
+export const DEFAULT_ROBOT_BASE_URL = "http://192.168.200.123:8000";
 
 export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [baseUrl, setBaseUrlState] = useState<string>(DEFAULT_ROBOT_BASE_URL);
@@ -76,8 +79,12 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [isPolling, setIsPolling] = useState<boolean>(true);
   const hasPollingBeenPausedRef = useRef(false);
   const [controlToken, setControlTokenState] = useState<string | null>(null);
+  const [sessionId, setSessionIdState] = useState<string | null>(null);
 
-  const api = useMemo(() => createRobotApi(baseUrl, undefined, controlToken), [baseUrl, controlToken]);
+  const api = useMemo(
+    () => createRobotApi(baseUrl, undefined, controlToken, sessionId),
+    [baseUrl, controlToken, sessionId]
+  );
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -181,6 +188,13 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         if (storedToken && isMounted) {
           setControlTokenState(storedToken);
         }
+
+        const storedSessionId = await AsyncStorage.getItem(
+          ROBOT_SESSION_ID_STORAGE_KEY
+        );
+        if (storedSessionId && isMounted) {
+          setSessionIdState(storedSessionId);
+        }
       } catch (error) {
         console.warn("Failed to load stored robot base URL", error);
       }
@@ -272,6 +286,28 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     [api]
   );
 
+  const setSessionId = useCallback(
+    async (sessionIdValue: string | null) => {
+      console.log("Updating session ID", { hasSession: Boolean(sessionIdValue) });
+      api.setSessionId(sessionIdValue);
+      setSessionIdState(sessionIdValue);
+
+      try {
+        if (sessionIdValue) {
+          await AsyncStorage.setItem(
+            ROBOT_SESSION_ID_STORAGE_KEY,
+            sessionIdValue
+          );
+        } else {
+          await AsyncStorage.removeItem(ROBOT_SESSION_ID_STORAGE_KEY);
+        }
+      } catch (error) {
+        console.warn("Failed to persist session ID", error);
+      }
+    },
+    [api]
+  );
+
   const clearConnection = useCallback(async () => {
     console.log("Clearing robot connection");
     // Clear status and error
@@ -287,10 +323,15 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     setControlTokenState(null);
     api.setControlToken(null);
 
+    // Clear session ID
+    setSessionIdState(null);
+    api.setSessionId(null);
+
     // Clear stored values
     try {
       await AsyncStorage.removeItem(ROBOT_BASE_URL_STORAGE_KEY);
       await AsyncStorage.removeItem(ROBOT_CONTROL_TOKEN_STORAGE_KEY);
+      await AsyncStorage.removeItem(ROBOT_SESSION_ID_STORAGE_KEY);
     } catch (error) {
       console.warn("Failed to clear stored base URL", error);
     }
@@ -317,9 +358,23 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       refreshStatus,
       controlToken,
       setControlToken,
+      sessionId,
+      setSessionId,
       clearConnection,
     }),
-    [api, baseUrl, isPolling, lastUpdated, refreshStatus, status, statusError, setControlToken, clearConnection]
+    [
+      api,
+      baseUrl,
+      isPolling,
+      lastUpdated,
+      refreshStatus,
+      status,
+      statusError,
+      setControlToken,
+      setSessionId,
+      clearConnection,
+      sessionId,
+    ]
   );
 
   return (

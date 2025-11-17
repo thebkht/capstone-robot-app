@@ -11,6 +11,10 @@ interface CameraVideoProps {
      isStreaming: boolean;
      error: string | null;
      onToggleStream: () => void;
+     onSetLights: (pwmA: number, pwmB: number) => void;
+     isAdjustingLights: boolean;
+     hasControlSession: boolean;
+     onRequestPairing: () => void;
 }
 
 export function CameraVideo({
@@ -20,70 +24,129 @@ export function CameraVideo({
      isStreaming,
      error,
      onToggleStream,
+     onSetLights,
+     isAdjustingLights,
+     hasControlSession,
+     onRequestPairing,
 }: CameraVideoProps) {
      return (
           <View style={styles.cameraFrame}>
-               {wsUrl ? (
-                    <>
-                         {currentFrame ? (
-                              <Image
-                                   source={{ uri: currentFrame }}
-                                   style={styles.camera}
-                                   contentFit="contain"
-                                   cachePolicy="none"
-                                   transition={null}
-                              />
-                         ) : (
-                              <View style={styles.placeholderContainer}>
-                                   {isConnecting ? (
-                                        <>
-                                             <ActivityIndicator size="large" color="#1DD1A1" />
+               <View style={styles.streamArea}>
+                    {wsUrl ? (
+                         <>
+                              {currentFrame ? (
+                                   <Image
+                                        source={{ uri: currentFrame }}
+                                        style={styles.camera}
+                                        contentFit="contain"
+                                        cachePolicy="none"
+                                        transition={null}
+                                   />
+                              ) : (
+                                   <View style={styles.placeholderContainer}>
+                                        {isConnecting ? (
+                                             <>
+                                                  <ActivityIndicator size="large" color="#1DD1A1" />
+                                                  <ThemedText style={styles.placeholderText}>
+                                                       Connecting to camera...
+                                                  </ThemedText>
+                                             </>
+                                        ) : (
                                              <ThemedText style={styles.placeholderText}>
-                                                  Connecting to camera...
+                                                  {isStreaming
+                                                       ? 'Waiting for video...'
+                                                       : 'Press Start to begin streaming'}
                                              </ThemedText>
-                                        </>
-                                   ) : (
-                                        <ThemedText style={styles.placeholderText}>
-                                             {isStreaming
-                                                  ? 'Waiting for video...'
-                                                  : 'Press Start to begin streaming'}
-                                        </ThemedText>
-                                   )}
-                              </View>
-                         )}
+                                        )}
+                                   </View>
+                              )}
 
-                         {error && (
-                              <View style={styles.errorOverlay}>
-                                   <ThemedText style={styles.errorText}>{error}</ThemedText>
-                                   <ThemedText style={styles.errorSubtext}>
-                                        WebSocket: {wsUrl}
-                                   </ThemedText>
-                                   <Pressable style={styles.retryButton} onPress={onToggleStream}>
-                                        <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
-                                   </Pressable>
-                              </View>
-                         )}
-                    </>
-               ) : (
-                    <View style={styles.loadingContainer}>
-                         <ActivityIndicator size="large" color="#1DD1A1" />
-                         <ThemedText style={styles.loadingText}>
-                              No stream available. Configure the robot IP first.
-                         </ThemedText>
+                              {error && (
+                                   <View style={styles.errorOverlay}>
+                                        <ThemedText style={styles.errorText}>{error}</ThemedText>
+                                        <ThemedText style={styles.errorSubtext}>
+                                             WebSocket: {wsUrl}
+                                        </ThemedText>
+                                        <Pressable style={styles.retryButton} onPress={onToggleStream}>
+                                             <ThemedText style={styles.retryButtonText}>Retry Connection</ThemedText>
+                                        </Pressable>
+                                   </View>
+                              )}
+                         </>
+                    ) : (
+                         <View style={styles.loadingContainer}>
+                              <ActivityIndicator size="large" color="#1DD1A1" />
+                              <ThemedText style={styles.loadingText}>
+                                   No stream available. Configure the robot IP first.
+                              </ThemedText>
+                         </View>
+                    )}
+               </View>
+
+              <View style={styles.lightControls}>
+                   <ThemedText style={styles.lightLabel}>Camera lights</ThemedText>
+                    {!hasControlSession && (
+                         <View style={styles.pairingNotice}>
+                              <ThemedText style={styles.pairingText}>
+                                   Pair the robot with the PIN to enable lighting controls.
+                              </ThemedText>
+                              <Pressable style={styles.pairingButton} onPress={onRequestPairing}>
+                                   <ThemedText style={styles.pairingButtonText}>Pair robot</ThemedText>
+                              </Pressable>
+                         </View>
+                    )}
+                    <View style={styles.lightButtons}>
+                         <Pressable
+                              style={[
+                                   styles.lightButton,
+                                   styles.lightButtonSecondary,
+                                   (isAdjustingLights || !hasControlSession) && styles.lightButtonDisabled,
+                              ]}
+                              onPress={() => onSetLights(0, 0)}
+                              disabled={isAdjustingLights || !hasControlSession}
+                         >
+                              {isAdjustingLights ? (
+                                   <ActivityIndicator color="#E5E7EB" />
+                              ) : (
+                                   <ThemedText style={styles.lightButtonText}>Lights Off</ThemedText>
+                              )}
+                         </Pressable>
+                         <Pressable
+                              style={[
+                                   styles.lightButton,
+                                   styles.lightButtonPrimary,
+                                   (isAdjustingLights || !hasControlSession) && styles.lightButtonDisabled,
+                              ]}
+                              onPress={() => onSetLights(255, 255)}
+                              disabled={isAdjustingLights || !hasControlSession}
+                         >
+                              {isAdjustingLights ? (
+                                   <ActivityIndicator color="#04110B" />
+                              ) : (
+                                   <ThemedText style={styles.lightButtonTextDark}>Lights Max</ThemedText>
+                              )}
+                         </Pressable>
                     </View>
-               )}
+               </View>
           </View>
      );
 }
 
 const styles = StyleSheet.create({
      cameraFrame: {
+          flexDirection: 'column',
           borderRadius: 0,
           overflow: 'hidden',
           borderWidth: 1,
           borderColor: '#202020',
           aspectRatio: 4 / 3,
           backgroundColor: '#1B1B1B',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+     },
+     streamArea: {
+          flex: 1,
+          width: '100%',
           alignItems: 'center',
           justifyContent: 'center',
      },
@@ -147,5 +210,72 @@ const styles = StyleSheet.create({
           color: '#04110B',
           fontSize: 14,
           fontWeight: '600',
+     },
+     lightControls: {
+          width: '100%',
+          padding: 12,
+          borderTopWidth: 1,
+          borderTopColor: '#202020',
+          backgroundColor: '#0F1512',
+          gap: 8,
+     },
+     lightLabel: {
+          color: '#E5E7EB',
+          fontSize: 14,
+          fontWeight: '600',
+     },
+     lightButtons: {
+          flexDirection: 'row',
+          gap: 12,
+          width: '100%',
+     },
+     pairingNotice: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+     },
+     pairingText: {
+          color: '#9CA3AF',
+          flex: 1,
+          fontSize: 12,
+     },
+     pairingButton: {
+          borderWidth: 1,
+          borderColor: '#1DD1A1',
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          borderRadius: 6,
+     },
+     pairingButtonText: {
+          color: '#1DD1A1',
+          fontWeight: '600',
+          fontSize: 12,
+     },
+     lightButton: {
+          flex: 1,
+          paddingVertical: 10,
+          borderRadius: 6,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 1,
+          borderColor: '#1DD1A1',
+     },
+     lightButtonSecondary: {
+          backgroundColor: '#0B1612',
+     },
+     lightButtonPrimary: {
+          backgroundColor: '#1DD1A1',
+          borderColor: '#1DD1A1',
+     },
+     lightButtonDisabled: {
+          opacity: 0.6,
+     },
+     lightButtonText: {
+          color: '#E5E7EB',
+          fontWeight: '600',
+     },
+     lightButtonTextDark: {
+          color: '#04110B',
+          fontWeight: '700',
      },
 });
