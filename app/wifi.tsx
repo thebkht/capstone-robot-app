@@ -194,7 +194,7 @@ export default function WifiStatusScreen() {
                                              <View
                                                   style={[
                                                        styles.statusIndicator,
-                                                       { backgroundColor: isConnected ? "#1DD1A1" : "#9CA3AF" },
+                                                       { backgroundColor: isConnected ? "#1DD1A1" : "#67686C" },
                                                   ]}
                                              />
                                              <ThemedText style={styles.statusValue}>
@@ -318,11 +318,11 @@ export default function WifiStatusScreen() {
 const styles = StyleSheet.create({
      safeArea: {
           flex: 1,
-          backgroundColor: "#050505",
+          backgroundColor: "#161616",
      },
      container: {
           flex: 1,
-          backgroundColor: "#050505",
+          backgroundColor: "#161616",
      },
      networks: {
           gap: 12,
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
           gap: 16,
      },
      loadingText: {
-          color: "#9CA3AF",
+          color: "#67686C",
           fontSize: 16,
      },
      title: {
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
           marginBottom: 8,
      },
      statusCard: {
-          backgroundColor: "#0F0F10",
+          backgroundColor: "#1C1C1C",
           padding: 16,
           gap: 16,
      },
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
           alignItems: "center",
      },
      statusLabel: {
-          color: "#9CA3AF",
+          color: "#67686C",
           fontSize: 16,
      },
      statusValue: {
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
           opacity: 0.5,
      },
      networksList: {
-          backgroundColor: "#0F0F10",
+          backgroundColor: "#1C1C1C",
           overflow: "hidden",
      },
      networkItem: {
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
      },
      networkItemBorder: {
           borderBottomWidth: 1,
-          borderBottomColor: "#1F2937",
+          borderBottomColor: "#202020",
      },
      networkItemContent: {
           flexDirection: "row",
@@ -425,12 +425,12 @@ const styles = StyleSheet.create({
           fontFamily: "JetBrainsMono_600SemiBold",
      },
      emptyState: {
-          backgroundColor: "#0F0F10",
+          backgroundColor: "#1C1C1C",
           padding: 24,
           alignItems: "center",
      },
      emptyStateText: {
-          color: "#9CA3AF",
+          color: "#67686C",
           fontSize: 14,
           fontStyle: "italic",
      },
@@ -438,9 +438,9 @@ const styles = StyleSheet.create({
           gap: 12,
           padding: 20,
           paddingTop: 12,
-          backgroundColor: "#050505",
+          backgroundColor: "#161616",
           borderTopWidth: 1,
-          borderTopColor: "#0F0F10",
+          borderTopColor: "#1C1C1C",
      },
      actionButton: {
           paddingVertical: 16,
@@ -449,12 +449,12 @@ const styles = StyleSheet.create({
           justifyContent: "center",
      },
      primaryButton: {
-          backgroundColor: "#0F0F10",
+          backgroundColor: "#1C1C1C",
      },
      secondaryButton: {
-          backgroundColor: "#0F0F10",
+          backgroundColor: "#1C1C1C",
           borderWidth: 1,
-          borderColor: "#1F2937",
+          borderColor: "#202020",
      },
      buttonPressed: {
           opacity: 0.8,

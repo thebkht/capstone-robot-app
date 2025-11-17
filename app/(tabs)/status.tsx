@@ -116,8 +116,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 0,
-    borderColor: '#1F2937',
-    backgroundColor: '#0F0F10',
+    borderColor: '#202020',
+    backgroundColor: '#1C1C1C',
   },
   rowBetween: {
     flexDirection: 'row',
