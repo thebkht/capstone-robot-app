@@ -729,19 +729,21 @@ export function WifiProvisionScreen() {
             </View>
           </ThemedView> */}
 
-          <Pressable
-            style={styles.connectIpButton}
-            onPress={() => {
-              setManualConnectError(null);
-              setIsManualModalVisible(true);
-            }}
-          >
-            <ThemedText style={styles.connectIpText}>
-              Connect to a specific IP
-            </ThemedText>
-          </Pressable>
+
         </ThemedView>
       </ScrollView>
+
+      <Pressable
+        style={styles.connectIpButton}
+        onPress={() => {
+          setManualConnectError(null);
+          setIsManualModalVisible(true);
+        }}
+      >
+        <ThemedText style={styles.connectIpText}>
+          Connect to a specific IP
+        </ThemedText>
+      </Pressable>
 
       <Modal
         visible={isManualModalVisible}
@@ -823,6 +825,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#161616",
+    padding: 24,
   },
   scrollView: {
     flex: 1,
@@ -832,7 +835,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 24,
     gap: 24,
     backgroundColor: "#161616",
   },
