@@ -50,10 +50,7 @@
           "image": "./assets/images/icons/splash-icon-light.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#161616",
-          "dark": {
-            "backgroundColor": "#161616"
-          }
+          "backgroundColor": "#161616"
         }
       ],
       "expo-secure-store",
@@ -61,10 +58,7 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
-          "modes": [
-            "peripheral",
-            "central"
-          ],
+          "modes": ["peripheral", "central"],
           "bluetoothAlwaysPermission": "Allow Rovy Controller to connect to bluetooth devices"
         }
       ],
