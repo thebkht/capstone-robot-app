@@ -10,6 +10,8 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -30,6 +32,7 @@ import {
 import { useRovyBle } from "@/hooks/use-rovy-ble";
 import type { RovyDevice } from "@/services/rovy-ble";
 import { Image } from "expo-image";
+import { IconSymbol } from "./ui/icon-symbol";
 
 const deriveHost = (value: string | null | undefined) => {
   if (!value) {
@@ -70,6 +73,26 @@ const StatusPill = ({
     <ThemedText style={styles.statusPillText}>{label}</ThemedText>
   </View>
 );
+
+const getSignalStrengthInfo = (rssi?: number | null) => {
+  if (typeof rssi !== "number") {
+    return { label: "Unknown", color: "#6B7280" };
+  }
+  if (rssi >= -60) {
+    return { label: "Strong", color: "#1DD1A1" };
+  }
+  if (rssi >= -75) {
+    return { label: "Medium", color: "#FBBF24" };
+  }
+  return { label: "Weak", color: "#F87171" };
+};
+
+const formatRssiValue = (rssi?: number | null) => {
+  if (typeof rssi !== "number") {
+    return "Signal unknown";
+  }
+  return `${rssi} dBm`;
+};
 
 /**
  * Wi-Fi Provision Screen Component
@@ -117,6 +140,16 @@ export function WifiProvisionScreen() {
     null
   );
   const [isManualConnecting, setIsManualConnecting] = useState(false);
+  const scanRotationValue = useRef(new Animated.Value(0)).current;
+  const scanRotationLoop = useRef<Animated.CompositeAnimation | null>(null);
+  const scanRotation = useMemo(
+    () =>
+      scanRotationValue.interpolate({
+        inputRange: [0, 1],
+        outputRange: ["0deg", "360deg"],
+      }),
+    [scanRotationValue]
+  );
 
   const isCheckingNetworkRef = useRef(false);
   const refreshStatusRef = useRef(refreshStatus);
@@ -125,6 +158,31 @@ export function WifiProvisionScreen() {
   useEffect(() => {
     refreshStatusRef.current = refreshStatus;
   }, [refreshStatus]);
+
+  useEffect(() => {
+    if (isScanning) {
+      scanRotationLoop.current = Animated.loop(
+        Animated.timing(scanRotationValue, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      scanRotationLoop.current.start();
+    } else {
+      scanRotationLoop.current?.stop();
+      scanRotationValue.stopAnimation(() => {
+        scanRotationValue.setValue(0);
+      });
+      scanRotationLoop.current = null;
+    }
+
+    return () => {
+      scanRotationLoop.current?.stop();
+      scanRotationLoop.current = null;
+    };
+  }, [isScanning, scanRotationValue]);
 
   useEffect(() => {
     if (manualIpEdited) {
@@ -451,6 +509,11 @@ export function WifiProvisionScreen() {
     "Unknown network";
 
   const wifiIpAddress = status?.network?.ip || "Unavailable";
+  const scanIconStyle = isScanning
+    ? {
+      transform: [{ rotate: scanRotation }],
+    }
+    : undefined;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
@@ -478,7 +541,7 @@ export function WifiProvisionScreen() {
             </ThemedView>
           ) : null}
 
-          <ThemedView style={styles.sectionCard}>
+          <View>
             <View style={styles.sectionHeader}>
               <View>
                 <ThemedText style={styles.sectionTitle}>Bluetooth</ThemedText>
@@ -489,68 +552,96 @@ export function WifiProvisionScreen() {
               />
             </View>
 
-            <View style={styles.blockHeader}>
-              <ThemedText style={styles.blockTitle}>Nearby devices</ThemedText>
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View>
+                  <ThemedText style={styles.sectionTitle}>Nearby devices</ThemedText>
+                </View>
+                <Pressable
+                  style={[
+                    styles.scanButton,
+                    (isScanning || isConnecting) && styles.disabledPrimary,
+                  ]}
+                  onPress={handleScan}
+                  disabled={isScanning || isConnecting}
+                >
+                  <Animated.View style={scanIconStyle}>
+                    <IconSymbol
+                      size={20}
+                      name="arrow.trianglehead.2.clockwise"
+                      color="#fff"
+                    />
+                  </Animated.View>
+                </Pressable>
+              </View>
+
+
               {isScanning ? (
                 <View style={styles.inlineStatus}>
-                  <ActivityIndicator size="small" color="#1DD1A1" />
                   <ThemedText style={styles.statusLabelText}>
                     Scanning for devices...
                   </ThemedText>
                 </View>
               ) : null}
-            </View>
 
-            <View style={styles.deviceList}>
-              {devices.length === 0 && !isScanning ? (
-                <ThemedText style={styles.emptyStateText}>
-                  {isConnected
-                    ? "Connected to a robot. Disconnect to scan again."
-                    : "No nearby robots detected yet."}
-                </ThemedText>
-              ) : (
-                devices.map((device) => (
-                  <Pressable
-                    key={device.id}
-                    style={[
-                      styles.deviceItem,
-                      selectedDevice?.id === device.id && styles.deviceSelected,
-                    ]}
-                    onPress={() => handleConnect(device)}
-                    disabled={isConnecting}
-                  >
-                    <View>
-                      <ThemedText style={styles.deviceName}>
-                        {device.name || "ROVY"}
-                      </ThemedText>
-                      <ThemedText style={styles.deviceId}>{device.id}</ThemedText>
-                    </View>
-                    {selectedDevice?.id === device.id && isConnected ? (
-                      <ThemedText style={styles.connectedBadge}>
-                        Connected
-                      </ThemedText>
-                    ) : null}
-                  </Pressable>
-                ))
-              )}
-            </View>
 
-            <Pressable
-              style={[
-                styles.primaryButton,
-                (isScanning || isConnecting) && styles.disabledPrimary,
-              ]}
-              onPress={handleScan}
-              disabled={isScanning || isConnecting}
-            >
-              {isScanning ? (
-                <ActivityIndicator color="#04110B" />
-              ) : (
-                <ThemedText style={styles.primaryButtonText}>
-                  Scan for ROVY
-                </ThemedText>
-              )}
-            </Pressable>
+              <View style={styles.deviceList}>
+                {devices.length === 0 && !isScanning ? (
+                  <ThemedText style={styles.emptyStateText}>
+                    {isConnected
+                      ? "Connected to a robot. Disconnect to scan again."
+                      : "No nearby robots detected yet."}
+                  </ThemedText>
+                ) : (
+                  devices.map((device) => {
+                    const signalInfo = getSignalStrengthInfo(device.rssi);
+                    return (
+                      <Pressable
+                        key={device.id}
+                        style={[
+                          styles.deviceItem,
+                          selectedDevice?.id === device.id && styles.deviceSelected,
+                        ]}
+                        onPress={() => handleConnect(device)}
+                        disabled={isConnecting}
+                      >
+                        <View style={styles.deviceHeader}>
+                          {selectedDevice?.id === device.id && isConnected ? (
+                            <View style={[styles.signalDot, { backgroundColor: "#1DD1A1" }]} />
+                          ) : null}
+                          <View>
+                            <ThemedText style={styles.deviceName}>
+                              {device.name || "ROVY"}
+                            </ThemedText>
+                          </View>
+                          <View
+                            style={[
+                              styles.signalBadge,
+                              { borderColor: signalInfo.color },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.signalDot,
+                                { backgroundColor: signalInfo.color },
+                              ]}
+                            />
+                            <ThemedText
+                              style={[
+                                styles.signalBadgeText,
+                                { color: signalInfo.color },
+                              ]}
+                            >
+                              {signalInfo.label}
+                            </ThemedText>
+                          </View>
+                        </View>
+                      </Pressable>
+                    );
+                  })
+                )}
+              </View>
+            </View>
 
             {isConnected ? (
               <Pressable
@@ -563,7 +654,7 @@ export function WifiProvisionScreen() {
                 </ThemedText>
               </Pressable>
             ) : null}
-          </ThemedView>
+          </View>
 
           {/* <ThemedView style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
@@ -875,6 +966,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#202020",
     backgroundColor: "#1C1C1C",
+    marginVertical: 8,
     gap: 20,
   },
   sectionHeader: {
@@ -885,7 +977,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontFamily: "JetBrainsMono_600SemiBold",
-    color: "#F9FAFB",
+    color: "#67686C",
   },
   sectionHint: {
     color: "#67686C",
@@ -913,13 +1005,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   deviceItem: {
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#202020",
-    backgroundColor: "#1B1B1B",
+    gap: 12,
+  },
+  deviceHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
   deviceSelected: {
     borderColor: "#1DD1A1",
@@ -932,6 +1024,30 @@ const styles = StyleSheet.create({
   deviceId: {
     color: "#6B7280",
     fontSize: 12,
+  },
+  deviceMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  signalBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  signalBadgeText: {
+    fontSize: 12,
+    fontFamily: "JetBrainsMono_600SemiBold",
+  },
+  signalDot: {
+    width: 8,
+    height: 8,
+  },
+  signalRssiText: {
+    color: "#9CA3AF",
+    fontSize: 12,
+    fontFamily: "JetBrainsMono_500Medium",
   },
   connectedBadge: {
     color: "#1DD1A1",
@@ -947,6 +1063,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingInline: 16,
     alignItems: "center",
+  },
+  scanButton: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   disabledPrimary: {
     opacity: 0.5,

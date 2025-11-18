@@ -15,7 +15,6 @@ const WIFI_CONFIG_CHARACTERISTIC_UUID = "1234abcd-0001-1000-8000-00805f9b34fb";
 const WIFI_STATUS_CHARACTERISTIC_UUID = "1234abcd-0002-1000-8000-00805f9b34fb";
 
 // Device name prefix for filtering
-const ROVY_DEVICE_PREFIX = "ROVY-";
 
 // Wi-Fi status values
 export type WifiStatus = "idle" | "connecting" | "connected" | "failed";
@@ -24,6 +23,7 @@ export type WifiStatus = "idle" | "connecting" | "connected" | "failed";
 export interface RovyDevice {
   id: string;
   name: string;
+  rssi?: number | null;
 }
 
 // Callback type for status changes
@@ -240,10 +240,7 @@ export class RovyBleManager {
       this.bleManager.startDeviceScan(
         null, // Scan for all devices
         { allowDuplicates: false },
-        (
-          error: Error | null,
-          device: { id: string; name: string | null } | null
-        ) => {
+        (error: Error | null, device: Device | null) => {
           if (error) {
             clearTimeout(scanTimeout);
             this.bleManager?.stopDeviceScan();
@@ -252,18 +249,18 @@ export class RovyBleManager {
             return;
           }
 
-          if (device) {
-            const deviceName = device.name;
-            if (
-              deviceName &&
-              deviceName.toUpperCase().startsWith(ROVY_DEVICE_PREFIX)
-            ) {
-              console.log("Found ROVY device:", deviceName, device.id);
-              foundDevices.set(device.id, {
-                id: device.id,
-                name: deviceName,
-              });
-            }
+          if (device?.name) {
+            console.log(
+              "Found ROVY device:",
+              device.name,
+              device.id,
+              device.rssi
+            );
+            foundDevices.set(device.id, {
+              id: device.id,
+              name: device.name,
+              rssi: device.rssi ?? null,
+            });
           }
         }
       );
