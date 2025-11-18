@@ -76,7 +76,7 @@ const StatusPill = ({
 
 const getSignalStrengthInfo = (rssi?: number | null) => {
   if (typeof rssi !== "number") {
-    return { label: "Unknown", color: "#6B7280" };
+    return { label: "Unknown", color: "#67686C" };
   }
   if (rssi >= -60) {
     return { label: "Strong", color: "#1DD1A1" };
