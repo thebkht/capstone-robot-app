@@ -1,11 +1,4 @@
-import axios, {
-  AxiosError,
-  AxiosInstance,
-  AxiosRequestConfig,
-  AxiosResponse,
-} from "axios";
-
-type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+import axios, { AxiosError, AxiosInstance, AxiosResponse } from "axios";
 
 export type RobotConnectionState =
   | "disconnected"
@@ -144,6 +137,12 @@ export class RobotAPI {
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
+
+          // Added global headers:
+          ...(this.controlToken
+            ? { "x-control-token": this.controlToken }
+            : {}),
+          ...(this.sessionId ? { "session-id": this.sessionId } : {}),
         },
       });
 

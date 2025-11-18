@@ -13,7 +13,6 @@ interface CameraVideoProps {
      onToggleStream: () => void;
      onSetLights: (pwmA: number, pwmB: number) => void;
      isAdjustingLights: boolean;
-     hasControlSession: boolean;
      onRequestPairing: () => void;
 }
 
@@ -26,7 +25,6 @@ export function CameraVideo({
      onToggleStream,
      onSetLights,
      isAdjustingLights,
-     hasControlSession,
      onRequestPairing,
 }: CameraVideoProps) {
      return (
@@ -83,27 +81,17 @@ export function CameraVideo({
                     )}
                </View>
 
-              <View style={styles.lightControls}>
-                   <ThemedText style={styles.lightLabel}>Camera lights</ThemedText>
-                    {!hasControlSession && (
-                         <View style={styles.pairingNotice}>
-                              <ThemedText style={styles.pairingText}>
-                                   Pair the robot with the PIN to enable lighting controls.
-                              </ThemedText>
-                              <Pressable style={styles.pairingButton} onPress={onRequestPairing}>
-                                   <ThemedText style={styles.pairingButtonText}>Pair robot</ThemedText>
-                              </Pressable>
-                         </View>
-                    )}
+               <View style={styles.lightControls}>
+                    <ThemedText style={styles.lightLabel}>Camera lights</ThemedText>
                     <View style={styles.lightButtons}>
                          <Pressable
                               style={[
                                    styles.lightButton,
                                    styles.lightButtonSecondary,
-                                   (isAdjustingLights || !hasControlSession) && styles.lightButtonDisabled,
+                                   (isAdjustingLights) && styles.lightButtonDisabled,
                               ]}
                               onPress={() => onSetLights(0, 0)}
-                              disabled={isAdjustingLights || !hasControlSession}
+                              disabled={isAdjustingLights}
                          >
                               {isAdjustingLights ? (
                                    <ActivityIndicator color="#E5E7EB" />
@@ -115,10 +103,10 @@ export function CameraVideo({
                               style={[
                                    styles.lightButton,
                                    styles.lightButtonPrimary,
-                                   (isAdjustingLights || !hasControlSession) && styles.lightButtonDisabled,
+                                   (isAdjustingLights) && styles.lightButtonDisabled,
                               ]}
                               onPress={() => onSetLights(255, 255)}
-                              disabled={isAdjustingLights || !hasControlSession}
+                              disabled={isAdjustingLights}
                          >
                               {isAdjustingLights ? (
                                    <ActivityIndicator color="#04110B" />

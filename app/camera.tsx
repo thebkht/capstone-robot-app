@@ -18,7 +18,7 @@ import { useRobot } from '@/context/robot-provider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function CameraScreen() {
-     const { api, baseUrl, controlToken, sessionId } = useRobot();
+     const { api, baseUrl, } = useRobot();
      const router = useRouter();
      const [joystick, setJoystick] = useState({ x: 0, y: 0 });
      const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,6 @@ export default function CameraScreen() {
      const [isStreaming, setIsStreaming] = useState(false);
      const [isConnecting, setIsConnecting] = useState(false);
      const [isAdjustingLights, setIsAdjustingLights] = useState(false);
-     const hasControlSession = Boolean(controlToken && sessionId);
      const wsRef = useRef<WebSocket | null>(null);
 
      // WebSocket URL
@@ -73,12 +72,6 @@ export default function CameraScreen() {
                setIsConnecting(false);
                setIsStreaming(true);
                setError(null);
-
-               if (controlToken && sessionId) {
-                    void api
-                         .nod({ times: 1, delta: 10, delay: 0.3 })
-                         .catch((nodError) => console.warn('Failed to trigger nod', nodError));
-               }
           };
 
           ws.onmessage = (event) => {
@@ -116,7 +109,7 @@ export default function CameraScreen() {
                     setError(`Connection closed unexpectedly (${event.code})`);
                }
           };
-     }, [api, controlToken, sessionId, wsUrl]);
+     }, [wsUrl]);
 
      const disconnectWebSocket = useCallback(() => {
           if (wsRef.current) {
@@ -180,11 +173,6 @@ export default function CameraScreen() {
 
      const handleSetLights = useCallback(
           async (pwmA: number, pwmB: number) => {
-               if (!controlToken || !sessionId) {
-                    console.warn('Lighting controls require a claimed session.');
-                    return;
-               }
-
                setIsAdjustingLights(true);
                try {
                     await api.controlLights({ pwmA, pwmB });
@@ -194,7 +182,7 @@ export default function CameraScreen() {
                     setIsAdjustingLights(false);
                }
           },
-          [api, controlToken, sessionId]
+          [api]
      );
 
      return (
@@ -243,7 +231,6 @@ export default function CameraScreen() {
                          onToggleStream={handleToggleStream}
                          onSetLights={handleSetLights}
                          isAdjustingLights={isAdjustingLights}
-                         hasControlSession={hasControlSession}
                          onRequestPairing={() => router.push('/pairing')}
                     />
 
