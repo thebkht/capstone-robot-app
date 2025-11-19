@@ -12,13 +12,13 @@ import {
 } from '@/services/json-socket';
 
 interface JoystickProps {
-  onChange?: (value: { x: number; y: number }) => void;
+  onChange?: (value: { l: number; r: number }) => void;
 }
 
 interface Direction {
   key: string;
   label: string;
-  vector: { x: number; y: number };
+  vector: { l: number; r: number };
   rotation?: string;
   hasIcon?: boolean;
   command?: MovementCommand;
@@ -30,7 +30,7 @@ const directions: Direction[] = [
   {
     key: 'up-left',
     label: '',
-    vector: { x: -1, y: 1 },
+    vector: { l: -1, r: 1 },
     rotation: '-45deg',
     hasIcon: true,
     command: { T: cmd_movition_ctrl, L: slow_speed, R: max_speed },
@@ -38,7 +38,7 @@ const directions: Direction[] = [
   {
     key: 'up',
     label: '',
-    vector: { x: 0, y: 1 },
+    vector: { l: 0, r: 1 },
     rotation: '0deg',
     hasIcon: true,
     command: { T: cmd_movition_ctrl, L: max_speed, R: max_speed },
@@ -46,7 +46,7 @@ const directions: Direction[] = [
   {
     key: 'up-right',
     label: '',
-    vector: { x: 1, y: 1 },
+    vector: { l: 1, r: 1 },
     rotation: '45deg',
     hasIcon: true,
     command: { T: cmd_movition_ctrl, L: max_speed, R: slow_speed },
@@ -54,7 +54,7 @@ const directions: Direction[] = [
   {
     key: 'left',
     label: '',
-    vector: { x: -1, y: 0 },
+    vector: { l: -1, r: 0 },
     rotation: '-90deg',
     hasIcon: true,
     command: { T: cmd_movition_ctrl, L: -max_speed, R: max_speed },
@@ -62,14 +62,14 @@ const directions: Direction[] = [
   {
     key: 'center',
     label: '',
-    vector: { x: 0, y: 0 },
+    vector: { l: 0, r: 0 },
     hasIcon: false,
     command: stopCommand,
   },
   {
     key: 'right',
     label: '',
-    vector: { x: 1, y: 0 },
+    vector: { l: 1, r: 0 },
     rotation: '90deg',
     hasIcon: true,
     command: { T: cmd_movition_ctrl, L: max_speed, R: -max_speed },
@@ -77,7 +77,7 @@ const directions: Direction[] = [
   {
     key: 'down-left',
     label: '',
-    vector: { x: -1, y: -1 },
+    vector: { l: -1, r: -1 },
     rotation: '-135deg',
     hasIcon: true,
     command: { T: cmd_movition_ctrl, L: -slow_speed, R: -max_speed },
@@ -85,7 +85,7 @@ const directions: Direction[] = [
   {
     key: 'down',
     label: '',
-    vector: { x: 0, y: -1 },
+    vector: { l: 0, r: -1 },
     rotation: '180deg',
     hasIcon: true,
     command: { T: cmd_movition_ctrl, L: -max_speed, R: -max_speed },
@@ -93,7 +93,7 @@ const directions: Direction[] = [
   {
     key: 'down-right',
     label: '',
-    vector: { x: 1, y: -1 },
+    vector: { l: 1, r: -1 },
     rotation: '135deg',
     hasIcon: true,
     command: { T: cmd_movition_ctrl, L: -max_speed, R: -slow_speed },
@@ -117,7 +117,7 @@ export const Joystick: React.FC<JoystickProps> = ({ onChange }) => {
   );
 
   const handlePressOut = useCallback(() => {
-    onChange?.({ x: 0, y: 0 });
+    onChange?.({ l: 0, r: 0 });
     cmdJsonCmd({ ...stopCommand }, baseUrl);
   }, [baseUrl, onChange]);
 
@@ -130,7 +130,7 @@ export const Joystick: React.FC<JoystickProps> = ({ onChange }) => {
               handlePressIn({
                 key: 'center',
                 label: '',
-                vector: { x: 0, y: 0 },
+                vector: { l: 0, r: 0 },
                 hasIcon: false,
                 command: stopCommand,
               })

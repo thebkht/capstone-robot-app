@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function CameraScreen() {
      const { api, baseUrl, } = useRobot();
      const router = useRouter();
-     const [joystick, setJoystick] = useState({ x: 0, y: 0 });
+     const [joystick, setJoystick] = useState({ l: 0, r: 0 });
      const [error, setError] = useState<string | null>(null);
      const [isCapturing, setIsCapturing] = useState(false);
      const [lastSnapshot, setLastSnapshot] = useState<string | null>(null);
@@ -284,7 +284,7 @@ export default function CameraScreen() {
                          <ThemedText type="title">Virtual joystick</ThemedText>
                          <Joystick onChange={setJoystick} />
                          <ThemedText style={styles.joystickValue}>
-                              X: {joystick.x.toFixed(2)} Y: {joystick.y.toFixed(2)}
+                              L: {joystick.l.toFixed(2)} R: {joystick.r.toFixed(2)}
                          </ThemedText>
                     </ThemedView>
                </ThemedView>
