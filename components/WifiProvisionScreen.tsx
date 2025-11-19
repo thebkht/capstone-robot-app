@@ -691,7 +691,7 @@ export function WifiProvisionScreen() {
             <View style={styles.sectionHeader}>
               <View>
                 <ThemedText style={styles.sectionTitle}>
-                  Bluetooth Low Energy (BLE)
+                  Bluetooth
                 </ThemedText>
               </View>
               <StatusPill
