@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface JoystickProps {
@@ -9,19 +10,23 @@ interface Direction {
   key: string;
   label: string;
   vector: { x: number; y: number };
+  rotation?: string;
+  hasIcon?: boolean;
 }
 
 const directions: Direction[] = [
-  { key: 'up-left', label: '↖', vector: { x: -1, y: 1 } },
-  { key: 'up', label: '↑', vector: { x: 0, y: 1 } },
-  { key: 'up-right', label: '↗', vector: { x: 1, y: 1 } },
-  { key: 'left', label: '←', vector: { x: -1, y: 0 } },
-  { key: 'center', label: '', vector: { x: 0, y: 0 } },
-  { key: 'right', label: '→', vector: { x: 1, y: 0 } },
-  { key: 'down-left', label: '↙', vector: { x: -1, y: -1 } },
-  { key: 'down', label: '↓', vector: { x: 0, y: -1 } },
-  { key: 'down-right', label: '↘', vector: { x: 1, y: -1 } },
+  { key: 'up-left', label: '', vector: { x: -1, y: 1 }, rotation: '-45deg', hasIcon: true },
+  { key: 'up', label: '', vector: { x: 0, y: 1 }, rotation: '0deg', hasIcon: true },
+  { key: 'up-right', label: '', vector: { x: 1, y: 1 }, rotation: '45deg', hasIcon: true },
+  { key: 'left', label: '', vector: { x: -1, y: 0 }, rotation: '-90deg', hasIcon: true },
+  { key: 'center', label: '', vector: { x: 0, y: 0 }, hasIcon: false },
+  { key: 'right', label: '', vector: { x: 1, y: 0 }, rotation: '90deg', hasIcon: true },
+  { key: 'down-left', label: '', vector: { x: -1, y: -1 }, rotation: '-135deg', hasIcon: true },
+  { key: 'down', label: '', vector: { x: 0, y: -1 }, rotation: '180deg', hasIcon: true },
+  { key: 'down-right', label: '', vector: { x: 1, y: -1 }, rotation: '135deg', hasIcon: true },
 ];
+
+const arrowSource = require('../assets/images/ctrl_arrow.svg');
 
 export const Joystick: React.FC<JoystickProps> = ({ onChange }) => {
   const handlePressIn = useMemo(
@@ -63,7 +68,23 @@ export const Joystick: React.FC<JoystickProps> = ({ onChange }) => {
             onPressOut={handlePressOut}
             style={({ pressed }) => [styles.button, pressed && styles.buttonActive]}
           >
-            {direction.label ? <Text style={styles.buttonLabel}>{direction.label}</Text> : null}
+            {({ pressed }) => (
+              <View style={styles.buttonContent}>
+                {direction.hasIcon ? (
+                  <Image
+                    source={arrowSource}
+                    style={[
+                      styles.arrow,
+                      direction.rotation ? { transform: [{ rotate: direction.rotation }] } : null,
+                    ]}
+                    tintColor={pressed ? '#FFFFFF' : '#C6C7CC'}
+                    contentFit="contain"
+                    accessible={false}
+                  />
+                ) : null}
+                {direction.label ? <Text style={styles.buttonLabel}>{direction.label}</Text> : null}
+              </View>
+            )}
           </Pressable>
         ))}
       </View>
@@ -145,9 +166,19 @@ const styles = StyleSheet.create({
     borderColor: '#3B3C42',
     borderWidth: 1,
   },
+  buttonContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+  },
   buttonActive: {
     backgroundColor: '#4FF5C0',
     borderColor: '#4FF5C0',
+  },
+  arrow: {
+    width: 32,
+    height: 32,
   },
   buttonLabel: {
     color: '#E5E7EB',
