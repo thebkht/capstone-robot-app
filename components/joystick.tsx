@@ -1,103 +1,156 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Animated, GestureResponderEvent, PanResponder, PanResponderGestureState, StyleSheet, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface JoystickProps {
-  size?: number;
   onChange?: (value: { x: number; y: number }) => void;
 }
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+interface Direction {
+  key: string;
+  label: string;
+  vector: { x: number; y: number };
+}
 
-export const Joystick: React.FC<JoystickProps> = ({ size = 180, onChange }) => {
-  const radius = size / 2;
-  const knobRadius = size * 0.18;
-  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const [dragging, setDragging] = useState(false);
+const directions: Direction[] = [
+  { key: 'up-left', label: '↖', vector: { x: -1, y: 1 } },
+  { key: 'up', label: '↑', vector: { x: 0, y: 1 } },
+  { key: 'up-right', label: '↗', vector: { x: 1, y: 1 } },
+  { key: 'left', label: '←', vector: { x: -1, y: 0 } },
+  { key: 'center', label: '', vector: { x: 0, y: 0 } },
+  { key: 'right', label: '→', vector: { x: 1, y: 0 } },
+  { key: 'down-left', label: '↙', vector: { x: -1, y: -1 } },
+  { key: 'down', label: '↓', vector: { x: 0, y: -1 } },
+  { key: 'down-right', label: '↘', vector: { x: 1, y: -1 } },
+];
 
-  const emitChange = useCallback(
-    (gestureState: PanResponderGestureState) => {
-      const x = clamp(gestureState.dx, -radius + knobRadius, radius - knobRadius);
-      const y = clamp(gestureState.dy, -radius + knobRadius, radius - knobRadius);
-      onChange?.({
-        x: Number((x / (radius - knobRadius)).toFixed(2)),
-        y: Number((-y / (radius - knobRadius)).toFixed(2)),
-      });
-    },
-    [knobRadius, onChange, radius],
+export const Joystick: React.FC<JoystickProps> = ({ onChange }) => {
+  const handlePressIn = useMemo(
+    () =>
+      (vector: { x: number; y: number }) => {
+        onChange?.(vector);
+      },
+    [onChange],
   );
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          pan.setValue({ x: 0, y: 0 });
-          setDragging(true);
-        },
-        onPanResponderMove: (_evt: GestureResponderEvent, gestureState: PanResponderGestureState) => {
-          const x = clamp(gestureState.dx, -radius + knobRadius, radius - knobRadius);
-          const y = clamp(gestureState.dy, -radius + knobRadius, radius - knobRadius);
-          pan.setValue({ x, y });
-          emitChange(gestureState);
-        },
-        onPanResponderRelease: () => {
-          Animated.spring(pan, {
-            toValue: { x: 0, y: 0 },
-            useNativeDriver: false,
-          }).start();
-          setDragging(false);
-          onChange?.({ x: 0, y: 0 });
-        },
-      }),
-    [emitChange, knobRadius, onChange, pan, radius],
+  const handlePressOut = useMemo(
+    () => () => {
+      onChange?.({ x: 0, y: 0 });
+    },
+    [onChange],
   );
 
   return (
-    <View style={[styles.base, { width: size, height: size, borderRadius: radius }]}>
-      <View style={[styles.crosshair, styles.horizontal]} />
-      <View style={[styles.crosshair, styles.vertical]} />
-      <Animated.View
-        style={[
-          styles.knob,
-          {
-            width: knobRadius * 2,
-            height: knobRadius * 2,
-            borderRadius: knobRadius,
-            transform: pan.getTranslateTransform(),
-            opacity: dragging ? 0.95 : 0.8,
-          },
-        ]}
-        {...panResponder.panHandlers}
-      />
+    <View style={styles.controller}>
+      <View style={styles.grid}>
+        <View style={styles.middleOverlay} pointerEvents="box-none">
+          <Pressable
+            onPressIn={() => handlePressIn({ x: 0, y: 0 })}
+            onPressOut={handlePressOut}
+            style={({ pressed }) => [styles.funcOuter, pressed && styles.funcOuterActive]}
+          >
+            <View style={styles.funcInnerShadow}>
+              <View style={styles.funcInner}>
+                <Text style={styles.funcText}>FUNC</Text>
+              </View>
+            </View>
+          </Pressable>
+        </View>
+
+        {directions.map((direction) => (
+          <Pressable
+            key={direction.key}
+            onPressIn={() => handlePressIn(direction.vector)}
+            onPressOut={handlePressOut}
+            style={({ pressed }) => [styles.button, pressed && styles.buttonActive]}
+          >
+            {direction.label ? <Text style={styles.buttonLabel}>{direction.label}</Text> : null}
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  base: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.16)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  controller: {
+    width: 210,
+    alignSelf: 'center',
+  },
+  grid: {
+    width: 210,
+    height: 210,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    position: 'relative',
+    borderRadius: 40,
     overflow: 'hidden',
+    backgroundColor: '#28292E',
   },
-  knob: {
-    backgroundColor: 'rgba(66, 135, 245, 0.6)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
-  },
-  crosshair: {
+  middleOverlay: {
     position: 'absolute',
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    top: 50,
+    left: 50,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E1E20',
+    zIndex: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
-  horizontal: {
-    width: '100%',
-    height: 1,
+  funcOuter: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E1E20',
   },
-  vertical: {
-    width: 1,
-    height: '100%',
+  funcOuterActive: {
+    backgroundColor: '#4FF5C0',
+  },
+  funcInnerShadow: {
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2F3138',
+  },
+  funcInner: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E1E20',
+    borderWidth: 1,
+    borderColor: '#2A2B30',
+  },
+  funcText: {
+    color: '#E5E7EB',
+    fontWeight: '700',
+  },
+  button: {
+    width: 70,
+    height: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2C2D32',
+    borderColor: '#3B3C42',
+    borderWidth: 1,
+  },
+  buttonActive: {
+    backgroundColor: '#4FF5C0',
+    borderColor: '#4FF5C0',
+  },
+  buttonLabel: {
+    color: '#E5E7EB',
+    fontSize: 24,
   },
 });
