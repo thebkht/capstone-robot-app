@@ -6,7 +6,7 @@ import { getStoredRobots, RobotStatusCheck } from "./robot-storage";
  * Returns the status and robot info if available.
  */
 export async function checkRobotStatus(
-  robot: { robot_id: string; last_ip?: string; control_token: string; baseUrl?: string }
+  robot: { robot_id: string; last_ip?: string; control_token?: string; baseUrl?: string }
 ): Promise<RobotStatusCheck> {
   const baseUrl = robot.baseUrl || (robot.last_ip ? `http://${robot.last_ip}:8000` : null);
   
@@ -18,7 +18,7 @@ export async function checkRobotStatus(
   }
 
   try {
-    const api = createRobotApi(baseUrl, 3000, robot.control_token, null);
+    const api = createRobotApi(baseUrl, 3000);
     
     // Try to fetch status
     const statusResponse = await api.fetchTelemetry();
