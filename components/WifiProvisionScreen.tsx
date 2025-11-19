@@ -25,10 +25,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import {
-  DEFAULT_ROBOT_BASE_URL,
-  useRobot,
-} from "@/context/robot-provider";
+import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 import { useRovyBle } from "@/hooks/use-rovy-ble";
 import type { RovyDevice } from "@/services/rovy-ble";
 import { Image } from "expo-image";
@@ -61,13 +58,7 @@ const formatBaseUrl = (value: string) => {
   return `http://${trimmed.replace(/\/$/, "")}`;
 };
 
-const StatusPill = ({
-  color,
-  label,
-}: {
-  color: string;
-  label: string;
-}) => (
+const StatusPill = ({ color, label }: { color: string; label: string }) => (
   <View style={styles.statusPill}>
     <View style={[styles.statusDot, { backgroundColor: color }]} />
     <ThemedText style={styles.statusPillText}>{label}</ThemedText>
@@ -113,20 +104,13 @@ export function WifiProvisionScreen() {
     disconnect,
   } = useRovyBle();
 
-  const {
-    refreshStatus,
-    status,
-    statusError,
-    baseUrl,
-    setBaseUrl,
-  } = useRobot();
+  const { refreshStatus, status, statusError, baseUrl, setBaseUrl } =
+    useRobot();
 
   const router = useRouter();
 
   const [devices, setDevices] = useState<RovyDevice[]>([]);
-  const [selectedDevice, setSelectedDevice] = useState<RovyDevice | null>(
-    null
-  );
+  const [selectedDevice, setSelectedDevice] = useState<RovyDevice | null>(null);
   const [ssid, setSsid] = useState("");
   const [password, setPassword] = useState("");
   const [showWifiConfig, setShowWifiConfig] = useState(false);
@@ -206,7 +190,24 @@ export function WifiProvisionScreen() {
     try {
       setDevices([]);
       setSelectedDevice(null);
-      const foundDevices = await scanForRovy();
+
+      // Callback to update devices list in real-time as they're discovered
+      const onDeviceFound = (device: RovyDevice) => {
+        setDevices((prevDevices) => {
+          // Check if device already exists to avoid duplicates
+          const exists = prevDevices.some((d) => d.id === device.id);
+          if (exists) {
+            // Update existing device (e.g., RSSI might have changed)
+            return prevDevices.map((d) => (d.id === device.id ? device : d));
+          }
+          // Add new device
+          return [...prevDevices, device];
+        });
+      };
+
+      const foundDevices = await scanForRovy(onDeviceFound);
+
+      // Final update with all devices (in case any were missed)
       setDevices(foundDevices);
 
       if (foundDevices.length === 0) {
@@ -511,8 +512,8 @@ export function WifiProvisionScreen() {
   const wifiIpAddress = status?.network?.ip || "Unavailable";
   const scanIconStyle = isScanning
     ? {
-      transform: [{ rotate: scanRotation }],
-    }
+        transform: [{ rotate: scanRotation }],
+      }
     : undefined;
 
   return (
@@ -555,7 +556,9 @@ export function WifiProvisionScreen() {
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
                 <View>
-                  <ThemedText style={styles.sectionTitle}>Nearby devices</ThemedText>
+                  <ThemedText style={styles.sectionTitle}>
+                    Nearby devices
+                  </ThemedText>
                 </View>
                 <Pressable
                   style={[
@@ -574,8 +577,6 @@ export function WifiProvisionScreen() {
                   </Animated.View>
                 </Pressable>
               </View>
-
-
               {isScanning ? (
                 <View style={styles.inlineStatus}>
                   <ThemedText style={styles.statusLabelText}>
@@ -583,64 +584,68 @@ export function WifiProvisionScreen() {
                   </ThemedText>
                 </View>
               ) : null}
-
-
-              <View style={styles.deviceList}>
-                {devices.length === 0 && !isScanning ? (
-                  <ThemedText style={styles.emptyStateText}>
-                    {isConnected
-                      ? "Connected to a robot. Disconnect to scan again."
-                      : "No nearby robots detected yet."}
-                  </ThemedText>
-                ) : (
-                  devices.map((device) => {
-                    const signalInfo = getSignalStrengthInfo(device.rssi);
-                    return (
-                      <Pressable
-                        key={device.id}
-                        style={[
-                          styles.deviceItem,
-                          selectedDevice?.id === device.id && styles.deviceSelected,
-                        ]}
-                        onPress={() => handleConnect(device)}
-                        disabled={isConnecting}
-                      >
-                        <View style={styles.deviceHeader}>
-                          {selectedDevice?.id === device.id && isConnected ? (
-                            <View style={[styles.signalDot, { backgroundColor: "#1DD1A1" }]} />
-                          ) : null}
-                          <View>
-                            <ThemedText style={styles.deviceName}>
-                              {device.name || "ROVY"}
-                            </ThemedText>
-                          </View>
-                          <View
-                            style={[
-                              styles.signalBadge,
-                              { borderColor: signalInfo.color },
-                            ]}
-                          >
+              {devices.length === 0 && !isScanning && isConnected ? (
+                <ThemedText style={styles.emptyStateText}>
+                  Connected to a robot. Disconnect to scan again.
+                </ThemedText>
+              ) : (
+                devices.length !== 0 && (
+                  <View style={styles.deviceList}>
+                    {devices.map((device) => {
+                      const signalInfo = getSignalStrengthInfo(device.rssi);
+                      return (
+                        <Pressable
+                          key={device.id}
+                          style={[
+                            styles.deviceItem,
+                            selectedDevice?.id === device.id &&
+                              styles.deviceSelected,
+                          ]}
+                          onPress={() => handleConnect(device)}
+                          disabled={isConnecting}
+                        >
+                          <View style={styles.deviceHeader}>
+                            {selectedDevice?.id === device.id && isConnected ? (
+                              <View
+                                style={[
+                                  styles.signalDot,
+                                  { backgroundColor: "#1DD1A1" },
+                                ]}
+                              />
+                            ) : null}
+                            <View>
+                              <ThemedText style={styles.deviceName}>
+                                {device.name || "ROVY"}
+                              </ThemedText>
+                            </View>
                             <View
                               style={[
-                                styles.signalDot,
-                                { backgroundColor: signalInfo.color },
-                              ]}
-                            />
-                            <ThemedText
-                              style={[
-                                styles.signalBadgeText,
-                                { color: signalInfo.color },
+                                styles.signalBadge,
+                                { borderColor: signalInfo.color },
                               ]}
                             >
-                              {signalInfo.label}
-                            </ThemedText>
+                              <View
+                                style={[
+                                  styles.signalDot,
+                                  { backgroundColor: signalInfo.color },
+                                ]}
+                              />
+                              <ThemedText
+                                style={[
+                                  styles.signalBadgeText,
+                                  { color: signalInfo.color },
+                                ]}
+                              >
+                                {signalInfo.label}
+                              </ThemedText>
+                            </View>
                           </View>
-                        </View>
-                      </Pressable>
-                    );
-                  })
-                )}
-              </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )
+              )}
             </View>
 
             {isConnected ? (
@@ -820,9 +825,7 @@ export function WifiProvisionScreen() {
               />
             </View>
           </ThemedView> */}
-
         </ThemedView>
-
       </ScrollView>
       <View style={styles.bottomActionContainer}>
         <Pressable
@@ -837,7 +840,7 @@ export function WifiProvisionScreen() {
           </ThemedText>
         </Pressable>
         <Image
-          source={require('@/assets/images/head.png')}
+          source={require("@/assets/images/head.png")}
           style={styles.robotImage}
           contentFit="contain"
         />
@@ -885,7 +888,9 @@ export function WifiProvisionScreen() {
                   onPress={() => setIsManualModalVisible(false)}
                   disabled={isManualConnecting}
                 >
-                  <ThemedText style={styles.outlineButtonText}>Cancel</ThemedText>
+                  <ThemedText style={styles.outlineButtonText}>
+                    Cancel
+                  </ThemedText>
                 </Pressable>
                 <Pressable
                   style={[
@@ -898,7 +903,9 @@ export function WifiProvisionScreen() {
                   {isManualConnecting ? (
                     <ActivityIndicator color="#04110B" />
                   ) : (
-                    <ThemedText style={styles.primaryButtonText}>Connect</ThemedText>
+                    <ThemedText style={styles.primaryButtonText}>
+                      Connect
+                    </ThemedText>
                   )}
                 </Pressable>
               </View>
@@ -921,14 +928,14 @@ export function WifiProvisionScreen() {
 
 const styles = StyleSheet.create({
   robotImage: {
-    width: '100%',
+    width: "100%",
     aspectRatio: 375 / 100,
   },
   safeArea: {
     flex: 1,
     backgroundColor: "#161616",
     padding: 24,
-    paddingBottom: 0
+    paddingBottom: 0,
   },
   scrollView: {
     flex: 1,
@@ -1181,7 +1188,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingTop: 12,
     backgroundColor: "#161616",
-    gap: 36
+    gap: 36,
   },
   connectIpButton: {
     borderWidth: 1,

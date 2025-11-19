@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
+  DeviceFoundCallback,
   RovyDevice,
   StatusChangeCallback,
   WifiStatus,
@@ -52,29 +53,33 @@ export function useRovyBle() {
 
   /**
    * Scan for nearby ROVY devices
+   * @param onDeviceFound Optional callback that gets called when a device is found during scanning
    */
-  const scanForRovy = useCallback(async (): Promise<RovyDevice[]> => {
-    if (!managerRef.current) {
-      throw new Error("BLE manager not initialized");
-    }
+  const scanForRovy = useCallback(
+    async (onDeviceFound?: DeviceFoundCallback): Promise<RovyDevice[]> => {
+      if (!managerRef.current) {
+        throw new Error("BLE manager not initialized");
+      }
 
-    setIsScanning(true);
-    setError(null);
+      setIsScanning(true);
+      setError(null);
 
-    try {
-      const devices = await managerRef.current.scanForRovy();
-      console.log(`Found ${devices.length} ROVY device(s)`);
-      return devices;
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to scan for devices";
-      setError(errorMessage);
-      console.error("Scan error:", err);
-      throw err;
-    } finally {
-      setIsScanning(false);
-    }
-  }, []);
+      try {
+        const devices = await managerRef.current.scanForRovy(onDeviceFound);
+        console.log(`Found ${devices.length} ROVY device(s)`);
+        return devices;
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to scan for devices";
+        setError(errorMessage);
+        console.error("Scan error:", err);
+        throw err;
+      } finally {
+        setIsScanning(false);
+      }
+    },
+    []
+  );
 
   /**
    * Connect to a ROVY device

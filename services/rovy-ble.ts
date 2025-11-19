@@ -29,6 +29,9 @@ export interface RovyDevice {
 // Callback type for status changes
 export type StatusChangeCallback = (status: WifiStatus) => void;
 
+// Callback type for device discovery during scanning
+export type DeviceFoundCallback = (device: RovyDevice) => void;
+
 /**
  * ROVY BLE Manager for Wi-Fi configuration
  * Handles scanning, connecting, and configuring Wi-Fi via BLE
@@ -205,8 +208,12 @@ export class RovyBleManager {
   /**
    * Scan for nearby ROVY devices
    * Filters devices whose name starts with "ROVY-"
+   * @param onDeviceFound Optional callback that gets called when a device is found during scanning
+   * @returns Promise that resolves with all found devices after scan completes
    */
-  async scanForRovy(): Promise<RovyDevice[]> {
+  async scanForRovy(
+    onDeviceFound?: DeviceFoundCallback
+  ): Promise<RovyDevice[]> {
     console.log("Starting scan for ROVY devices...");
 
     if (!this.bleManager) {
@@ -256,11 +263,21 @@ export class RovyBleManager {
               device.id,
               device.rssi
             );
-            foundDevices.set(device.id, {
+            const rovyDevice: RovyDevice = {
               id: device.id,
               name: device.name,
               rssi: device.rssi ?? null,
-            });
+            };
+            foundDevices.set(device.id, rovyDevice);
+
+            // Call the callback immediately when a device is found
+            if (onDeviceFound) {
+              try {
+                onDeviceFound(rovyDevice);
+              } catch (error) {
+                console.error("Error in onDeviceFound callback:", error);
+              }
+            }
           }
         }
       );
