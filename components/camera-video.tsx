@@ -13,7 +13,6 @@ interface CameraVideoProps {
      onToggleStream: () => void;
      onSetLights: (pwmA: number, pwmB: number) => void;
      isAdjustingLights: boolean;
-     onRequestPairing: () => void;
 }
 
 export function CameraVideo({
@@ -25,7 +24,6 @@ export function CameraVideo({
      onToggleStream,
      onSetLights,
      isAdjustingLights,
-     onRequestPairing,
 }: CameraVideoProps) {
      return (
           <View style={styles.cameraFrame}>

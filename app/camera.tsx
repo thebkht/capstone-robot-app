@@ -231,7 +231,6 @@ export default function CameraScreen() {
                          onToggleStream={handleToggleStream}
                          onSetLights={handleSetLights}
                          isAdjustingLights={isAdjustingLights}
-                         onRequestPairing={() => router.push('/pairing')}
                     />
 
                     <View style={styles.row}>

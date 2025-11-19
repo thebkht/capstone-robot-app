@@ -18,7 +18,7 @@ import { useRobot } from "@/context/robot-provider";
 
 export default function WifiStatusScreen() {
      const router = useRouter();
-     const { api, status, refreshStatus, controlToken, sessionId } = useRobot();
+     const { api, status, refreshStatus } = useRobot();
      const statusRef = React.useRef(status);
 
      // Keep status ref updated without causing re-renders
@@ -135,12 +135,10 @@ export default function WifiStatusScreen() {
      const currentSsid = wifiStatus?.ssid || status?.network?.ssid || status?.network?.wifiSsid;
      const currentIp = wifiStatus?.ip || status?.network?.ip;
      const isConnected = wifiStatus?.connected ?? Boolean(currentSsid);
-     const hasControlSession = Boolean(controlToken && sessionId);
-
      const handleConnectToRobot = useCallback(async () => {
           try {
                await refreshStatus();
-               router.push(hasControlSession ? "/(tabs)/home" : "/pairing");
+               router.push("/(tabs)/home");
           } catch (error) {
                Alert.alert(
                     "Connection Error",

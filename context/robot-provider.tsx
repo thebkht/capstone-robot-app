@@ -10,7 +10,6 @@ import React, {
   useState,
 } from "react";
 
-import { CONTROL_TOKEN_STORAGE_KEY } from "@/app/pairing";
 import {
   RobotAPI,
   RobotNetworkInfo,
@@ -70,6 +69,8 @@ interface RobotContextValue {
 }
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
+
+const SECURE_STORE_CONTROL_TOKEN_KEY = "robot_control_token";
 
 export const ROBOT_BASE_URL_STORAGE_KEY = "robot_base_url";
 export const ROBOT_CONTROL_TOKEN_STORAGE_KEY = "robot_control_token";
@@ -225,7 +226,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
           console.warn("SecureStore is not available on this platform");
         } else {
           const storedToken = await SecureStore.getItemAsync(
-            CONTROL_TOKEN_STORAGE_KEY
+            SECURE_STORE_CONTROL_TOKEN_KEY
           );
           if (storedToken && isMounted) {
             console.log("Loaded stored control token");
@@ -294,9 +295,9 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
           return;
         }
         if (token) {
-          await SecureStore.setItemAsync(CONTROL_TOKEN_STORAGE_KEY, token);
+          await SecureStore.setItemAsync(SECURE_STORE_CONTROL_TOKEN_KEY, token);
         } else {
-          await SecureStore.deleteItemAsync(CONTROL_TOKEN_STORAGE_KEY);
+          await SecureStore.deleteItemAsync(SECURE_STORE_CONTROL_TOKEN_KEY);
         }
       } catch (error) {
         console.warn("Failed to persist control token", error);
@@ -410,7 +411,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
 
     try {
       if (SecureStore.isAvailableAsync && await SecureStore.isAvailableAsync()) {
-        await SecureStore.deleteItemAsync(CONTROL_TOKEN_STORAGE_KEY);
+        await SecureStore.deleteItemAsync(SECURE_STORE_CONTROL_TOKEN_KEY);
       }
     } catch (error) {
       console.warn("Failed to clear stored control token", error);
