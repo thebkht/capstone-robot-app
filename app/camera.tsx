@@ -32,25 +32,43 @@ export default function CameraScreen() {
 
      // WebSocket URL
      const wsUrl = useMemo(() => {
-          if (!baseUrl) {
-               return undefined;
-          }
+          if (!baseUrl) return undefined;
 
           try {
-               const parsedUrl = new URL(
-                    baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`
-               );
+               // Normalize URL (add scheme if missing)
+               const normalizedUrl = baseUrl.startsWith('http')
+                    ? baseUrl
+                    : `http://${baseUrl}`; // default to http for IPs or unknown
 
-               parsedUrl.protocol = 'ws:';
-               parsedUrl.pathname = `${parsedUrl.pathname.replace(/\/$/, '')}/camera/ws`;
-               parsedUrl.search = '';
+               const parsedUrl = new URL(normalizedUrl);
+
+               const host = parsedUrl.hostname;
+
+               // Detect if hostname is IP
+               const isIp =
+                    /^\d{1,3}(\.\d{1,3}){3}$/.test(host) ||
+                    host === "localhost";
+
+               // Set protocol
+               if (isIp) {
+                    parsedUrl.protocol = "ws:";   // <-- IP → always ws
+               } else {
+                    parsedUrl.protocol = parsedUrl.protocol === "https:" ? "wss:" : "ws:";
+               }
+
+               // Set the WS path
+               parsedUrl.pathname =
+                    `${parsedUrl.pathname.replace(/\/$/, "")}/camera/ws`;
+
+               parsedUrl.search = "";
 
                return parsedUrl.toString();
           } catch (err) {
-               console.warn('Invalid base URL for WebSocket', err);
+               console.warn("Invalid base URL for WebSocket", err);
                return undefined;
           }
      }, [baseUrl]);
+
 
 
      const connectWebSocket = useCallback(() => {
