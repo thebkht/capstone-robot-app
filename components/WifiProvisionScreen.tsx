@@ -113,7 +113,6 @@ export function WifiProvisionScreen() {
     baseUrl,
     setBaseUrl,
     connectToStoredRobot,
-    controlToken,
     api,
   } = useRobot();
 
@@ -229,7 +228,7 @@ export function WifiProvisionScreen() {
       if (foundDevices.length === 0) {
         Alert.alert(
           "No Devices Found",
-          "No ROVY devices were found. Make sure the robot is powered on and in pairing mode."
+          "No ROVY devices were found. Make sure the robot is powered on and in BLE provisioning mode."
         );
       }
     } catch (err) {
@@ -397,10 +396,10 @@ export function WifiProvisionScreen() {
       // First, check if this is a previously connected robot
       const connected = await connectToStoredRobot(formatted);
       if (connected) {
-        // Successfully connected to stored robot - skip pairing
+        // Successfully connected to stored robot - skip additional setup
         await refreshStatus();
         setIsManualModalVisible(false);
-        router.push(controlToken ? "/(tabs)/home" : "/pairing");
+        router.push("/(tabs)/home");
         return;
       }
 
@@ -418,14 +417,7 @@ export function WifiProvisionScreen() {
     } finally {
       setIsManualConnecting(false);
     }
-  }, [
-    manualIpInput,
-    refreshStatus,
-    router,
-    setBaseUrl,
-    connectToStoredRobot,
-    controlToken,
-  ]);
+  }, [manualIpInput, refreshStatus, router, setBaseUrl, connectToStoredRobot]);
 
   // Load and check saved robots on mount
   useEffect(() => {
@@ -627,17 +619,17 @@ export function WifiProvisionScreen() {
       setIsManualConnecting(true);
       try {
         if (robotCheck.status === "ready") {
-          // Token is valid, connect directly
+          // Previously saved robot, connect directly
           const connected = await connectToStoredRobot(baseUrl);
           if (connected) {
             await refreshStatus();
-            router.push(controlToken ? "/(tabs)/home" : "/pairing");
+            router.push("/(tabs)/home");
           }
         } else {
-          // Needs re-pair or offline, go to connection/pairing flow
+          // Needs setup or offline, go to connection flow
           setBaseUrl(baseUrl);
           await refreshStatus();
-          router.push("/pairing");
+          router.push("/connection");
         }
       } catch (error) {
         Alert.alert(
@@ -648,7 +640,7 @@ export function WifiProvisionScreen() {
         setIsManualConnecting(false);
       }
     },
-    [connectToStoredRobot, refreshStatus, router, controlToken, setBaseUrl]
+    [connectToStoredRobot, refreshStatus, router, setBaseUrl]
   );
 
   // Get status badge for saved robot
@@ -657,7 +649,7 @@ export function WifiProvisionScreen() {
       case "ready":
         return { label: "Ready", color: "#1DD1A1" };
       case "needs_repair":
-        return { label: "Needs re-pair", color: "#FBBF24" };
+        return { label: "Needs setup", color: "#FBBF24" };
       case "offline":
         return { label: "Offline", color: "#F87171" };
       default:
@@ -694,7 +686,9 @@ export function WifiProvisionScreen() {
           <View>
             <View style={styles.sectionHeader}>
               <View>
-                <ThemedText style={styles.sectionTitle}>Bluetooth</ThemedText>
+                <ThemedText style={styles.sectionTitle}>
+                  Bluetooth Low Energy (BLE)
+                </ThemedText>
               </View>
               <StatusPill
                 color={bluetoothStatus.color}
@@ -935,10 +929,10 @@ export function WifiProvisionScreen() {
                     const subtitle =
                       robotCheck.status === "ready"
                         ? robotCheck.robotStatus?.wifi?.ssid
-                          ? `${robotCheck.robotStatus.wifi.ssid} – Tap to connect (no PIN)`
-                          : "Tap to connect (no PIN)"
+                          ? `${robotCheck.robotStatus.wifi.ssid} – Tap to connect`
+                          : "Tap to connect"
                         : robotCheck.status === "needs_repair"
-                          ? "Needs re-pair (PIN)"
+                          ? "Needs Wi-Fi setup"
                           : robot.last_wifi_ssid
                             ? `Last seen: ${robot.last_wifi_ssid} (${robot.last_ip || "offline"
                             })`

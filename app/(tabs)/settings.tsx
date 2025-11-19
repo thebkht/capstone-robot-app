@@ -25,7 +25,7 @@ export default function SettingsScreen() {
   const handleClearConnection = useCallback(() => {
     Alert.alert(
       'Clear Connection',
-      'This will reset the robot connection and pairing. You will need to reconnect and pair again.',
+      'This will reset the robot connection. You will need to reconnect again.',
       [
         {
           text: 'Cancel',
@@ -71,7 +71,7 @@ export default function SettingsScreen() {
         <ThemedView style={styles.card}>
           <ThemedText type="subtitle">Connection</ThemedText>
           <ThemedText style={styles.description}>
-            Clear the current robot connection and pairing. You will need to reconnect and pair again.
+            Clear the current robot connection. You will need to reconnect again.
           </ThemedText>
           <Pressable style={styles.dangerButton} onPress={handleClearConnection}>
             <ThemedText style={styles.dangerText}>Clear Connection</ThemedText>
