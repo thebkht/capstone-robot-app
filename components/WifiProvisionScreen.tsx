@@ -569,15 +569,15 @@ export function WifiProvisionScreen() {
   const wifiIpAddress = status?.network?.ip || "Unavailable";
   const scanIconStyle = isScanning
     ? {
-        transform: [{ rotate: scanRotation }],
-      }
+      transform: [{ rotate: scanRotation }],
+    }
     : undefined;
 
   // Check if we're connected to robot (via BT, hotspot, or direct IP)
   const isConnectedToRobot = Boolean(
     isConnected || // Bluetooth connected
-      status?.network?.ip || // Has network IP
-      (baseUrl && baseUrl !== DEFAULT_ROBOT_BASE_URL) // Has custom base URL
+    status?.network?.ip || // Has network IP
+    (baseUrl && baseUrl !== DEFAULT_ROBOT_BASE_URL) // Has custom base URL
   );
 
   // Scan robot Wi-Fi networks
@@ -596,9 +596,9 @@ export function WifiProvisionScreen() {
       const response = await api.scanWifiNetworks();
       const networks = Array.isArray(response.networks)
         ? response.networks.map((n: any) => ({
-            ssid: typeof n === "string" ? n : n.ssid || "",
-            rssi: typeof n === "object" && n.rssi ? n.rssi : -100,
-          }))
+          ssid: typeof n === "string" ? n : n.ssid || "",
+          rssi: typeof n === "object" && n.rssi ? n.rssi : -100,
+        }))
         : [];
       setRobotWifiNetworks(networks);
     } catch (error) {
@@ -748,7 +748,7 @@ export function WifiProvisionScreen() {
                           style={[
                             styles.deviceItem,
                             selectedDevice?.id === device.id &&
-                              styles.deviceSelected,
+                            styles.deviceSelected,
                           ]}
                           onPress={() => handleConnect(device)}
                           disabled={isConnecting}
@@ -825,9 +825,8 @@ export function WifiProvisionScreen() {
                 <ThemedText style={styles.statusLabel}>Status:</ThemedText>
                 <ThemedText style={styles.statusValue}>
                   {status?.network?.wifiSsid || status?.network?.ssid
-                    ? `Connected to ${
-                        status.network.wifiSsid || status.network.ssid
-                      }`
+                    ? `Connected to ${status.network.wifiSsid || status.network.ssid
+                    }`
                     : "Not connected"}
                 </ThemedText>
               </View>
@@ -840,7 +839,7 @@ export function WifiProvisionScreen() {
                       style={[
                         styles.primaryButton,
                         (isScanningRobotWifi || !isConnectedToRobot) &&
-                          styles.disabledPrimary,
+                        styles.disabledPrimary,
                       ]}
                       onPress={handleScanRobotWifi}
                       disabled={isScanningRobotWifi || !isConnectedToRobot}
@@ -909,7 +908,7 @@ export function WifiProvisionScreen() {
             </ThemedView>
 
             {/* Previously Connected Robots Card */}
-            <ThemedView style={styles.sectionCard}>
+            {savedRobots.length !== 0 && <ThemedView style={styles.sectionCard}>
               <ThemedText style={styles.sectionTitle}>
                 Previously connected robots
               </ThemedText>
@@ -931,8 +930,7 @@ export function WifiProvisionScreen() {
                     const statusBadge = getRobotStatusBadge(robotCheck);
                     const displayName =
                       robot.name ||
-                      `Rovy (${
-                        robot.last_wifi_ssid || robot.last_ip || "unknown"
+                      `Rovy (${robot.last_wifi_ssid || robot.last_ip || "unknown"
                       })`;
                     const subtitle =
                       robotCheck.status === "ready"
@@ -940,14 +938,13 @@ export function WifiProvisionScreen() {
                           ? `${robotCheck.robotStatus.wifi.ssid} – Tap to connect (no PIN)`
                           : "Tap to connect (no PIN)"
                         : robotCheck.status === "needs_repair"
-                        ? "Needs re-pair (PIN)"
-                        : robot.last_wifi_ssid
-                        ? `Last seen: ${robot.last_wifi_ssid} (${
-                            robot.last_ip || "offline"
-                          })`
-                        : robot.last_ip
-                        ? `Last IP: ${robot.last_ip}`
-                        : "Offline";
+                          ? "Needs re-pair (PIN)"
+                          : robot.last_wifi_ssid
+                            ? `Last seen: ${robot.last_wifi_ssid} (${robot.last_ip || "offline"
+                            })`
+                            : robot.last_ip
+                              ? `Last IP: ${robot.last_ip}`
+                              : "Offline";
 
                     return (
                       <Pressable
@@ -979,173 +976,8 @@ export function WifiProvisionScreen() {
                   })}
                 </View>
               )}
-            </ThemedView>
+            </ThemedView>}
           </View>
-
-          {/* <ThemedView style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <ThemedText style={styles.sectionTitle}>Wi-Fi</ThemedText>
-                <ThemedText style={styles.sectionHint}>
-                  Make sure the robot joins the same Wi-Fi network as your phone.
-                </ThemedText>
-              </View>
-              <StatusPill
-                color={wifiConnectionStatus.color}
-                label={wifiConnectionStatus.label}
-              />
-            </View>
-
-            <View style={styles.statusBoard}>
-              <View style={styles.statusRow}>
-                <ThemedText style={styles.statusLabel}>Wi-Fi connection</ThemedText>
-                <View style={styles.statusValueRow}>
-                  <View
-                    style={[
-                      styles.statusIndicator,
-                      { backgroundColor: wifiConnectionStatus.color },
-                    ]}
-                  />
-                  <ThemedText style={styles.statusValue}>
-                    {wifiConnectionStatus.label}
-                  </ThemedText>
-                </View>
-              </View>
-              <View style={styles.statusRow}>
-                <ThemedText style={styles.statusLabel}>Network name</ThemedText>
-                <ThemedText style={styles.statusValue}>
-                  {wifiNetworkName}
-                </ThemedText>
-              </View>
-              <View style={styles.statusRow}>
-                <ThemedText style={styles.statusLabel}>IP address</ThemedText>
-                <ThemedText style={styles.statusValue}>{wifiIpAddress}</ThemedText>
-              </View>
-            </View>
-
-            {isConnected && isOnSameNetwork === false && !showWifiConfig ? (
-              <ThemedView style={styles.infoCard}>
-                <ThemedText style={styles.infoText}>
-                  The robot is not on the same Wi-Fi network. Send updated Wi-Fi
-                  credentials below.
-                </ThemedText>
-              </ThemedView>
-            ) : null}
-
-            {previousNetworks.length ? (
-              <View style={styles.blockHeader}>
-                <ThemedText style={styles.blockTitle}>
-                  Previously connected
-                </ThemedText>
-              </View>
-            ) : null}
-
-            {previousNetworks.map((network) => (
-              <View key={network} style={styles.previousItem}>
-                <View style={styles.previousDot} />
-                <ThemedText style={styles.previousText}>{network}</ThemedText>
-              </View>
-            ))}
-
-            {showWifiConfig ? (
-              <View style={styles.form}>
-                <ThemedText style={styles.label}>Network Name (SSID)</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  value={ssid}
-                  onChangeText={setSsid}
-                  placeholder="Enter Wi-Fi network name"
-                  placeholderTextColor="#6B7280"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isSendingConfig}
-                />
-
-                <ThemedText style={styles.label}>Password</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Enter Wi-Fi password (optional)"
-                  placeholderTextColor="#6B7280"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isSendingConfig}
-                />
-
-                <Pressable
-                  style={[
-                    styles.primaryButton,
-                    (isSendingConfig || !ssid.trim()) && styles.disabledPrimary,
-                  ]}
-                  onPress={handleSendConfig}
-                  disabled={isSendingConfig || !ssid.trim()}
-                >
-                  {isSendingConfig ? (
-                    <ActivityIndicator color="#04110B" />
-                  ) : (
-                    <ThemedText style={styles.primaryButtonText}>
-                      Connect Wi-Fi
-                    </ThemedText>
-                  )}
-                </Pressable>
-
-                <Pressable
-                  style={[styles.secondaryButton, styles.outlineButton]}
-                  onPress={() => {
-                    setShowWifiConfig(false);
-                    setSsid("");
-                    setPassword("");
-                  }}
-                >
-                  <ThemedText style={styles.outlineButtonText}>Cancel</ThemedText>
-                </Pressable>
-              </View>
-            ) : (
-              <>
-                <Pressable
-                  style={[
-                    styles.primaryButton,
-                    isRobotConnecting && styles.disabledPrimary,
-                  ]}
-                  onPress={handleNetworkConnect}
-                  disabled={isRobotConnecting}
-                >
-                  {isRobotConnecting ? (
-                    <ActivityIndicator color="#04110B" />
-                  ) : (
-                    <ThemedText style={styles.primaryButtonText}>
-                      Connect to Robot
-                    </ThemedText>
-                  )}
-                </Pressable>
-
-                <Pressable
-                  style={[
-                    styles.secondaryButton,
-                    (!isConnected || isSendingConfig) && styles.buttonDisabled,
-                  ]}
-                  onPress={handleChangeWifi}
-                  disabled={!isConnected || isSendingConfig}
-                >
-                  <ThemedText style={styles.secondaryButtonText}>
-                    Change Robot WiFi
-                  </ThemedText>
-                </Pressable>
-              </>
-            )}
-
-            <View style={styles.provisionStatusRow}>
-              <ThemedText style={styles.statusLabel}>
-                Setup status ({selectedDevice?.name || "Bluetooth"})
-              </ThemedText>
-              <StatusPill
-                color={getStatusColor()}
-                label={getStatusText()}
-              />
-            </View>
-          </ThemedView> */}
         </ThemedView>
       </ScrollView>
       <View style={styles.bottomActionContainer}>
