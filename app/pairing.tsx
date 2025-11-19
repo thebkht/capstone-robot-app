@@ -13,6 +13,8 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { SerifFonts } from "@/constants/theme";
 import { useRobot } from "@/context/robot-provider";
+import { getDeviceInfo } from "@/services/device-id";
+import { saveRobot, updateRobotLastWifiSsid } from "@/services/robot-storage";
 
 const TITLE_FONT_FAMILY = SerifFonts.bold;
 const SUBTITLE_FONT_FAMILY = SerifFonts.semiBold;
@@ -23,7 +25,7 @@ export const CONTROL_TOKEN_STORAGE_KEY = "robot_control_token";
 
 export default function PairingScreen() {
      const router = useRouter();
-     const { api, setControlToken, setSessionId, status } = useRobot();
+     const { api, setControlToken, setSessionId, status, baseUrl, setCurrentRobotId } = useRobot();
      const [isRequestingPairing, setIsRequestingPairing] = useState(false);
      const [showPinInput, setShowPinInput] = useState(false);
      const [pin, setPin] = useState("");
@@ -77,17 +79,55 @@ export default function PairingScreen() {
           setSuccess(null);
 
           try {
-               const response = await api.confirmClaim(pin);
+               // Get device info for pairing
+               const deviceInfo = await getDeviceInfo();
+               
+               // Confirm pairing with device_id
+               const response = await api.confirmClaim(
+                    pin,
+                    deviceInfo.device_id,
+                    {
+                         name: deviceInfo.name,
+                         platform: deviceInfo.platform,
+                    }
+               );
                console.log("Pairing confirmation successful", response);
 
-               if (response.controlToken) {
-                    await setControlToken(response.controlToken);
+               const controlToken = response.controlToken || response.control_token;
+               const robotId = response.robot_id;
+               const deviceId = response.device_id || deviceInfo.device_id;
+
+               if (controlToken) {
+                    await setControlToken(controlToken);
                     const sessionId =
                          response.sessionId || response.session_id || response.session;
 
                     if (sessionId) {
                          await setSessionId(sessionId);
                     }
+
+                    // Store robot info for future connections
+                    if (robotId) {
+                         const robotIp = status?.network?.ip;
+                         const robotBaseUrl = api.getBaseUrl();
+                         const wifiSsid = status?.network?.ssid || status?.network?.wifiSsid;
+                         
+                         await saveRobot({
+                              robot_id: robotId,
+                              name: status?.network?.ssid || status?.network?.wifiSsid || undefined,
+                              baseUrl: robotBaseUrl,
+                              device_id: deviceId,
+                              control_token: controlToken,
+                              last_ip: robotIp,
+                              last_wifi_ssid: wifiSsid,
+                         });
+                         
+                         // Set current robot ID in context
+                         setCurrentRobotId(robotId);
+                         
+                         console.log("Saved robot info for future connections:", robotId);
+                    }
+
                     setSuccess("Robot paired successfully! Redirecting...");
                     setTimeout(() => {
                          router.replace("/");

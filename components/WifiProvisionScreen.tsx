@@ -27,6 +27,8 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 import { useRovyBle } from "@/hooks/use-rovy-ble";
+import { checkAllRobotsStatus } from "@/services/robot-status-check";
+import { RobotStatusCheck as RobotStatusCheckType } from "@/services/robot-storage";
 import type { RovyDevice } from "@/services/rovy-ble";
 import { Image } from "expo-image";
 import { IconSymbol } from "./ui/icon-symbol";
@@ -104,8 +106,16 @@ export function WifiProvisionScreen() {
     disconnect,
   } = useRovyBle();
 
-  const { refreshStatus, status, statusError, baseUrl, setBaseUrl } =
-    useRobot();
+  const {
+    refreshStatus,
+    status,
+    statusError,
+    baseUrl,
+    setBaseUrl,
+    connectToStoredRobot,
+    controlToken,
+    api,
+  } = useRobot();
 
   const router = useRouter();
 
@@ -124,6 +134,12 @@ export function WifiProvisionScreen() {
     null
   );
   const [isManualConnecting, setIsManualConnecting] = useState(false);
+  const [savedRobots, setSavedRobots] = useState<RobotStatusCheckType[]>([]);
+  const [isCheckingRobots, setIsCheckingRobots] = useState(false);
+  const [robotWifiNetworks, setRobotWifiNetworks] = useState<
+    { ssid: string; rssi: number }[]
+  >([]);
+  const [isScanningRobotWifi, setIsScanningRobotWifi] = useState(false);
   const scanRotationValue = useRef(new Animated.Value(0)).current;
   const scanRotationLoop = useRef<Animated.CompositeAnimation | null>(null);
   const scanRotation = useMemo(
@@ -378,6 +394,17 @@ export function WifiProvisionScreen() {
     setIsManualConnecting(true);
 
     try {
+      // First, check if this is a previously connected robot
+      const connected = await connectToStoredRobot(formatted);
+      if (connected) {
+        // Successfully connected to stored robot - skip pairing
+        await refreshStatus();
+        setIsManualModalVisible(false);
+        router.push(controlToken ? "/(tabs)/home" : "/pairing");
+        return;
+      }
+
+      // Not a stored robot, proceed with normal connection
       setBaseUrl(formatted);
       await refreshStatus();
       setIsManualModalVisible(false);
@@ -391,7 +418,37 @@ export function WifiProvisionScreen() {
     } finally {
       setIsManualConnecting(false);
     }
-  }, [manualIpInput, refreshStatus, router, setBaseUrl]);
+  }, [
+    manualIpInput,
+    refreshStatus,
+    router,
+    setBaseUrl,
+    connectToStoredRobot,
+    controlToken,
+  ]);
+
+  // Load and check saved robots on mount
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        setIsCheckingRobots(true);
+        const checks = await checkAllRobotsStatus();
+        if (mounted) {
+          setSavedRobots(checks);
+        }
+      } catch (error) {
+        console.warn("Failed to check saved robots", error);
+      } finally {
+        if (mounted) {
+          setIsCheckingRobots(false);
+        }
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Refresh phone network on mount (only once)
   useEffect(() => {
@@ -515,6 +572,98 @@ export function WifiProvisionScreen() {
         transform: [{ rotate: scanRotation }],
       }
     : undefined;
+
+  // Check if we're connected to robot (via BT, hotspot, or direct IP)
+  const isConnectedToRobot = Boolean(
+    isConnected || // Bluetooth connected
+      status?.network?.ip || // Has network IP
+      (baseUrl && baseUrl !== DEFAULT_ROBOT_BASE_URL) // Has custom base URL
+  );
+
+  // Scan robot Wi-Fi networks
+  const handleScanRobotWifi = useCallback(async () => {
+    if (!isConnectedToRobot || !api) {
+      Alert.alert(
+        "Not Connected",
+        "Please connect to the robot first via Bluetooth or IP."
+      );
+      return;
+    }
+
+    setIsScanningRobotWifi(true);
+    setRobotWifiNetworks([]);
+    try {
+      const response = await api.scanWifiNetworks();
+      const networks = Array.isArray(response.networks)
+        ? response.networks.map((n: any) => ({
+            ssid: typeof n === "string" ? n : n.ssid || "",
+            rssi: typeof n === "object" && n.rssi ? n.rssi : -100,
+          }))
+        : [];
+      setRobotWifiNetworks(networks);
+    } catch (error) {
+      Alert.alert(
+        "Scan Failed",
+        error instanceof Error ? error.message : "Failed to scan Wi-Fi networks"
+      );
+    } finally {
+      setIsScanningRobotWifi(false);
+    }
+  }, [isConnectedToRobot, api]);
+
+  // Reconnect to a saved robot
+  const handleReconnectToRobot = useCallback(
+    async (robotCheck: RobotStatusCheckType) => {
+      const robot = robotCheck.robot;
+      const baseUrl =
+        robot.baseUrl ||
+        (robot.last_ip ? `http://${robot.last_ip}:8000` : null);
+
+      if (!baseUrl) {
+        Alert.alert("Error", "Robot IP address not available.");
+        return;
+      }
+
+      setIsManualConnecting(true);
+      try {
+        if (robotCheck.status === "ready") {
+          // Token is valid, connect directly
+          const connected = await connectToStoredRobot(baseUrl);
+          if (connected) {
+            await refreshStatus();
+            router.push(controlToken ? "/(tabs)/home" : "/pairing");
+          }
+        } else {
+          // Needs re-pair or offline, go to connection/pairing flow
+          setBaseUrl(baseUrl);
+          await refreshStatus();
+          router.push("/pairing");
+        }
+      } catch (error) {
+        Alert.alert(
+          "Connection Failed",
+          error instanceof Error ? error.message : "Failed to connect to robot"
+        );
+      } finally {
+        setIsManualConnecting(false);
+      }
+    },
+    [connectToStoredRobot, refreshStatus, router, controlToken, setBaseUrl]
+  );
+
+  // Get status badge for saved robot
+  const getRobotStatusBadge = (robotCheck: RobotStatusCheckType) => {
+    switch (robotCheck.status) {
+      case "ready":
+        return { label: "Ready", color: "#1DD1A1" };
+      case "needs_repair":
+        return { label: "Needs re-pair", color: "#FBBF24" };
+      case "offline":
+        return { label: "Offline", color: "#F87171" };
+      default:
+        return { label: "Unknown", color: "#67686C" };
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
@@ -659,6 +808,178 @@ export function WifiProvisionScreen() {
                 </ThemedText>
               </Pressable>
             ) : null}
+          </View>
+
+          {/* Wi-Fi Section */}
+          <View>
+            <View style={styles.sectionHeader}>
+              <View>
+                <ThemedText style={styles.sectionTitle}>Wi-Fi</ThemedText>
+              </View>
+            </View>
+
+            {/* Robot Wi-Fi Status Card */}
+            <ThemedView style={styles.sectionCard}>
+              <ThemedText style={styles.sectionTitle}>Robot Wi-Fi</ThemedText>
+              <View style={styles.statusRow}>
+                <ThemedText style={styles.statusLabel}>Status:</ThemedText>
+                <ThemedText style={styles.statusValue}>
+                  {status?.network?.wifiSsid || status?.network?.ssid
+                    ? `Connected to ${
+                        status.network.wifiSsid || status.network.ssid
+                      }`
+                    : "Not connected"}
+                </ThemedText>
+              </View>
+
+              {isConnectedToRobot &&
+                !status?.network?.wifiSsid &&
+                !status?.network?.ssid && (
+                  <>
+                    <Pressable
+                      style={[
+                        styles.primaryButton,
+                        (isScanningRobotWifi || !isConnectedToRobot) &&
+                          styles.disabledPrimary,
+                      ]}
+                      onPress={handleScanRobotWifi}
+                      disabled={isScanningRobotWifi || !isConnectedToRobot}
+                    >
+                      {isScanningRobotWifi ? (
+                        <ActivityIndicator color="#04110B" />
+                      ) : (
+                        <ThemedText style={styles.primaryButtonText}>
+                          Scan networks
+                        </ThemedText>
+                      )}
+                    </Pressable>
+
+                    {robotWifiNetworks.length > 0 && (
+                      <View style={styles.wifiList}>
+                        <ThemedText style={styles.subsectionTitle}>
+                          Available networks
+                        </ThemedText>
+                        {robotWifiNetworks.map((network, index) => {
+                          const signalInfo = getSignalStrengthInfo(
+                            network.rssi
+                          );
+                          return (
+                            <Pressable
+                              key={`${network.ssid}-${index}`}
+                              style={styles.wifiItem}
+                              onPress={() => {
+                                // TODO: Open password input modal
+                                Alert.alert(
+                                  "Connect",
+                                  `Connect to ${network.ssid}? (Password input coming soon)`
+                                );
+                              }}
+                            >
+                              <ThemedText style={styles.wifiSsid}>
+                                {network.ssid}
+                              </ThemedText>
+                              <View
+                                style={[
+                                  styles.signalBadge,
+                                  { borderColor: signalInfo.color },
+                                ]}
+                              >
+                                <View
+                                  style={[
+                                    styles.signalDot,
+                                    { backgroundColor: signalInfo.color },
+                                  ]}
+                                />
+                                <ThemedText
+                                  style={[
+                                    styles.signalBadgeText,
+                                    { color: signalInfo.color },
+                                  ]}
+                                >
+                                  {signalInfo.label}
+                                </ThemedText>
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                )}
+            </ThemedView>
+
+            {/* Previously Connected Robots Card */}
+            <ThemedView style={styles.sectionCard}>
+              <ThemedText style={styles.sectionTitle}>
+                Previously connected robots
+              </ThemedText>
+              {isCheckingRobots ? (
+                <View style={styles.inlineStatus}>
+                  <ActivityIndicator size="small" color="#1DD1A1" />
+                  <ThemedText style={styles.statusLabelText}>
+                    Checking robots...
+                  </ThemedText>
+                </View>
+              ) : savedRobots.length === 0 ? (
+                <ThemedText style={styles.emptyStateText}>
+                  No previously connected robots
+                </ThemedText>
+              ) : (
+                <View style={styles.robotList}>
+                  {savedRobots.map((robotCheck) => {
+                    const robot = robotCheck.robot;
+                    const statusBadge = getRobotStatusBadge(robotCheck);
+                    const displayName =
+                      robot.name ||
+                      `Rovy (${
+                        robot.last_wifi_ssid || robot.last_ip || "unknown"
+                      })`;
+                    const subtitle =
+                      robotCheck.status === "ready"
+                        ? robotCheck.robotStatus?.wifi?.ssid
+                          ? `${robotCheck.robotStatus.wifi.ssid} – Tap to connect (no PIN)`
+                          : "Tap to connect (no PIN)"
+                        : robotCheck.status === "needs_repair"
+                        ? "Needs re-pair (PIN)"
+                        : robot.last_wifi_ssid
+                        ? `Last seen: ${robot.last_wifi_ssid} (${
+                            robot.last_ip || "offline"
+                          })`
+                        : robot.last_ip
+                        ? `Last IP: ${robot.last_ip}`
+                        : "Offline";
+
+                    return (
+                      <Pressable
+                        key={robot.robot_id}
+                        style={styles.robotItem}
+                        onPress={() => handleReconnectToRobot(robotCheck)}
+                      >
+                        <View style={styles.robotItemContent}>
+                          <View style={styles.robotItemHeader}>
+                            <ThemedText style={styles.robotName}>
+                              {displayName}
+                            </ThemedText>
+                            <StatusPill
+                              color={statusBadge.color}
+                              label={statusBadge.label}
+                            />
+                          </View>
+                          <ThemedText style={styles.robotSubtitle}>
+                            {subtitle}
+                          </ThemedText>
+                        </View>
+                        <IconSymbol
+                          size={20}
+                          name="chevron.right"
+                          color="#67686C"
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+            </ThemedView>
           </View>
 
           {/* <ThemedView style={styles.sectionCard}>
@@ -1217,6 +1538,66 @@ const styles = StyleSheet.create({
     color: "#F9FAFB",
     fontSize: 12,
     fontFamily: "JetBrainsMono_600SemiBold",
+  },
+  subsectionTitle: {
+    fontSize: 14,
+    fontFamily: "JetBrainsMono_600SemiBold",
+    color: "#D1D5DB",
+    marginBottom: 8,
+  },
+  wifiList: {
+    gap: 12,
+    marginTop: 12,
+  },
+  wifiItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#202020",
+    backgroundColor: "#1B1B1B",
+  },
+  wifiSsid: {
+    color: "#F9FAFB",
+    fontSize: 16,
+    fontFamily: "JetBrainsMono_600SemiBold",
+  },
+  robotList: {
+    gap: 12,
+    marginTop: 12,
+  },
+  robotItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#202020",
+    backgroundColor: "#1B1B1B",
+  },
+  robotItemContent: {
+    flex: 1,
+    gap: 4,
+  },
+  robotItemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  robotName: {
+    color: "#F9FAFB",
+    fontSize: 16,
+    fontFamily: "JetBrainsMono_600SemiBold",
+    flex: 1,
+  },
+  robotSubtitle: {
+    color: "#67686C",
+    fontSize: 12,
+    fontFamily: "JetBrainsMono_400Regular",
   },
   modalBackdrop: {
     flex: 1,

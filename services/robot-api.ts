@@ -91,9 +91,12 @@ export interface ClaimRequestResponse {
 export interface ClaimConfirmResponse {
   success?: boolean;
   controlToken?: string;
+  control_token?: string;
   sessionId?: string;
   session_id?: string;
   session?: string;
+  robot_id?: string;
+  device_id?: string;
   [key: string]: unknown;
 }
 
@@ -204,6 +207,10 @@ export class RobotAPI {
   public updateBaseUrl(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.axiosInstance.defaults.baseURL = this.baseUrl;
+  }
+
+  public getBaseUrl(): string {
+    return this.baseUrl;
   }
 
   public setControlToken(token: string | null) {
@@ -496,10 +503,33 @@ export class RobotAPI {
     }
   }
 
-  public async confirmClaim(pin: string): Promise<ClaimConfirmResponse> {
-    const response = await this.post<ClaimConfirmResponse>("/claim/confirm", {
+  public async confirmClaim(
+    pin: string,
+    deviceId: string,
+    deviceInfo?: {
+      name?: string;
+      platform?: string;
+      app_version?: string;
+    }
+  ): Promise<ClaimConfirmResponse> {
+    const payload: {
+      pin: string;
+      device_id: string;
+      name?: string;
+      platform?: string;
+      app_version?: string;
+    } = {
       pin,
-    });
+      device_id: deviceId,
+    };
+
+    if (deviceInfo) {
+      if (deviceInfo.name) payload.name = deviceInfo.name;
+      if (deviceInfo.platform) payload.platform = deviceInfo.platform;
+      if (deviceInfo.app_version) payload.app_version = deviceInfo.app_version;
+    }
+
+    const response = await this.post<ClaimConfirmResponse>("/claim/confirm", payload);
     if (response.error) {
       throw new Error(response.error);
     }

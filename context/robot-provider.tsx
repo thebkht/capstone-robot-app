@@ -17,6 +17,8 @@ import {
   RobotStatus,
   createRobotApi,
 } from "@/services/robot-api";
+import { getStoredRobotByUrl, updateRobotLastIp, updateRobotLastSeen } from "@/services/robot-storage";
+import { getDeviceId } from "@/services/device-id";
 
 const isIpv4Address = (value: string | null | undefined) => {
   if (!value) {
@@ -62,6 +64,9 @@ interface RobotContextValue {
   sessionId: string | null;
   setSessionId: (sessionId: string | null) => Promise<void>;
   clearConnection: () => Promise<void>;
+  connectToStoredRobot: (baseUrl: string) => Promise<boolean>;
+  currentRobotId: string | null;
+  setCurrentRobotId: (robotId: string | null) => void;
 }
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
@@ -80,6 +85,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const hasPollingBeenPausedRef = useRef(false);
   const [controlToken, setControlTokenState] = useState<string | null>(null);
   const [sessionId, setSessionIdState] = useState<string | null>(null);
+  const [currentRobotId, setCurrentRobotId] = useState<string | null>(null);
 
   const api = useMemo(
     () => createRobotApi(baseUrl, undefined, controlToken, sessionId),
@@ -90,6 +96,13 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     try {
       console.log("Refreshing robot status from", baseUrl);
       const health = await api.fetchHealth();
+      
+      // Update last seen for stored robot if we have a robot_id
+      if (currentRobotId) {
+        await updateRobotLastSeen(currentRobotId).catch((err) => {
+          console.warn("Failed to update robot last seen", err);
+        });
+      }
 
       const [networkInfo, telemetry, mode] = await Promise.all([
         api
@@ -144,6 +157,13 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
           network.ip = baseUrlIpv4;
         }
 
+        // Update stored robot's last IP if we have a robot_id
+        if (currentRobotId && network.ip) {
+          updateRobotLastIp(currentRobotId, network.ip).catch((err) => {
+            console.warn("Failed to update robot last IP", err);
+          });
+        }
+
         return Object.keys(network).length ? network : undefined;
       })();
 
@@ -169,7 +189,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       setStatus(null);
       setStatusError((error as Error).message);
     }
-  }, [api, baseUrl]);
+  }, [api, baseUrl, currentRobotId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -308,6 +328,55 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     [api]
   );
 
+  const connectToStoredRobot = useCallback(
+    async (url: string): Promise<boolean> => {
+      try {
+        const storedRobot = await getStoredRobotByUrl(url);
+        if (!storedRobot) {
+          console.log("No stored robot found for URL:", url);
+          return false;
+        }
+
+        // Verify device_id matches
+        const currentDeviceId = await getDeviceId();
+        if (storedRobot.device_id !== currentDeviceId) {
+          console.log("Device ID mismatch, cannot use stored robot");
+          return false;
+        }
+
+        console.log("Found stored robot, connecting:", storedRobot.robot_id);
+        
+        // Set up connection with stored credentials
+        setBaseUrlState(storedRobot.baseUrl);
+        api.updateBaseUrl(storedRobot.baseUrl);
+        setControlTokenState(storedRobot.control_token);
+        api.setControlToken(storedRobot.control_token);
+        setCurrentRobotId(storedRobot.robot_id);
+
+        // Update last seen
+        await updateRobotLastSeen(storedRobot.robot_id);
+        if (storedRobot.last_ip) {
+          await updateRobotLastIp(storedRobot.robot_id, storedRobot.last_ip);
+        }
+
+        // Try to refresh status to verify connection
+        try {
+          await refreshStatus();
+          console.log("Successfully connected to stored robot");
+          return true;
+        } catch (error) {
+          console.warn("Failed to verify stored robot connection", error);
+          // Still return true - the connection might work, just status check failed
+          return true;
+        }
+      } catch (error) {
+        console.error("Failed to connect to stored robot", error);
+        return false;
+      }
+    },
+    [api, refreshStatus]
+  );
+
   const clearConnection = useCallback(async () => {
     console.log("Clearing robot connection");
     // Clear status and error
@@ -326,6 +395,9 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     // Clear session ID
     setSessionIdState(null);
     api.setSessionId(null);
+
+    // Clear current robot ID
+    setCurrentRobotId(null);
 
     // Clear stored values
     try {
@@ -361,6 +433,9 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       sessionId,
       setSessionId,
       clearConnection,
+      connectToStoredRobot,
+      currentRobotId,
+      setCurrentRobotId,
     }),
     [
       api,
@@ -373,7 +448,9 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       setControlToken,
       setSessionId,
       clearConnection,
+      connectToStoredRobot,
       sessionId,
+      currentRobotId,
     ]
   );
 
