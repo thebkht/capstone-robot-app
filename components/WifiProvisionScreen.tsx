@@ -394,7 +394,7 @@ export function WifiProvisionScreen() {
     setIsManualConnecting(true);
 
     try {
-      const probeApi = createRobotApi(formatted, 4000, null, null);
+      const probeApi = createRobotApi(formatted, 4000, null);
       await probeApi.fetchHealth();
 
       // First, check if this is a previously connected robot
