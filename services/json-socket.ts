@@ -1,4 +1,4 @@
-import { io, Socket } from "socket.io-client";
+const WS_PATH = "/json";
 
 export const cmd_movition_ctrl = "cmd_movition_ctrl";
 export const speed_rate = 1;
@@ -13,49 +13,88 @@ export interface MovementCommand {
 
 let heartbeat_left = 0;
 let heartbeat_right = 0;
-let socketJson: Socket | null = null;
+let socketJson: WebSocket | null = null;
 let activeSocketUrl: string | null = null;
 
 const buildSocketUrl = (baseUrl?: string | null) => {
-  if (baseUrl && baseUrl.trim()) {
-    try {
-      const parsed = new URL(baseUrl.startsWith("http") ? baseUrl : `http://${baseUrl}`);
-      parsed.pathname = "/json";
-      parsed.search = "";
-      return parsed.toString();
-    } catch (error) {
-      console.warn("Failed to derive json socket URL from baseUrl", baseUrl, error);
+  const normalizeBaseUrl = () => {
+    if (baseUrl && baseUrl.trim()) {
+      return baseUrl.startsWith("http") ? baseUrl : `http://${baseUrl}`;
     }
+
+    if (typeof location !== "undefined" && location.host) {
+      return `${location.protocol || "http:"}//${location.host}`;
+    }
+
+    return null;
+  };
+
+  const normalized = normalizeBaseUrl();
+  if (!normalized) {
+    return null;
   }
 
-  if (typeof location !== "undefined" && location.host) {
-    return `http://${location.host}/json`;
-  }
+  try {
+    const parsedUrl = new URL(normalized);
+    const host = parsedUrl.hostname;
+    const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host === "localhost";
 
-  return null;
+    parsedUrl.protocol = isIp
+      ? "ws:"
+      : parsedUrl.protocol === "https:"
+      ? "wss:"
+      : "ws:";
+
+    parsedUrl.pathname = `${parsedUrl.pathname.replace(/\/$/, "")}${WS_PATH}`;
+    parsedUrl.search = "";
+
+    return parsedUrl.toString();
+  } catch (error) {
+    console.warn("Failed to derive json WebSocket URL", normalized, error);
+    return null;
+  }
 };
 
 const ensureSocket = (baseUrl?: string | null) => {
   const url = buildSocketUrl(baseUrl);
   if (!url) {
-    console.warn("Unable to determine json socket URL");
+    console.warn("Unable to determine json WebSocket URL");
     return null;
   }
 
   if (socketJson && activeSocketUrl === url) {
-    return socketJson;
+    if (
+      socketJson.readyState !== WebSocket.CLOSED &&
+      socketJson.readyState !== WebSocket.CLOSING
+    ) {
+      return socketJson;
+    }
   }
 
   if (socketJson) {
     try {
-      socketJson.disconnect();
+      socketJson.close();
     } catch (error) {
-      console.warn("Failed to disconnect existing json socket", error);
+      console.warn("Failed to close existing json WebSocket", error);
     }
   }
 
-  socketJson = io(url, { transports: ["websocket"], autoConnect: true });
-  activeSocketUrl = url;
+  try {
+    socketJson = new WebSocket(url);
+    activeSocketUrl = url;
+
+    socketJson.onerror = (event) => {
+      console.warn("json WebSocket error", event);
+    };
+
+    socketJson.onclose = (event) => {
+      console.warn("json WebSocket closed", event.code, event.reason);
+    };
+  } catch (error) {
+    console.warn("Failed to establish json WebSocket", error);
+    socketJson = null;
+  }
+
   return socketJson;
 };
 
@@ -80,5 +119,27 @@ export const cmdJsonCmd = (jsonData: MovementCommand, baseUrl?: string | null) =
         }
       : jsonData;
 
-  socket.emit("json", payload);
+  const sendPayload = () => {
+    try {
+      socket.send(JSON.stringify(payload));
+    } catch (error) {
+      console.warn("Failed to send json command", error);
+    }
+  };
+
+  if (socket.readyState === WebSocket.OPEN) {
+    sendPayload();
+  } else if (socket.readyState === WebSocket.CONNECTING) {
+    socket.addEventListener("open", sendPayload, { once: true });
+  } else {
+    // Attempt to re-establish and send when opened.
+    const reopened = ensureSocket(baseUrl);
+    if (reopened) {
+      if (reopened.readyState === WebSocket.OPEN) {
+        sendPayload();
+      } else if (reopened.readyState === WebSocket.CONNECTING) {
+        reopened.addEventListener("open", sendPayload, { once: true });
+      }
+    }
+  }
 };
