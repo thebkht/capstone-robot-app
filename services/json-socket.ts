@@ -102,7 +102,10 @@ const ensureSocket = (baseUrl?: string | null) => {
   return socketJson;
 };
 
-export const cmdJsonCmd = (jsonData: MovementCommand, baseUrl?: string | null) => {
+export const cmdJsonCmd = (
+  jsonData: MovementCommand,
+  baseUrl?: string | null
+) => {
   console.log(jsonData);
   const socket = ensureSocket(baseUrl);
   if (!socket) {

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 
@@ -79,7 +79,7 @@ export function CameraVideo({
                     )}
                </View>
 
-               <View style={styles.lightControls}>
+               {/* <View style={styles.lightControls}>
                     <ThemedText style={styles.lightLabel}>Camera lights</ThemedText>
                     <View style={styles.lightButtons}>
                          <Pressable
@@ -113,7 +113,7 @@ export function CameraVideo({
                               )}
                          </Pressable>
                     </View>
-               </View>
+               </View> */}
           </View>
      );
 }
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
      },
      streamArea: {
           flex: 1,
-          width: '100%',
+          width: Dimensions.get("window").width,
           alignItems: 'center',
           justifyContent: 'center',
      },

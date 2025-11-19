@@ -281,7 +281,6 @@ export default function CameraScreen() {
                     ) : null}
 
                     <ThemedView style={styles.joystickCard}>
-                         <ThemedText type="title">Virtual joystick</ThemedText>
                          <Joystick onChange={setJoystick} />
                          <ThemedText style={styles.joystickValue}>
                               L: {joystick.l.toFixed(2)} R: {joystick.r.toFixed(2)}
@@ -361,9 +360,7 @@ const styles = StyleSheet.create({
           gap: 16,
           padding: 20,
           borderRadius: 0,
-          borderWidth: 1,
-          borderColor: '#202020',
-          backgroundColor: '#1C1C1C',
+          backgroundColor: '#161616',
           alignItems: 'center',
      },
      joystickValue: {
