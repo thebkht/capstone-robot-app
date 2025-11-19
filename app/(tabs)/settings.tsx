@@ -35,7 +35,7 @@ export default function SettingsScreen() {
           text: 'Clear',
           style: 'destructive',
           onPress: async () => {
-            // Clear connection (status, baseUrl, controlToken, and stored values)
+            // Clear connection (status, baseUrl, and stored values)
             await clearConnection();
             // Navigate back to connection screen
             router.replace('/connection');

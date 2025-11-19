@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as SecureStore from "expo-secure-store";
 import React, {
   createContext,
   useCallback,
@@ -58,8 +57,6 @@ interface RobotContextValue {
   isPolling: boolean;
   setIsPolling: (value: boolean) => void;
   refreshStatus: () => Promise<void>;
-  controlToken: string | null;
-  setControlToken: (token: string | null) => Promise<void>;
   sessionId: string | null;
   setSessionId: (sessionId: string | null) => Promise<void>;
   clearConnection: () => Promise<void>;
@@ -70,10 +67,7 @@ interface RobotContextValue {
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
-const SECURE_STORE_CONTROL_TOKEN_KEY = "robot_control_token";
-
 export const ROBOT_BASE_URL_STORAGE_KEY = "robot_base_url";
-export const ROBOT_CONTROL_TOKEN_STORAGE_KEY = "robot_control_token";
 export const ROBOT_SESSION_ID_STORAGE_KEY = "robot_session_id";
 export const DEFAULT_ROBOT_BASE_URL = "http://192.168.200.123:8000";
 
@@ -84,13 +78,12 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
   const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined);
   const [isPolling, setIsPolling] = useState<boolean>(true);
   const hasPollingBeenPausedRef = useRef(false);
-  const [controlToken, setControlTokenState] = useState<string | null>(null);
   const [sessionId, setSessionIdState] = useState<string | null>(null);
   const [currentRobotId, setCurrentRobotId] = useState<string | null>(null);
 
   const api = useMemo(
-    () => createRobotApi(baseUrl, undefined, controlToken, sessionId),
-    [baseUrl, controlToken, sessionId]
+    () => createRobotApi(baseUrl, undefined, sessionId),
+    [baseUrl, sessionId]
   );
 
   const refreshStatus = useCallback(async () => {
@@ -203,13 +196,6 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
           console.log("Loaded stored robot base URL", storedUrl);
           setBaseUrlState(storedUrl);
         }
-        const storedToken = await AsyncStorage.getItem(
-          ROBOT_CONTROL_TOKEN_STORAGE_KEY
-        );
-        if (storedToken && isMounted) {
-          setControlTokenState(storedToken);
-        }
-
         const storedSessionId = await AsyncStorage.getItem(
           ROBOT_SESSION_ID_STORAGE_KEY
         );
@@ -218,24 +204,6 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         }
       } catch (error) {
         console.warn("Failed to load stored robot base URL", error);
-      }
-
-      try {
-        // Check if SecureStore is available (it may not be on web or in some dev environments)
-        if (SecureStore.isAvailableAsync && !(await SecureStore.isAvailableAsync())) {
-          console.warn("SecureStore is not available on this platform");
-        } else {
-          const storedToken = await SecureStore.getItemAsync(
-            SECURE_STORE_CONTROL_TOKEN_KEY
-          );
-          if (storedToken && isMounted) {
-            console.log("Loaded stored control token");
-            setControlTokenState(storedToken);
-          }
-        }
-      } catch (error) {
-        console.warn("Failed to load stored control token", error);
-        // Don't crash the app if SecureStore fails - it might not be available in dev mode
       }
     })();
 
@@ -283,30 +251,6 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     [api, baseUrl]
   );
 
-  const setControlToken = useCallback(
-    async (token: string | null) => {
-      console.log("Updating control token", { hasToken: Boolean(token) });
-      api.setControlToken(token);
-      setControlTokenState(token);
-      try {
-        // Check if SecureStore is available
-        if (SecureStore.isAvailableAsync && !(await SecureStore.isAvailableAsync())) {
-          console.warn("SecureStore is not available, token will not persist");
-          return;
-        }
-        if (token) {
-          await SecureStore.setItemAsync(SECURE_STORE_CONTROL_TOKEN_KEY, token);
-        } else {
-          await SecureStore.deleteItemAsync(SECURE_STORE_CONTROL_TOKEN_KEY);
-        }
-      } catch (error) {
-        console.warn("Failed to persist control token", error);
-        // Don't throw - token is still set in memory even if storage fails
-      }
-    },
-    [api]
-  );
-
   const setSessionId = useCallback(
     async (sessionIdValue: string | null) => {
       console.log("Updating session ID", { hasSession: Boolean(sessionIdValue) });
@@ -350,8 +294,6 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         // Set up connection with stored credentials
         setBaseUrlState(storedRobot.baseUrl);
         api.updateBaseUrl(storedRobot.baseUrl);
-        setControlTokenState(storedRobot.control_token);
-        api.setControlToken(storedRobot.control_token);
         setCurrentRobotId(storedRobot.robot_id);
 
         // Update last seen
@@ -389,10 +331,6 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     setBaseUrlState(DEFAULT_ROBOT_BASE_URL);
     api.updateBaseUrl(DEFAULT_ROBOT_BASE_URL);
 
-    // Clear control token
-    setControlTokenState(null);
-    api.setControlToken(null);
-
     // Clear session ID
     setSessionIdState(null);
     api.setSessionId(null);
@@ -403,18 +341,9 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     // Clear stored values
     try {
       await AsyncStorage.removeItem(ROBOT_BASE_URL_STORAGE_KEY);
-      await AsyncStorage.removeItem(ROBOT_CONTROL_TOKEN_STORAGE_KEY);
       await AsyncStorage.removeItem(ROBOT_SESSION_ID_STORAGE_KEY);
     } catch (error) {
       console.warn("Failed to clear stored base URL", error);
-    }
-
-    try {
-      if (SecureStore.isAvailableAsync && await SecureStore.isAvailableAsync()) {
-        await SecureStore.deleteItemAsync(SECURE_STORE_CONTROL_TOKEN_KEY);
-      }
-    } catch (error) {
-      console.warn("Failed to clear stored control token", error);
     }
   }, [api]);
 
@@ -429,8 +358,6 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       isPolling,
       setIsPolling,
       refreshStatus,
-      controlToken,
-      setControlToken,
       sessionId,
       setSessionId,
       clearConnection,
@@ -446,7 +373,6 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       refreshStatus,
       status,
       statusError,
-      setControlToken,
       setSessionId,
       clearConnection,
       connectToStoredRobot,

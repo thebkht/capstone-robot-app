@@ -1,12 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as SecureStore from "expo-secure-store";
 
 export interface StoredRobot {
   robot_id: string;
   name?: string;
   baseUrl: string;
   device_id: string;
-  control_token: string;
+  control_token?: string;
   last_ip?: string;
   last_wifi_ssid?: string;
   last_seen?: string;

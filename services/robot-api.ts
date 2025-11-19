@@ -103,7 +103,6 @@ export interface ClaimConfirmResponse {
 export interface RobotApiOptions {
   baseUrl: string;
   timeout?: number;
-  controlToken?: string | null;
   sessionId?: string | null;
   axiosInstance?: AxiosInstance;
 }
@@ -123,13 +122,11 @@ export class RobotAPI {
   private baseUrl: string;
   private axiosInstance: AxiosInstance;
   private timeout: number;
-  private controlToken: string | null;
   private sessionId: string | null;
 
   constructor(options: RobotApiOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.timeout = options.timeout ?? 5000;
-    this.controlToken = options.controlToken ?? null;
     this.sessionId = options.sessionId ?? null;
 
     this.axiosInstance =
@@ -141,10 +138,6 @@ export class RobotAPI {
           Accept: "application/json",
           "Content-Type": "application/json",
 
-          // Added global headers:
-          ...(this.controlToken
-            ? { "x-control-token": this.controlToken }
-            : {}),
           ...(this.sessionId ? { "session-id": this.sessionId } : {}),
         },
       });
@@ -164,9 +157,6 @@ export class RobotAPI {
           config.method = config.method.toUpperCase() as any;
         }
 
-        if (this.controlToken) {
-          config.headers["x-control-token"] = this.controlToken;
-        }
         if (this.sessionId) {
           config.headers["session-id"] = this.sessionId;
         }
@@ -196,9 +186,6 @@ export class RobotAPI {
           url: error.config?.url,
           data: error.config?.data,
         });
-        if (error.response?.status === 401) {
-          console.log("Unauthorized - Control token may be invalid");
-        }
         return Promise.reject(error);
       }
     );
@@ -211,14 +198,6 @@ export class RobotAPI {
 
   public getBaseUrl(): string {
     return this.baseUrl;
-  }
-
-  public setControlToken(token: string | null) {
-    this.controlToken = token;
-  }
-
-  public getControlToken(): string | null {
-    return this.controlToken;
   }
 
   public setSessionId(sessionId: string | null) {
@@ -631,6 +610,5 @@ export class RobotAPI {
 export const createRobotApi = (
   baseUrl: string,
   timeout?: number,
-  controlToken?: string | null,
   sessionId?: string | null
-) => new RobotAPI({ baseUrl, timeout, controlToken, sessionId });
+) => new RobotAPI({ baseUrl, timeout, sessionId });
