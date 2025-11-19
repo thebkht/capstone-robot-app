@@ -1,6 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useCallback } from 'react';
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { useRobot } from '@/context/robot-provider';
+import {
+  cmdJsonCmd,
+  cmd_movition_ctrl,
+  max_speed,
+  slow_speed,
+  MovementCommand,
+} from '@/services/json-socket';
 
 interface JoystickProps {
   onChange?: (value: { x: number; y: number }) => void;
@@ -12,44 +21,120 @@ interface Direction {
   vector: { x: number; y: number };
   rotation?: string;
   hasIcon?: boolean;
+  command?: MovementCommand;
 }
 
+const stopCommand: MovementCommand = { T: cmd_movition_ctrl, L: 0, R: 0 };
+
 const directions: Direction[] = [
-  { key: 'up-left', label: '', vector: { x: -1, y: 1 }, rotation: '-45deg', hasIcon: true },
-  { key: 'up', label: '', vector: { x: 0, y: 1 }, rotation: '0deg', hasIcon: true },
-  { key: 'up-right', label: '', vector: { x: 1, y: 1 }, rotation: '45deg', hasIcon: true },
-  { key: 'left', label: '', vector: { x: -1, y: 0 }, rotation: '-90deg', hasIcon: true },
-  { key: 'center', label: '', vector: { x: 0, y: 0 }, hasIcon: false },
-  { key: 'right', label: '', vector: { x: 1, y: 0 }, rotation: '90deg', hasIcon: true },
-  { key: 'down-left', label: '', vector: { x: -1, y: -1 }, rotation: '-135deg', hasIcon: true },
-  { key: 'down', label: '', vector: { x: 0, y: -1 }, rotation: '180deg', hasIcon: true },
-  { key: 'down-right', label: '', vector: { x: 1, y: -1 }, rotation: '135deg', hasIcon: true },
+  {
+    key: 'up-left',
+    label: '',
+    vector: { x: -1, y: 1 },
+    rotation: '-45deg',
+    hasIcon: true,
+    command: { T: cmd_movition_ctrl, L: slow_speed, R: max_speed },
+  },
+  {
+    key: 'up',
+    label: '',
+    vector: { x: 0, y: 1 },
+    rotation: '0deg',
+    hasIcon: true,
+    command: { T: cmd_movition_ctrl, L: max_speed, R: max_speed },
+  },
+  {
+    key: 'up-right',
+    label: '',
+    vector: { x: 1, y: 1 },
+    rotation: '45deg',
+    hasIcon: true,
+    command: { T: cmd_movition_ctrl, L: max_speed, R: slow_speed },
+  },
+  {
+    key: 'left',
+    label: '',
+    vector: { x: -1, y: 0 },
+    rotation: '-90deg',
+    hasIcon: true,
+    command: { T: cmd_movition_ctrl, L: -max_speed, R: max_speed },
+  },
+  {
+    key: 'center',
+    label: '',
+    vector: { x: 0, y: 0 },
+    hasIcon: false,
+    command: stopCommand,
+  },
+  {
+    key: 'right',
+    label: '',
+    vector: { x: 1, y: 0 },
+    rotation: '90deg',
+    hasIcon: true,
+    command: { T: cmd_movition_ctrl, L: max_speed, R: -max_speed },
+  },
+  {
+    key: 'down-left',
+    label: '',
+    vector: { x: -1, y: -1 },
+    rotation: '-135deg',
+    hasIcon: true,
+    command: { T: cmd_movition_ctrl, L: -slow_speed, R: -max_speed },
+  },
+  {
+    key: 'down',
+    label: '',
+    vector: { x: 0, y: -1 },
+    rotation: '180deg',
+    hasIcon: true,
+    command: { T: cmd_movition_ctrl, L: -max_speed, R: -max_speed },
+  },
+  {
+    key: 'down-right',
+    label: '',
+    vector: { x: 1, y: -1 },
+    rotation: '135deg',
+    hasIcon: true,
+    command: { T: cmd_movition_ctrl, L: -max_speed, R: -slow_speed },
+  },
 ];
 
 const arrowSource = require('../assets/images/ctrl_arrow.svg');
 
 export const Joystick: React.FC<JoystickProps> = ({ onChange }) => {
-  const handlePressIn = useMemo(
-    () =>
-      (vector: { x: number; y: number }) => {
-        onChange?.(vector);
-      },
-    [onChange],
+  const { baseUrl } = useRobot();
+
+  const handlePressIn = useCallback(
+    (direction: Direction) => {
+      onChange?.(direction.vector);
+
+      if (direction.command) {
+        cmdJsonCmd({ ...direction.command }, baseUrl);
+      }
+    },
+    [baseUrl, onChange],
   );
 
-  const handlePressOut = useMemo(
-    () => () => {
-      onChange?.({ x: 0, y: 0 });
-    },
-    [onChange],
-  );
+  const handlePressOut = useCallback(() => {
+    onChange?.({ x: 0, y: 0 });
+    cmdJsonCmd({ ...stopCommand }, baseUrl);
+  }, [baseUrl, onChange]);
 
   return (
     <View style={styles.controller}>
       <View style={styles.grid}>
         <View style={styles.middleOverlay} pointerEvents="box-none">
           <Pressable
-            onPressIn={() => handlePressIn({ x: 0, y: 0 })}
+            onPressIn={() =>
+              handlePressIn({
+                key: 'center',
+                label: '',
+                vector: { x: 0, y: 0 },
+                hasIcon: false,
+                command: stopCommand,
+              })
+            }
             onPressOut={handlePressOut}
             style={({ pressed }) => [styles.funcOuter, pressed && styles.funcOuterActive]}
           >
@@ -64,7 +149,7 @@ export const Joystick: React.FC<JoystickProps> = ({ onChange }) => {
         {directions.map((direction) => (
           <Pressable
             key={direction.key}
-            onPressIn={() => handlePressIn(direction.vector)}
+            onPressIn={() => handlePressIn(direction)}
             onPressOut={handlePressOut}
             style={({ pressed }) => [styles.button, pressed && styles.buttonActive]}
           >
