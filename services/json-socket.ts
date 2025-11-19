@@ -1,12 +1,16 @@
 const WS_PATH = "/json";
 
-export const cmd_movition_ctrl = "cmd_movition_ctrl";
-export const speed_rate = 1;
-export const slow_speed = 0.5;
-export const max_speed = 1;
+export const cmd_movition_ctrl = 1;
+export const cmd_pwm_ctrl = 11;
+export const max_speed = 0.65;
+export const slow_speed = 0.3;
+export const max_rate = 1.0;
+export const mid_rate = 0.66;
+export const min_rate = 0.3;
+export const speed_rate = max_rate;
 
 export interface MovementCommand {
-  T: string;
+  T: number;
   L: number;
   R: number;
 }
