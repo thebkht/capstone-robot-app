@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 
+import { getDeviceId } from "@/services/device-id";
 import {
   RobotAPI,
   RobotNetworkInfo,
@@ -16,7 +17,6 @@ import {
   createRobotApi,
 } from "@/services/robot-api";
 import { getStoredRobotByUrl, updateRobotLastIp, updateRobotLastSeen } from "@/services/robot-storage";
-import { getDeviceId } from "@/services/device-id";
 
 const isIpv4Address = (value: string | null | undefined) => {
   if (!value) {
@@ -67,6 +67,8 @@ interface RobotContextValue {
 
 const RobotContext = createContext<RobotContextValue | undefined>(undefined);
 
+const SECURE_STORE_CONTROL_TOKEN_KEY = "robot_control_token";
+
 export const ROBOT_BASE_URL_STORAGE_KEY = "robot_base_url";
 export const ROBOT_SESSION_ID_STORAGE_KEY = "robot_session_id";
 export const DEFAULT_ROBOT_BASE_URL = "http://192.168.200.123:8000";
@@ -90,7 +92,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     try {
       console.log("Refreshing robot status from", baseUrl);
       const health = await api.fetchHealth();
-      
+
       // Update last seen for stored robot if we have a robot_id
       if (currentRobotId) {
         await updateRobotLastSeen(currentRobotId).catch((err) => {
@@ -205,6 +207,24 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       } catch (error) {
         console.warn("Failed to load stored robot base URL", error);
       }
+
+      try {
+        // Check if SecureStore is available (it may not be on web or in some dev environments)
+        if (SecureStore.isAvailableAsync && !(await SecureStore.isAvailableAsync())) {
+          console.warn("SecureStore is not available on this platform");
+        } else {
+          const storedToken = await SecureStore.getItemAsync(
+            CONTROL_TOKEN_STORAGE_KEY
+          );
+          if (storedToken && isMounted) {
+            console.log("Loaded stored control token");
+            setControlTokenState(storedToken);
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to load stored control token", error);
+        // Don't crash the app if SecureStore fails - it might not be available in dev mode
+      }
     })();
 
     return () => {
@@ -251,6 +271,30 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
     [api, baseUrl]
   );
 
+  const setControlToken = useCallback(
+    async (token: string | null) => {
+      console.log("Updating control token", { hasToken: Boolean(token) });
+      api.setControlToken(token);
+      setControlTokenState(token);
+      try {
+        // Check if SecureStore is available
+        if (SecureStore.isAvailableAsync && !(await SecureStore.isAvailableAsync())) {
+          console.warn("SecureStore is not available, token will not persist");
+          return;
+        }
+        if (token) {
+          await SecureStore.setItemAsync(CONTROL_TOKEN_STORAGE_KEY, token);
+        } else {
+          await SecureStore.deleteItemAsync(CONTROL_TOKEN_STORAGE_KEY);
+        }
+      } catch (error) {
+        console.warn("Failed to persist control token", error);
+        // Don't throw - token is still set in memory even if storage fails
+      }
+    },
+    [api]
+  );
+
   const setSessionId = useCallback(
     async (sessionIdValue: string | null) => {
       console.log("Updating session ID", { hasSession: Boolean(sessionIdValue) });
@@ -290,7 +334,7 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
         }
 
         console.log("Found stored robot, connecting:", storedRobot.robot_id);
-        
+
         // Set up connection with stored credentials
         setBaseUrlState(storedRobot.baseUrl);
         api.updateBaseUrl(storedRobot.baseUrl);
@@ -344,6 +388,14 @@ export const RobotProvider = ({ children }: React.PropsWithChildren) => {
       await AsyncStorage.removeItem(ROBOT_SESSION_ID_STORAGE_KEY);
     } catch (error) {
       console.warn("Failed to clear stored base URL", error);
+    }
+
+    try {
+      if (SecureStore.isAvailableAsync && await SecureStore.isAvailableAsync()) {
+        await SecureStore.deleteItemAsync(CONTROL_TOKEN_STORAGE_KEY);
+      }
+    } catch (error) {
+      console.warn("Failed to clear stored control token", error);
     }
   }, [api]);
 

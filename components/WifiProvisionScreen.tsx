@@ -27,6 +27,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { DEFAULT_ROBOT_BASE_URL, useRobot } from "@/context/robot-provider";
 import { useRovyBle } from "@/hooks/use-rovy-ble";
+import { createRobotApi } from "@/services/robot-api";
 import { checkAllRobotsStatus } from "@/services/robot-status-check";
 import { RobotStatusCheck as RobotStatusCheckType } from "@/services/robot-storage";
 import type { RovyDevice } from "@/services/rovy-ble";
@@ -393,6 +394,9 @@ export function WifiProvisionScreen() {
     setIsManualConnecting(true);
 
     try {
+      const probeApi = createRobotApi(formatted, 4000, null, null);
+      await probeApi.fetchHealth();
+
       // First, check if this is a previously connected robot
       const connected = await connectToStoredRobot(formatted);
       if (connected) {
