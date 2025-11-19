@@ -34,7 +34,7 @@ const directions: Direction[] = [
   {
     key: 'up',
     label: '^',
-    vector: { l: 0, r: 1 },
+    vector: { l: 1, r: 1 },
     command: { T: cmd_movition_ctrl, L: max_speed, R: max_speed },
   },
   {
@@ -47,7 +47,7 @@ const directions: Direction[] = [
     key: 'left',
     label: '^',
     rotation: '-90deg',
-    vector: { l: -1, r: 0 },
+    vector: { l: 1, r: 0 },
     command: { T: cmd_movition_ctrl, L: -max_speed, R: max_speed },
   },
   {
@@ -60,26 +60,26 @@ const directions: Direction[] = [
     key: 'right',
     label: '^',
     rotation: '90deg',
-    vector: { l: 1, r: 0 },
+    vector: { l: 0, r: 1 },
     command: { T: cmd_movition_ctrl, L: max_speed, R: -max_speed },
   },
   {
     key: 'down-left',
     label: '∙',
-    vector: { l: -1, r: -1 },
+    vector: { l: 1, r: -1 },
     command: { T: cmd_movition_ctrl, L: -slow_speed, R: -max_speed },
   },
   {
     key: 'down',
     label: '^',
     rotation: '180deg',
-    vector: { l: 0, r: -1 },
+    vector: { l: -1, r: -1 },
     command: { T: cmd_movition_ctrl, L: -max_speed, R: -max_speed },
   },
   {
     key: 'down-right',
     label: '∙',
-    vector: { l: 1, r: -1 },
+    vector: { l: -1, r: 1 },
     command: { T: cmd_movition_ctrl, L: -max_speed, R: -slow_speed },
   },
 ];
