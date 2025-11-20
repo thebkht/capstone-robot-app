@@ -129,6 +129,7 @@ const styles = StyleSheet.create({
           backgroundColor: '#1B1B1B',
           alignItems: 'center',
           justifyContent: 'space-between',
+          zIndex: 0
      },
      streamArea: {
           flex: 1,

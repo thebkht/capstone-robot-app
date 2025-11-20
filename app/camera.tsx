@@ -4,6 +4,7 @@ import {
      ActivityIndicator,
      Pressable,
      StyleSheet,
+     Text,
      View
 } from 'react-native';
 
@@ -240,16 +241,30 @@ export default function CameraScreen() {
                          </View>
                     )} */}
 
-                    <CameraVideo
-                         wsUrl={wsUrl}
-                         currentFrame={currentFrame}
-                         isConnecting={isConnecting}
-                         isStreaming={isStreaming}
-                         error={error}
-                         onToggleStream={handleToggleStream}
-                         onSetLights={handleSetLights}
-                         isAdjustingLights={isAdjustingLights}
-                    />
+                    <View style={styles.videoFeed}>
+                         <View style={{ position: "relative" }}>
+                              <View style={{ position: "absolute", zIndex: 2 }}>
+                                   <View style={{ flex: 1, alignItems: "flex-end", justifyContent: "flex-start" }}>
+                                        <Pressable style={styles.feedLight}>
+                                             <IconSymbol name='bolt' size={20} color="#1DD1A1" />
+                                             <Text style={styles.feedLightText}>
+                                                  OFF
+                                             </Text>
+                                        </Pressable>
+                                   </View>
+                              </View>
+                         </View>
+                         <CameraVideo
+                              wsUrl={wsUrl}
+                              currentFrame={currentFrame}
+                              isConnecting={isConnecting}
+                              isStreaming={isStreaming}
+                              error={error}
+                              onToggleStream={handleToggleStream}
+                              onSetLights={handleSetLights}
+                              isAdjustingLights={isAdjustingLights}
+                         />
+                    </View>
 
                     <View style={styles.row}>
                          <Pressable
@@ -319,10 +334,27 @@ const styles = StyleSheet.create({
      backButtonText: {
           color: '#E5E7EB',
      },
+     feedLight: {
+          borderWidth: 1,
+          borderColor: "#1DD1A1",
+          paddingInline: 6,
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          marginVertical: 5
+     },
+     feedLightText: {
+          color: "#1DD1A1",
+          fontSize: 14
+     },
      row: {
           flexDirection: 'row',
           gap: 16,
           alignItems: 'center',
+     },
+     videoFeed: {
+          position: "relative",
+          zIndex: 0
      },
      primaryButton: {
           flex: 1,

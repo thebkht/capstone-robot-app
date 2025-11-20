@@ -8,11 +8,18 @@ export const max_rate = 1.0;
 export const mid_rate = 0.66;
 export const min_rate = 0.3;
 export const speed_rate = max_rate;
+export const cmd_lights_ctrl = 132;
 
 export interface MovementCommand {
   T: number;
   L: number;
   R: number;
+}
+
+export interface LightsCommand {
+  T: number;
+  IO4: number;
+  IO5: number;
 }
 
 let heartbeat_left = 0;
@@ -103,7 +110,7 @@ const ensureSocket = (baseUrl?: string | null) => {
 };
 
 export const cmdJsonCmd = (
-  jsonData: MovementCommand,
+  jsonData: MovementCommand | LightsCommand,
   baseUrl?: string | null
 ) => {
   console.log(jsonData);
@@ -113,8 +120,9 @@ export const cmdJsonCmd = (
   }
 
   if (jsonData.T === cmd_movition_ctrl) {
-    heartbeat_left = jsonData.L;
-    heartbeat_right = jsonData.R;
+    const movementData = jsonData as MovementCommand;
+    heartbeat_left = movementData.L;
+    heartbeat_right = movementData.R;
   }
 
   const payload =
