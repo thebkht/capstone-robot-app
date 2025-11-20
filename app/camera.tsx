@@ -17,6 +17,7 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useRobot } from '@/context/robot-provider';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { cmd_lights_ctrl, cmdJsonCmd } from '@/services/json-socket';
 
 export default function CameraScreen() {
      const { api, baseUrl, } = useRobot();
@@ -204,6 +205,13 @@ export default function CameraScreen() {
           [api]
      );
 
+     const handleLightCTL = useCallback(
+          () => {
+               cmdJsonCmd({ T: cmd_lights_ctrl, IO4: 115, IO5: 0 }, baseUrl);
+          },
+          [baseUrl],
+     );
+
      return (
           <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
                <ThemedView style={styles.container}>
@@ -245,7 +253,7 @@ export default function CameraScreen() {
                          <View style={{ position: "relative" }}>
                               <View style={{ position: "absolute", zIndex: 2 }}>
                                    <View style={{ flex: 1, alignItems: "flex-end", justifyContent: "flex-start" }}>
-                                        <Pressable style={styles.feedLight}>
+                                        <Pressable style={styles.feedLight} onPress={handleLightCTL}>
                                              <IconSymbol name='bolt' size={20} color="#1DD1A1" />
                                              <Text style={styles.feedLightText}>
                                                   OFF
