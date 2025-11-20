@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, Platform } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Audio, Recording } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -50,7 +50,7 @@ const buildWebSocketUrl = (baseUrl: string | undefined, path: string) => {
 
 export default function AgenticVoiceScreen() {
   const router = useRouter();
-  const { api, baseUrl } = useRobot();
+  const { baseUrl } = useRobot();
 
   const cameraWsUrl = useMemo(() => buildWebSocketUrl(baseUrl, '/camera/ws'), [baseUrl]);
   const audioWsUrl = useMemo(() => buildWebSocketUrl(baseUrl, '/audio-stream'), [baseUrl]);
@@ -68,7 +68,6 @@ export default function AgenticVoiceScreen() {
   const [isAudioConnecting, setIsAudioConnecting] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
-  const [isAdjustingLights, setIsAdjustingLights] = useState(false);
   const [voiceLog, setVoiceLog] = useState<VoiceLogEntry[]>([]);
 
   const appendLog = useCallback((entry: Omit<VoiceLogEntry, 'id' | 'timestamp'>) => {
@@ -323,7 +322,7 @@ export default function AgenticVoiceScreen() {
 
       // Read as base64 - use string literal, not enum
       const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: 'base64',
+        encoding: FileSystem.EncodingType.Base64,
       });
 
       if (!base64) {
@@ -464,20 +463,6 @@ export default function AgenticVoiceScreen() {
     }
   }, [appendLog, isAudioConnecting, isAudioConnected, isRecording]);
 
-  const handleSetLights = useCallback(
-    async (pwmA: number, pwmB: number) => {
-      setIsAdjustingLights(true);
-      try {
-        await api.controlLights({ pwmA, pwmB });
-      } catch (error) {
-        console.warn('Failed to set lights', error);
-      } finally {
-        setIsAdjustingLights(false);
-      }
-    },
-    [api]
-  );
-
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       <ThemedView style={styles.container}>
@@ -510,8 +495,6 @@ export default function AgenticVoiceScreen() {
           isStreaming={isCameraStreaming}
           error={cameraError}
           onToggleStream={handleToggleCamera}
-          onSetLights={handleSetLights}
-          isAdjustingLights={isAdjustingLights}
         />
 
         <ThemedView style={styles.card}>
