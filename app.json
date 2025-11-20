@@ -13,6 +13,7 @@
       "bundleIdentifier": "com.rovy.rovycontroller",
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "Rovy Controller uses Bluetooth to securely provision and connect to your Rovy.",
+        "NSMicrophoneUsageDescription": "Rovy Controller uses your microphone to communicate with your Rovy",
         "icon": "./assets/ios.icon"
       }
     },
@@ -40,6 +41,12 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Rovy Controller to access your microphone."
+        }
+      ],
       [
         "expo-splash-screen",
         {

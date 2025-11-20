@@ -37,9 +37,27 @@ const BEHAVIORS = [
 ] as const;
 
 const CONTROL_MODES = [
-  { id: 'manual', label: 'Manual', icon: 'bolt.fill' as const },
-  { id: 'agentic', label: 'Agentic', icon: 'sparkles' as const },
-];
+  {
+    id: 'manual',
+    label: 'Manual control',
+    href: '/manual' as const,
+    cardIcon: 'camera.fill' as const,
+    cardIconColor: '#1DD1A1',
+    chevronColor: '#94A3B8',
+    cardVariant: 'camera' as const,
+    modeIcon: 'bolt.fill' as const,
+  },
+  {
+    id: 'agentic',
+    label: 'Agentic voice control',
+    href: '/agentic' as const,
+    cardIcon: 'mic.fill' as const,
+    cardIconColor: '#0F1512',
+    chevronColor: '#0F1512',
+    cardVariant: 'voice' as const,
+    modeIcon: 'sparkles' as const,
+  },
+] as const;
 
 export default function HomeScreen() {
   const { status } = useRobot();
@@ -118,30 +136,49 @@ export default function HomeScreen() {
             ))}
           </View>
 
+          {CONTROL_MODES.map((control) => {
+            const isVoice = control.cardVariant === 'voice';
+            const buttonStyle = isVoice ? styles.voiceButton : styles.cameraButton;
+            const buttonPressedStyle = isVoice ? styles.voiceButtonPressed : styles.cameraButtonPressed;
+            const contentStyle = isVoice ? styles.voiceButtonContent : styles.cameraButtonContent;
+            const textStyle = isVoice ? styles.voiceButtonText : styles.cameraButtonText;
+
+            return (
+              <Link href={control.href} asChild key={control.id}>
+                <Pressable style={({ pressed }) => [buttonStyle, pressed && buttonPressedStyle]}>
+                  <View style={contentStyle}>
+                    <IconSymbol name={control.cardIcon} size={20} color={control.cardIconColor} />
+                    <ThemedText style={textStyle}>{control.label}</ThemedText>
+                    <IconSymbol name="chevron.right" size={18} color={control.chevronColor} />
+                  </View>
+                </Pressable>
+              </Link>
+            );
+          })}
+
           <View style={styles.modeRow}>
             {CONTROL_MODES.map((control) => {
               const isActive = control.id === 'agentic' ? isAgentic : !isAgentic;
               return (
-                <Link href="/manual" key={control.id} asChild>
-                  <Pressable
-
-                    style={({ pressed }) => [
-                      styles.modeButton,
-                      isActive && styles.modeButtonActive,
-                      pressed && styles.modeButtonPressed,
-                    ]}
+                <Pressable
+                  key={control.id}
+                  style={({ pressed }) => [
+                    styles.modeButton,
+                    isActive && styles.modeButtonActive,
+                    pressed && styles.modeButtonPressed,
+                  ]}
+                >
+                  <IconSymbol
+                    name={control.modeIcon}
+                    size={18}
+                    color={isActive ? '#161616' : '#CBD5F5'}
+                  />
+                  <ThemedText
+                    style={[styles.modeButtonText, isActive && styles.modeButtonTextActive]}
                   >
-                    <IconSymbol
-                      name={control.icon}
-                      size={18}
-                      color={isActive ? '#161616' : '#CBD5F5'}
-                    />
-                    <ThemedText
-                      style={[styles.modeButtonText, isActive && styles.modeButtonTextActive]}
-                    >
-                      {control.label}
-                    </ThemedText>
-                  </Pressable></Link>
+                    {control.label}
+                  </ThemedText>
+                </Pressable>
               );
             })}
           </View>
@@ -380,6 +417,27 @@ const styles = StyleSheet.create({
   cameraButtonText: {
     flex: 1,
     color: '#F9FAFB',
+    fontFamily: 'JetBrainsMono_600SemiBold',
+    fontSize: 16,
+  },
+  voiceButton: {
+    backgroundColor: '#1DD1A1',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#1DD1A1',
+  },
+  voiceButtonPressed: {
+    backgroundColor: '#0DAA80',
+    borderColor: '#0DAA80',
+  },
+  voiceButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  voiceButtonText: {
+    flex: 1,
+    color: '#04110B',
     fontFamily: 'JetBrainsMono_600SemiBold',
     fontSize: 16,
   },
