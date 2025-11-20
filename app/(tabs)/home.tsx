@@ -37,9 +37,27 @@ const BEHAVIORS = [
 ] as const;
 
 const CONTROL_MODES = [
-  { id: 'manual', label: 'Manual', icon: 'bolt.fill' as const },
-  { id: 'agentic', label: 'Agentic', icon: 'sparkles' as const },
-];
+  {
+    id: 'manual',
+    label: 'Manual control',
+    href: '/manual' as const,
+    cardIcon: 'camera.fill' as const,
+    cardIconColor: '#1DD1A1',
+    chevronColor: '#94A3B8',
+    cardVariant: 'camera' as const,
+    modeIcon: 'bolt.fill' as const,
+  },
+  {
+    id: 'agentic',
+    label: 'Agentic voice control',
+    href: '/agentic' as const,
+    cardIcon: 'mic.fill' as const,
+    cardIconColor: '#0F1512',
+    chevronColor: '#0F1512',
+    cardVariant: 'voice' as const,
+    modeIcon: 'sparkles' as const,
+  },
+] as const;
 
 export default function HomeScreen() {
   const { status } = useRobot();
@@ -118,35 +136,25 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          <Link href="/manual" asChild>
-            <Pressable
-              style={({ pressed }) => [
-                styles.cameraButton,
-                pressed && styles.cameraButtonPressed,
-              ]}
-            >
-              <View style={styles.cameraButtonContent}>
-                <IconSymbol name="camera.fill" size={20} color="#1DD1A1" />
-                <ThemedText style={styles.cameraButtonText}>Manual control</ThemedText>
-                <IconSymbol name="chevron.right" size={18} color="#94A3B8" />
-              </View>
-            </Pressable>
-          </Link>
+          {CONTROL_MODES.map((control) => {
+            const isVoice = control.cardVariant === 'voice';
+            const buttonStyle = isVoice ? styles.voiceButton : styles.cameraButton;
+            const buttonPressedStyle = isVoice ? styles.voiceButtonPressed : styles.cameraButtonPressed;
+            const contentStyle = isVoice ? styles.voiceButtonContent : styles.cameraButtonContent;
+            const textStyle = isVoice ? styles.voiceButtonText : styles.cameraButtonText;
 
-          <Link href="/agentic" asChild>
-            <Pressable
-              style={({ pressed }) => [
-                styles.voiceButton,
-                pressed && styles.voiceButtonPressed,
-              ]}
-            >
-              <View style={styles.voiceButtonContent}>
-                <IconSymbol name="mic.fill" size={20} color="#0F1512" />
-                <ThemedText style={styles.voiceButtonText}>Agentic voice control</ThemedText>
-                <IconSymbol name="chevron.right" size={18} color="#0F1512" />
-              </View>
-            </Pressable>
-          </Link>
+            return (
+              <Link href={control.href} asChild key={control.id}>
+                <Pressable style={({ pressed }) => [buttonStyle, pressed && buttonPressedStyle]}>
+                  <View style={contentStyle}>
+                    <IconSymbol name={control.cardIcon} size={20} color={control.cardIconColor} />
+                    <ThemedText style={textStyle}>{control.label}</ThemedText>
+                    <IconSymbol name="chevron.right" size={18} color={control.chevronColor} />
+                  </View>
+                </Pressable>
+              </Link>
+            );
+          })}
 
           <View style={styles.modeRow}>
             {CONTROL_MODES.map((control) => {
@@ -161,7 +169,7 @@ export default function HomeScreen() {
                   ]}
                 >
                   <IconSymbol
-                    name={control.icon}
+                    name={control.modeIcon}
                     size={18}
                     color={isActive ? '#161616' : '#CBD5F5'}
                   />
