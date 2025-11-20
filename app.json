@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "rovycontroller",
+    "icon": "./assets/images/icons/ios-light.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
