@@ -30,6 +30,7 @@ export default function CameraScreen() {
      const [isStreaming, setIsStreaming] = useState(false);
      const [isConnecting, setIsConnecting] = useState(false);
      const [isAdjustingLights, setIsAdjustingLights] = useState(false);
+     const [isLightOn, setIsLightOn] = useState(false)
      const wsRef = useRef<WebSocket | null>(null);
 
      // WebSocket URL
@@ -191,25 +192,13 @@ export default function CameraScreen() {
           }
      }, [api, resolveSnapshotUrl]);
 
-     const handleSetLights = useCallback(
-          async (pwmA: number, pwmB: number) => {
-               setIsAdjustingLights(true);
-               try {
-                    await api.controlLights({ pwmA, pwmB });
-               } catch (lightError) {
-                    console.warn('Failed to set lights', lightError);
-               } finally {
-                    setIsAdjustingLights(false);
-               }
-          },
-          [api]
-     );
 
      const handleLightCTL = useCallback(
           () => {
-               cmdJsonCmd({ T: cmd_lights_ctrl, IO4: 115, IO5: 0 }, baseUrl);
+               cmdJsonCmd({ T: cmd_lights_ctrl, IO4: isLightOn ? 0 : 115, IO5: isLightOn ? 0 : 115 }, baseUrl);
+               setIsLightOn(!isLightOn)
           },
-          [baseUrl],
+          [baseUrl, isLightOn],
      );
 
      return (
@@ -256,7 +245,7 @@ export default function CameraScreen() {
                                         <Pressable style={styles.feedLight} onPress={handleLightCTL}>
                                              <IconSymbol name='bolt' size={20} color="#1DD1A1" />
                                              <Text style={styles.feedLightText}>
-                                                  OFF
+                                                  {isLightOn ? "ON" : "OFF"}
                                              </Text>
                                         </Pressable>
                                    </View>
@@ -269,8 +258,6 @@ export default function CameraScreen() {
                               isStreaming={isStreaming}
                               error={error}
                               onToggleStream={handleToggleStream}
-                              onSetLights={handleSetLights}
-                              isAdjustingLights={isAdjustingLights}
                          />
                     </View>
 

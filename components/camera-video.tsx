@@ -11,8 +11,6 @@ interface CameraVideoProps {
      isStreaming: boolean;
      error: string | null;
      onToggleStream: () => void;
-     onSetLights: (pwmA: number, pwmB: number) => void;
-     isAdjustingLights: boolean;
 }
 
 export function CameraVideo({
@@ -22,8 +20,6 @@ export function CameraVideo({
      isStreaming,
      error,
      onToggleStream,
-     onSetLights,
-     isAdjustingLights,
 }: CameraVideoProps) {
      return (
           <View style={styles.cameraFrame}>
@@ -78,42 +74,6 @@ export function CameraVideo({
                          </View>
                     )}
                </View>
-
-               {/* <View style={styles.lightControls}>
-                    <ThemedText style={styles.lightLabel}>Camera lights</ThemedText>
-                    <View style={styles.lightButtons}>
-                         <Pressable
-                              style={[
-                                   styles.lightButton,
-                                   styles.lightButtonSecondary,
-                                   (isAdjustingLights) && styles.lightButtonDisabled,
-                              ]}
-                              onPress={() => onSetLights(0, 0)}
-                              disabled={isAdjustingLights}
-                         >
-                              {isAdjustingLights ? (
-                                   <ActivityIndicator color="#E5E7EB" />
-                              ) : (
-                                   <ThemedText style={styles.lightButtonText}>Lights Off</ThemedText>
-                              )}
-                         </Pressable>
-                         <Pressable
-                              style={[
-                                   styles.lightButton,
-                                   styles.lightButtonPrimary,
-                                   (isAdjustingLights) && styles.lightButtonDisabled,
-                              ]}
-                              onPress={() => onSetLights(255, 255)}
-                              disabled={isAdjustingLights}
-                         >
-                              {isAdjustingLights ? (
-                                   <ActivityIndicator color="#04110B" />
-                              ) : (
-                                   <ThemedText style={styles.lightButtonTextDark}>Lights Max</ThemedText>
-                              )}
-                         </Pressable>
-                    </View>
-               </View> */}
           </View>
      );
 }
