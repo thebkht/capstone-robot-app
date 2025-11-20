@@ -4,7 +4,6 @@
     "slug": "Rovy Controller",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
     "scheme": "rovycontroller",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
@@ -32,7 +31,7 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "minSdkVersion": 23,
-      "package": "com.thefalsenet.Rovycontroller"
+      "package": "com.thefalsenet.rovycontroller"
     },
     "web": {
       "output": "static",
