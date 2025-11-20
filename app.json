@@ -4,8 +4,8 @@
     "slug": "Rovy Controller",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
     "scheme": "rovycontroller",
+    "icon": "./assets/images/icons/ios-light.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
@@ -14,11 +14,7 @@
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "Rovy Controller uses Bluetooth to securely provision and connect to your Rovy.",
         "NSMicrophoneUsageDescription": "Rovy Controller uses your microphone to communicate with your Rovy",
-        "icon": {
-          "dark": "./assets/images/icons/ios-dark.png",
-          "light": "./assets/images/icons/ios-light.png",
-          "tinted": "./assets/images/icons/ios-tinted.png"
-        }
+        "icon": "./assets/ios.icon"
       }
     },
     "android": {
@@ -37,7 +33,7 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "minSdkVersion": 23,
-      "package": "com.thefalsenet.Rovycontroller"
+      "package": "com.thefalsenet.rovycontroller"
     },
     "web": {
       "output": "static",
