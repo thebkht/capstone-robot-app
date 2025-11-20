@@ -17,7 +17,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useRobot } from '@/context/robot-provider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-export default function CameraScreen() {
+export default function ManualScreen() {
      const { api, baseUrl, } = useRobot();
      const router = useRouter();
      const [joystick, setJoystick] = useState({ x: 0, y: 0 });
@@ -210,7 +210,7 @@ export default function CameraScreen() {
                          <Pressable style={styles.backButton} onPress={() => router.back()}>
                               <IconSymbol name="chevron.left" size={16} color="#E5E7EB" />
                          </Pressable>
-                         <ThemedText type="title">Camera</ThemedText>
+                         <ThemedText type="title">Manual control</ThemedText>
                     </View>
 
                     {/* {wsUrl && (

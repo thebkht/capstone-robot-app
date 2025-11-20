@@ -71,7 +71,8 @@ export default function RootLayout() {
         <ThemeProvider value={DarkTheme}>
           <Stack>
             <Stack.Screen name="connection" options={{ headerShown: false }} />
-            <Stack.Screen name="camera" options={{ headerShown: false }} />
+            <Stack.Screen name="manual" options={{ headerShown: false }} />
+            <Stack.Screen name="agentic" options={{ headerShown: false }} />
             <Stack.Screen name="wifi" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />

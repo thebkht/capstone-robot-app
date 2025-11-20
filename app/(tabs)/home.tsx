@@ -118,7 +118,7 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          <Link href="/camera" asChild>
+          <Link href="/manual" asChild>
             <Pressable
               style={({ pressed }) => [
                 styles.cameraButton,
@@ -127,8 +127,23 @@ export default function HomeScreen() {
             >
               <View style={styles.cameraButtonContent}>
                 <IconSymbol name="camera.fill" size={20} color="#1DD1A1" />
-                <ThemedText style={styles.cameraButtonText}>View Camera</ThemedText>
+                <ThemedText style={styles.cameraButtonText}>Manual control</ThemedText>
                 <IconSymbol name="chevron.right" size={18} color="#94A3B8" />
+              </View>
+            </Pressable>
+          </Link>
+
+          <Link href="/agentic" asChild>
+            <Pressable
+              style={({ pressed }) => [
+                styles.voiceButton,
+                pressed && styles.voiceButtonPressed,
+              ]}
+            >
+              <View style={styles.voiceButtonContent}>
+                <IconSymbol name="mic.fill" size={20} color="#0F1512" />
+                <ThemedText style={styles.voiceButtonText}>Agentic voice control</ThemedText>
+                <IconSymbol name="chevron.right" size={18} color="#0F1512" />
               </View>
             </Pressable>
           </Link>
@@ -394,6 +409,27 @@ const styles = StyleSheet.create({
   cameraButtonText: {
     flex: 1,
     color: '#F9FAFB',
+    fontFamily: 'JetBrainsMono_600SemiBold',
+    fontSize: 16,
+  },
+  voiceButton: {
+    backgroundColor: '#1DD1A1',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#1DD1A1',
+  },
+  voiceButtonPressed: {
+    backgroundColor: '#0DAA80',
+    borderColor: '#0DAA80',
+  },
+  voiceButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  voiceButtonText: {
+    flex: 1,
+    color: '#04110B',
     fontFamily: 'JetBrainsMono_600SemiBold',
     fontSize: 16,
   },
