@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -39,7 +39,7 @@ const BEHAVIORS = [
 const CONTROL_MODES = [
   {
     id: 'manual',
-    label: 'Manual control',
+    label: 'Manual',
     href: '/manual' as const,
     cardIcon: 'camera.fill' as const,
     cardIconColor: '#1DD1A1',
@@ -49,7 +49,7 @@ const CONTROL_MODES = [
   },
   {
     id: 'agentic',
-    label: 'Agentic voice control',
+    label: 'Agentic',
     href: '/agentic' as const,
     cardIcon: 'mic.fill' as const,
     cardIconColor: '#0F1512',
@@ -61,6 +61,7 @@ const CONTROL_MODES = [
 
 export default function HomeScreen() {
   const { status } = useRobot();
+  const router = useRouter();
   const batteryRaw = status?.battery ?? status?.telemetry?.battery ?? status?.health?.battery;
   const batteryLevel = typeof batteryRaw === 'number' ? Math.round(batteryRaw) : undefined;
   const batteryLabel = batteryLevel !== undefined ? `${batteryLevel}%` : '—';
@@ -136,26 +137,6 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {CONTROL_MODES.map((control) => {
-            const isVoice = control.cardVariant === 'voice';
-            const buttonStyle = isVoice ? styles.voiceButton : styles.cameraButton;
-            const buttonPressedStyle = isVoice ? styles.voiceButtonPressed : styles.cameraButtonPressed;
-            const contentStyle = isVoice ? styles.voiceButtonContent : styles.cameraButtonContent;
-            const textStyle = isVoice ? styles.voiceButtonText : styles.cameraButtonText;
-
-            return (
-              <Link href={control.href} asChild key={control.id}>
-                <Pressable style={({ pressed }) => [buttonStyle, pressed && buttonPressedStyle]}>
-                  <View style={contentStyle}>
-                    <IconSymbol name={control.cardIcon} size={20} color={control.cardIconColor} />
-                    <ThemedText style={textStyle}>{control.label}</ThemedText>
-                    <IconSymbol name="chevron.right" size={18} color={control.chevronColor} />
-                  </View>
-                </Pressable>
-              </Link>
-            );
-          })}
-
           <View style={styles.modeRow}>
             {CONTROL_MODES.map((control) => {
               const isActive = control.id === 'agentic' ? isAgentic : !isAgentic;
@@ -167,6 +148,7 @@ export default function HomeScreen() {
                     isActive && styles.modeButtonActive,
                     pressed && styles.modeButtonPressed,
                   ]}
+                  onPress={() => router.push(control.href)}
                 >
                   <IconSymbol
                     name={control.modeIcon}

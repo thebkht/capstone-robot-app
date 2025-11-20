@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, Platform } from 'react-native';
 import { Audio, Recording } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
@@ -181,13 +181,38 @@ export default function AgenticVoiceScreen() {
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
 
-        if (data.partialTranscript) {
-          appendLog({ label: 'Partial transcript', message: data.partialTranscript, tone: 'partial' });
+        // Handle test responses
+        if (data.type === 'status') {
+          appendLog({ label: 'Robot', message: data.message, tone: 'info' });
           return;
         }
 
-        if (data.finalTranscript) {
-          appendLog({ label: 'Final transcript', message: data.finalTranscript, tone: 'final' });
+        if (data.type === 'chunk_received') {
+          // Silent acknowledgment, don't spam logs
+          return;
+        }
+
+        if (data.type === 'audio_complete') {
+          appendLog({
+            label: 'Robot',
+            message: `Received ${data.total_chunks} audio chunks successfully`,
+            tone: 'info'
+          });
+          return;
+        }
+
+        // Handle transcription responses (for future)
+        if (data.finalTranscript || data.text) {
+          appendLog({
+            label: 'Transcript',
+            message: data.finalTranscript || data.text,
+            tone: 'final'
+          });
+          return;
+        }
+
+        if (data.partialTranscript) {
+          appendLog({ label: 'Partial', message: data.partialTranscript, tone: 'partial' });
           return;
         }
 
@@ -198,13 +223,25 @@ export default function AgenticVoiceScreen() {
 
         if (data.message) {
           appendLog({ label: 'Robot', message: data.message, tone: 'info' });
+          return;
+        }
+
+        // Fallback for unknown messages
+        if (data.type) {
+          appendLog({
+            label: 'Robot',
+            message: `Received: ${data.type}`,
+            tone: 'info'
+          });
         }
       } catch (error) {
+        console.warn('Audio WebSocket message parse error', error);
         appendLog({ label: 'Robot', message: String(event.data ?? 'Message received'), tone: 'info' });
       }
     };
 
-    ws.onerror = () => {
+    ws.onerror = (error) => {
+      console.warn('Audio WebSocket error', error);
       setAudioError('Audio stream error');
       setIsAudioConnecting(false);
       setIsAudioConnected(false);
@@ -237,21 +274,36 @@ export default function AgenticVoiceScreen() {
   const sendAudioChunks = useCallback(async (base64Payload: string) => {
     if (!audioSocket.current || audioSocket.current.readyState !== WebSocket.OPEN) {
       setRecordingError('Audio socket not connected');
+      appendLog({ label: 'Error', message: 'Audio socket not connected', tone: 'error' });
       return;
     }
 
-    const chunkSize = 8000;
-    for (let i = 0; i < base64Payload.length; i += chunkSize) {
-      const chunk = base64Payload.slice(i, i + chunkSize);
-      audioSocket.current.send(
-        JSON.stringify({ type: 'audio_chunk', encoding: 'base64', data: chunk })
-      );
-    }
+    try {
+      const chunkSize = 8000;
+      let chunksSent = 0;
 
-    audioSocket.current.send(
-      JSON.stringify({ type: 'audio_end', encoding: 'base64', sampleRate: AUDIO_SAMPLE_RATE })
-    );
-    appendLog({ label: 'You', message: 'Voice clip streamed to robot.', tone: 'client' });
+      for (let i = 0; i < base64Payload.length; i += chunkSize) {
+        const chunk = base64Payload.slice(i, i + chunkSize);
+        audioSocket.current.send(
+          JSON.stringify({ type: 'audio_chunk', encoding: 'base64', data: chunk })
+        );
+        chunksSent++;
+      }
+
+      audioSocket.current.send(
+        JSON.stringify({ type: 'audio_end', encoding: 'base64', sampleRate: AUDIO_SAMPLE_RATE })
+      );
+
+      appendLog({
+        label: 'You',
+        message: `Sent ${chunksSent} audio chunks to robot`,
+        tone: 'client'
+      });
+    } catch (error) {
+      console.error('Failed to send audio chunks', error);
+      appendLog({ label: 'Error', message: 'Failed to send audio to robot', tone: 'error' });
+      setRecordingError('Failed to send audio');
+    }
   }, [appendLog]);
 
   const stopRecording = useCallback(async () => {
@@ -262,77 +314,155 @@ export default function AgenticVoiceScreen() {
     try {
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
       setIsRecording(false);
 
-      if (uri) {
-        const base64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        await sendAudioChunks(base64);
+      if (!uri) {
+        throw new Error('No recording URI available');
+      }
+
+      // Read as base64 - use string literal, not enum
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64',
+      });
+
+      if (!base64) {
+        throw new Error('Failed to read audio file');
+      }
+
+      await sendAudioChunks(base64);
+
+      // Clean up the file
+      try {
+        await FileSystem.deleteAsync(uri, { idempotent: true });
+      } catch (deleteError) {
+        console.warn('Failed to delete recording file', deleteError);
       }
     } catch (error) {
-      console.warn('Failed to stop recording', error);
-      setRecordingError('Failed to stop recording');
+      console.error('Failed to stop recording', error);
+      setRecordingError('Failed to process recording');
+      appendLog({
+        label: 'Error',
+        message: `Recording error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        tone: 'error'
+      });
     } finally {
       recordingRef.current = null;
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: false,
+        });
+      } catch (audioModeError) {
+        console.warn('Failed to reset audio mode', audioModeError);
+      }
     }
-  }, [sendAudioChunks]);
+  }, [sendAudioChunks, appendLog]);
 
   const startRecording = useCallback(async () => {
     if (isRecording || isAudioConnecting) {
       return;
     }
 
+    if (!isAudioConnected) {
+      setRecordingError('Audio connection required');
+      return;
+    }
+
     setRecordingError(null);
 
     try {
+      // Request permission
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== 'granted') {
-        setRecordingError('Microphone permission is required to talk to the robot.');
+        setRecordingError('Microphone permission required');
+        appendLog({
+          label: 'Error',
+          message: 'Microphone permission is required to talk to the robot',
+          tone: 'error'
+        });
         return;
       }
 
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      // Set audio mode - critical for iOS
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false, // Changed to false to avoid iOS conflict
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
 
+      // Prepare recording
       const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync({
+
+      // Platform-specific recording options
+      const recordingOptions = {
         android: {
           extension: '.wav',
-          outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_LINEAR_PCM,
-          audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_PCM_16BIT,
+          outputFormat: Audio.AndroidOutputFormat.DEFAULT,
+          audioEncoder: Audio.AndroidAudioEncoder.DEFAULT,
           sampleRate: AUDIO_SAMPLE_RATE,
           numberOfChannels: 1,
-          bitRate: 256000,
+          bitRate: 128000,
         },
         ios: {
           extension: '.wav',
-          audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_HIGH,
+          audioQuality: Audio.IOSAudioQuality.HIGH,
           sampleRate: AUDIO_SAMPLE_RATE,
           numberOfChannels: 1,
-          bitRate: 256000,
+          bitRate: 128000,
           linearPCMBitDepth: 16,
           linearPCMIsBigEndian: false,
           linearPCMIsFloat: false,
         },
-        web: { mimeType: 'audio/wav' },
-      });
+        web: {
+          mimeType: 'audio/wav',
+          bitsPerSecond: 128000,
+        },
+      };
 
+      await recording.prepareToRecordAsync(recordingOptions);
       await recording.startAsync();
+
       recordingRef.current = recording;
       setIsRecording(true);
 
-      if (audioSocket.current?.readyState === WebSocket.OPEN) {
-        audioSocket.current.send(
-          JSON.stringify({ type: 'start', encoding: 'pcm16', sampleRate: AUDIO_SAMPLE_RATE })
-        );
-      }
-      appendLog({ label: 'You', message: 'Listening... release to send.', tone: 'client' });
+      appendLog({
+        label: 'You',
+        message: 'Recording... release to send',
+        tone: 'client'
+      });
     } catch (error) {
-      console.warn('Failed to start recording', error);
-      setRecordingError('Unable to access microphone');
+      console.error('Failed to start recording', error);
+
+      let errorMessage = 'Unable to start recording';
+      if (error instanceof Error) {
+        if (error.message.includes('background')) {
+          errorMessage = 'Cannot record while app is in background';
+        } else if (error.message.includes('permission')) {
+          errorMessage = 'Microphone permission denied';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      setRecordingError(errorMessage);
+      appendLog({
+        label: 'Error',
+        message: errorMessage,
+        tone: 'error'
+      });
+
+      // Clean up
+      recordingRef.current = null;
+      try {
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      } catch (cleanupError) {
+        console.warn('Failed to reset audio mode after error', cleanupError);
+      }
     }
-  }, [appendLog, isAudioConnecting, isRecording]);
+  }, [appendLog, isAudioConnecting, isAudioConnected, isRecording]);
 
   const handleSetLights = useCallback(
     async (pwmA: number, pwmB: number) => {
@@ -391,19 +521,15 @@ export default function AgenticVoiceScreen() {
               <ThemedText type="link">{isAudioConnected ? 'Reconnect' : 'Retry link'}</ThemedText>
             </Pressable>
           </View>
-          <ThemedText style={styles.cardDescription}>
-            Hold to stream microphone audio to the robot over WebSocket. Release to upload the
-            clip and receive transcripts and assistant messages.
-          </ThemedText>
           <Pressable
             style={[
               styles.talkButton,
               isRecording && styles.talkButtonActive,
-              !isAudioConnected && !isAudioConnecting && styles.talkButtonDisabled,
+              !isAudioConnected && styles.talkButtonDisabled,
             ]}
             onPressIn={startRecording}
             onPressOut={stopRecording}
-            disabled={!isAudioConnected && !isAudioConnecting}
+            disabled={!isAudioConnected}
           >
             {isRecording ? (
               <ActivityIndicator color="#04110B" />
@@ -411,7 +537,7 @@ export default function AgenticVoiceScreen() {
               <IconSymbol name="mic.fill" size={18} color="#04110B" />
             )}
             <ThemedText style={styles.talkButtonText}>
-              {isRecording ? 'Streaming...' : 'Hold to talk'}
+              {isRecording ? 'Recording...' : !isAudioConnected ? 'Waiting for connection...' : 'Hold to talk'}
             </ThemedText>
           </Pressable>
           {recordingError ? (
