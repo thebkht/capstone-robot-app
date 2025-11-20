@@ -4,6 +4,7 @@ import {
      ActivityIndicator,
      Pressable,
      StyleSheet,
+     Text,
      View
 } from 'react-native';
 
@@ -16,18 +17,19 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useRobot } from '@/context/robot-provider';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { cmd_lights_ctrl, cmdJsonCmd } from '@/services/json-socket';
 
 export default function CameraScreen() {
      const { api, baseUrl, } = useRobot();
      const router = useRouter();
-     const [joystick, setJoystick] = useState({ x: 0, y: 0 });
+     const [joystick, setJoystick] = useState({ l: 0, r: 0 });
      const [error, setError] = useState<string | null>(null);
      const [isCapturing, setIsCapturing] = useState(false);
      const [lastSnapshot, setLastSnapshot] = useState<string | null>(null);
      const [currentFrame, setCurrentFrame] = useState<string | null>(null);
      const [isStreaming, setIsStreaming] = useState(false);
      const [isConnecting, setIsConnecting] = useState(false);
-     const [isAdjustingLights, setIsAdjustingLights] = useState(false);
+     const [isLightOn, setIsLightOn] = useState(false)
      const wsRef = useRef<WebSocket | null>(null);
 
      // WebSocket URL
@@ -189,18 +191,13 @@ export default function CameraScreen() {
           }
      }, [api, resolveSnapshotUrl]);
 
-     const handleSetLights = useCallback(
-          async (pwmA: number, pwmB: number) => {
-               setIsAdjustingLights(true);
-               try {
-                    await api.controlLights({ pwmA, pwmB });
-               } catch (lightError) {
-                    console.warn('Failed to set lights', lightError);
-               } finally {
-                    setIsAdjustingLights(false);
-               }
+
+     const handleLightCTL = useCallback(
+          () => {
+               cmdJsonCmd({ T: cmd_lights_ctrl, IO4: isLightOn ? 0 : 115, IO5: isLightOn ? 0 : 115 }, baseUrl);
+               setIsLightOn(!isLightOn)
           },
-          [api]
+          [baseUrl, isLightOn],
      );
 
      return (
@@ -240,16 +237,28 @@ export default function CameraScreen() {
                          </View>
                     )} */}
 
-                    <CameraVideo
-                         wsUrl={wsUrl}
-                         currentFrame={currentFrame}
-                         isConnecting={isConnecting}
-                         isStreaming={isStreaming}
-                         error={error}
-                         onToggleStream={handleToggleStream}
-                         onSetLights={handleSetLights}
-                         isAdjustingLights={isAdjustingLights}
-                    />
+                    <View style={styles.videoFeed}>
+                         <View style={{ position: "relative" }}>
+                              <View style={{ position: "absolute", zIndex: 2 }}>
+                                   <View style={{ flex: 1, alignItems: "flex-end", justifyContent: "flex-start" }}>
+                                        <Pressable style={styles.feedLight} onPress={handleLightCTL}>
+                                             <IconSymbol name='bolt' size={20} color="#1DD1A1" />
+                                             <Text style={styles.feedLightText}>
+                                                  {isLightOn ? "ON" : "OFF"}
+                                             </Text>
+                                        </Pressable>
+                                   </View>
+                              </View>
+                         </View>
+                         <CameraVideo
+                              wsUrl={wsUrl}
+                              currentFrame={currentFrame}
+                              isConnecting={isConnecting}
+                              isStreaming={isStreaming}
+                              error={error}
+                              onToggleStream={handleToggleStream}
+                         />
+                    </View>
 
                     <View style={styles.row}>
                          <Pressable
@@ -281,10 +290,9 @@ export default function CameraScreen() {
                     ) : null}
 
                     <ThemedView style={styles.joystickCard}>
-                         <ThemedText type="title">Virtual joystick</ThemedText>
                          <Joystick onChange={setJoystick} />
                          <ThemedText style={styles.joystickValue}>
-                              X: {joystick.x.toFixed(2)} Y: {joystick.y.toFixed(2)}
+                              L: {joystick.l.toFixed(2)} R: {joystick.r.toFixed(2)}
                          </ThemedText>
                     </ThemedView>
                </ThemedView>
@@ -320,10 +328,27 @@ const styles = StyleSheet.create({
      backButtonText: {
           color: '#E5E7EB',
      },
+     feedLight: {
+          borderWidth: 1,
+          borderColor: "#1DD1A1",
+          paddingInline: 6,
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          marginVertical: 5
+     },
+     feedLightText: {
+          color: "#1DD1A1",
+          fontSize: 14
+     },
      row: {
           flexDirection: 'row',
           gap: 16,
           alignItems: 'center',
+     },
+     videoFeed: {
+          position: "relative",
+          zIndex: 0
      },
      primaryButton: {
           flex: 1,
@@ -361,9 +386,7 @@ const styles = StyleSheet.create({
           gap: 16,
           padding: 20,
           borderRadius: 0,
-          borderWidth: 1,
-          borderColor: '#202020',
-          backgroundColor: '#1C1C1C',
+          backgroundColor: '#161616',
           alignItems: 'center',
      },
      joystickValue: {
