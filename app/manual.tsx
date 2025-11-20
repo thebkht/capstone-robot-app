@@ -29,7 +29,6 @@ export default function CameraScreen() {
      const [currentFrame, setCurrentFrame] = useState<string | null>(null);
      const [isStreaming, setIsStreaming] = useState(false);
      const [isConnecting, setIsConnecting] = useState(false);
-     const [isAdjustingLights, setIsAdjustingLights] = useState(false);
      const [isLightOn, setIsLightOn] = useState(false)
      const wsRef = useRef<WebSocket | null>(null);
 

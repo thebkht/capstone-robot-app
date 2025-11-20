@@ -118,44 +118,30 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          <Link href="/camera" asChild>
-            <Pressable
-              style={({ pressed }) => [
-                styles.cameraButton,
-                pressed && styles.cameraButtonPressed,
-              ]}
-            >
-              <View style={styles.cameraButtonContent}>
-                <IconSymbol name="camera.fill" size={20} color="#1DD1A1" />
-                <ThemedText style={styles.cameraButtonText}>View Camera</ThemedText>
-                <IconSymbol name="chevron.right" size={18} color="#94A3B8" />
-              </View>
-            </Pressable>
-          </Link>
-
           <View style={styles.modeRow}>
             {CONTROL_MODES.map((control) => {
               const isActive = control.id === 'agentic' ? isAgentic : !isAgentic;
               return (
-                <Pressable
-                  key={control.id}
-                  style={({ pressed }) => [
-                    styles.modeButton,
-                    isActive && styles.modeButtonActive,
-                    pressed && styles.modeButtonPressed,
-                  ]}
-                >
-                  <IconSymbol
-                    name={control.icon}
-                    size={18}
-                    color={isActive ? '#161616' : '#CBD5F5'}
-                  />
-                  <ThemedText
-                    style={[styles.modeButtonText, isActive && styles.modeButtonTextActive]}
+                <Link href="/manual" key={control.id} asChild>
+                  <Pressable
+
+                    style={({ pressed }) => [
+                      styles.modeButton,
+                      isActive && styles.modeButtonActive,
+                      pressed && styles.modeButtonPressed,
+                    ]}
                   >
-                    {control.label}
-                  </ThemedText>
-                </Pressable>
+                    <IconSymbol
+                      name={control.icon}
+                      size={18}
+                      color={isActive ? '#161616' : '#CBD5F5'}
+                    />
+                    <ThemedText
+                      style={[styles.modeButtonText, isActive && styles.modeButtonTextActive]}
+                    >
+                      {control.label}
+                    </ThemedText>
+                  </Pressable></Link>
               );
             })}
           </View>
