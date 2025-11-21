@@ -1,20 +1,20 @@
 {
   "expo": {
-    "name": "Rovy Controller",
-    "slug": "Rovy Controller",
+    "name": "Jarvis Controller",
+    "slug": "Jarvis Controller",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "rovycontroller",
+    "scheme": "jarviscontroller",
     "icon": "./assets/images/icons/ios-light.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.rovy.rovycontroller",
+      "bundleIdentifier": "com.jarvis.controller",
       "icon": "./assets/ios.icon",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "Rovy Controller uses Bluetooth to securely provision and connect to your Rovy.",
-        "NSMicrophoneUsageDescription": "Rovy Controller uses your microphone to communicate with your Rovy"
+        "NSBluetoothAlwaysUsageDescription": "Jarvis Controller uses Bluetooth to securely provision and connect to your Jarvis.",
+        "NSMicrophoneUsageDescription": "Jarvis Controller uses your microphone to communicate with your Jarvis"
       }
     },
     "android": {
@@ -33,7 +33,7 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "minSdkVersion": 23,
-      "package": "com.thefalsenet.rovycontroller"
+      "package": "com.jarvis.controller"
     },
     "web": {
       "output": "static",
@@ -44,7 +44,7 @@
       [
         "expo-av",
         {
-          "microphonePermission": "Allow Rovy Controller to access your microphone."
+          "microphonePermission": "Allow Jarvis Controller to access your microphone."
         }
       ],
       [
@@ -62,7 +62,7 @@
         {
           "isBackgroundEnabled": true,
           "modes": ["peripheral", "central"],
-          "bluetoothAlwaysPermission": "Allow Rovy Controller to connect to bluetooth devices"
+          "bluetoothAlwaysPermission": "Allow Jarvis Controller to connect to bluetooth devices"
         }
       ],
       "./plugins/withAndroidBlePermissions",

@@ -214,7 +214,7 @@ export class RovyBleManager {
   async scanForRovy(
     onDeviceFound?: DeviceFoundCallback
   ): Promise<RovyDevice[]> {
-    console.log("Starting scan for ROVY devices...");
+    console.log("Starting scan for devices...");
 
     if (!this.bleManager) {
       throw this.getAvailabilityError();
@@ -238,9 +238,7 @@ export class RovyBleManager {
       const foundDevices = new Map<string, RovyDevice>();
       const scanTimeout = setTimeout(() => {
         this.bleManager?.stopDeviceScan();
-        console.log(
-          `Scan completed. Found ${foundDevices.size} ROVY device(s).`
-        );
+        console.log(`Scan completed. Found ${foundDevices.size} device(s).`);
         resolve(Array.from(foundDevices.values()));
       }, 10000); // 10 second scan timeout
 
@@ -257,12 +255,7 @@ export class RovyBleManager {
           }
 
           if (device?.name) {
-            console.log(
-              "Found ROVY device:",
-              device.name,
-              device.id,
-              device.rssi
-            );
+            console.log("Found device:", device.name, device.id, device.rssi);
             const rovyDevice: RovyDevice = {
               id: device.id,
               name: device.name,
@@ -289,7 +282,7 @@ export class RovyBleManager {
    * Discovers services and characteristics, subscribes to wifi_status notifications
    */
   async connectToRovy(deviceId: string): Promise<void> {
-    console.log("Connecting to ROVY device:", deviceId);
+    console.log("Connecting to device:", deviceId);
 
     if (!this.bleManager) {
       throw this.getAvailabilityError();
@@ -365,7 +358,7 @@ export class RovyBleManager {
 
       console.log("Successfully connected and subscribed to status updates");
     } catch (error) {
-      console.error("Error connecting to ROVY device:", error);
+      console.error("Error connecting to device:", error);
       // Clean up on error
       await this.disconnect().catch(() => {
         // Ignore cleanup errors
@@ -618,7 +611,7 @@ export class RovyBleManager {
    * Disconnect from the robot and clean up
    */
   async disconnect(): Promise<void> {
-    console.log("Disconnecting from ROVY device...");
+    console.log("Disconnecting from device...");
 
     // Unsubscribe from notifications
     if (this.statusSubscription) {
@@ -657,7 +650,7 @@ export class RovyBleManager {
    * Cleanup - call this when the manager is no longer needed
    */
   destroy(): void {
-    console.log("Destroying ROVY BLE manager...");
+    console.log("Destroying BLE manager...");
     this.disconnect().catch(() => {
       // Ignore errors during cleanup
     });

@@ -229,7 +229,7 @@ export function WifiProvisionScreen() {
       if (foundDevices.length === 0) {
         Alert.alert(
           "No Devices Found",
-          "No ROVY devices were found. Make sure the robot is powered on and in BLE provisioning mode."
+          "No devices were found. Make sure the robot is powered on and in BLE provisioning mode."
         );
       }
     } catch (err) {
@@ -762,7 +762,7 @@ export function WifiProvisionScreen() {
                             ) : null}
                             <View>
                               <ThemedText style={styles.deviceName}>
-                                {device.name || "ROVY"}
+                                {device.name || "JARVIS"}
                               </ThemedText>
                             </View>
                             <View
@@ -928,7 +928,7 @@ export function WifiProvisionScreen() {
                     const statusBadge = getRobotStatusBadge(robotCheck);
                     const displayName =
                       robot.name ||
-                      `Rovy (${robot.last_wifi_ssid || robot.last_ip || "unknown"
+                      `(${robot.last_wifi_ssid || robot.last_ip || "unknown"
                       })`;
                     const subtitle =
                       robotCheck.status === "ready"

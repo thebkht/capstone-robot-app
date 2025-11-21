@@ -100,26 +100,32 @@ export default function HomeScreen() {
   ];
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <ThemedView style={styles.screen}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.headerRow}>
             <View>
               <ThemedText type="title" style={styles.missionLabel}>
-                ROVY
+                JARVIS
               </ThemedText>
               <View style={styles.headerStatus}>
                 <IconSymbol name="battery.75" color="#34D399" size={20} />
-                <ThemedText style={styles.headerStatusText}>{batteryLabel}</ThemedText>
+                <ThemedText style={styles.headerStatusText}>
+                  {batteryLabel}
+                </ThemedText>
                 <View style={styles.headerDot} />
-                <ThemedText style={styles.headerStatusMeta}>{healthLabel}</ThemedText>
+                <ThemedText style={styles.headerStatusMeta}>
+                  {healthLabel}
+                </ThemedText>
               </View>
             </View>
-
           </View>
 
           <Image
-            source={require('@/assets/images/rovy.png')}
+            source={require("@/assets/images/rovy.png")}
             style={styles.robotImage}
             contentFit="cover"
           />
@@ -128,18 +134,25 @@ export default function HomeScreen() {
             {stats.map((stat) => (
               <View key={stat.id} style={styles.statCard}>
                 <View style={styles.statIconWrapper}>
-                  <IconSymbol name={stat.icon} size={18} color={stat.iconColor} />
+                  <IconSymbol
+                    name={stat.icon}
+                    size={18}
+                    color={stat.iconColor}
+                  />
                 </View>
                 <ThemedText style={styles.statLabel}>{stat.label}</ThemedText>
                 <ThemedText style={styles.statValue}>{stat.value}</ThemedText>
-                <ThemedText style={styles.statCaption}>{stat.caption}</ThemedText>
+                <ThemedText style={styles.statCaption}>
+                  {stat.caption}
+                </ThemedText>
               </View>
             ))}
           </View>
 
           <View style={styles.modeRow}>
             {CONTROL_MODES.map((control) => {
-              const isActive = control.id === 'agentic' ? isAgentic : !isAgentic;
+              const isActive =
+                control.id === "agentic" ? isAgentic : !isAgentic;
               return (
                 <Pressable
                   key={control.id}
@@ -153,10 +166,13 @@ export default function HomeScreen() {
                   <IconSymbol
                     name={control.modeIcon}
                     size={18}
-                    color={isActive ? '#161616' : '#CBD5F5'}
+                    color={isActive ? "#161616" : "#CBD5F5"}
                   />
                   <ThemedText
-                    style={[styles.modeButtonText, isActive && styles.modeButtonTextActive]}
+                    style={[
+                      styles.modeButtonText,
+                      isActive && styles.modeButtonTextActive,
+                    ]}
                   >
                     {control.label}
                   </ThemedText>
@@ -184,14 +200,24 @@ export default function HomeScreen() {
                 <View style={styles.behaviorTextGroup}>
                   <View style={styles.behaviorMetaRow}>
                     <View style={styles.behaviorBadge}>
-                      <ThemedText style={styles.behaviorBadgeText}>{behavior.tier}</ThemedText>
+                      <ThemedText style={styles.behaviorBadgeText}>
+                        {behavior.tier}
+                      </ThemedText>
                     </View>
                     <View style={styles.behaviorStatusPill}>
-                      <IconSymbol name="checkmark.circle.fill" size={14} color={behavior.statusColor} />
-                      <ThemedText style={styles.behaviorStatusText}>{behavior.status}</ThemedText>
+                      <IconSymbol
+                        name="checkmark.circle.fill"
+                        size={14}
+                        color={behavior.statusColor}
+                      />
+                      <ThemedText style={styles.behaviorStatusText}>
+                        {behavior.status}
+                      </ThemedText>
                     </View>
                   </View>
-                  <ThemedText style={styles.behaviorName}>{behavior.name}</ThemedText>
+                  <ThemedText style={styles.behaviorName}>
+                    {behavior.name}
+                  </ThemedText>
                   <ThemedText style={styles.behaviorDescription}>
                     {behavior.description}
                   </ThemedText>

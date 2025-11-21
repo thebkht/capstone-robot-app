@@ -84,32 +84,29 @@ export function useRovyBle() {
   /**
    * Connect to a ROVY device
    */
-  const connectToRovy = useCallback(
-    async (deviceId: string): Promise<void> => {
-      if (!managerRef.current) {
-        throw new Error("BLE manager not initialized");
-      }
+  const connectToRovy = useCallback(async (deviceId: string): Promise<void> => {
+    if (!managerRef.current) {
+      throw new Error("BLE manager not initialized");
+    }
 
-      setIsConnecting(true);
-      setError(null);
+    setIsConnecting(true);
+    setError(null);
 
-      try {
-        await managerRef.current.connectToRovy(deviceId);
-        setIsConnected(true);
-        console.log("Connected to ROVY device:", deviceId);
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to connect to device";
-        setError(errorMessage);
-        setIsConnected(false);
-        console.error("Connection error:", err);
-        throw err;
-      } finally {
-        setIsConnecting(false);
-      }
-    },
-    []
-  );
+    try {
+      await managerRef.current.connectToRovy(deviceId);
+      setIsConnected(true);
+      console.log("Connected to device:", deviceId);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to connect to device";
+      setError(errorMessage);
+      setIsConnected(false);
+      console.error("Connection error:", err);
+      throw err;
+    } finally {
+      setIsConnecting(false);
+    }
+  }, []);
 
   /**
    * Send Wi-Fi configuration
@@ -156,7 +153,7 @@ export function useRovyBle() {
       await managerRef.current.disconnect();
       setIsConnected(false);
       setWifiStatus("idle");
-      console.log("Disconnected from ROVY device");
+      console.log("Disconnected from device");
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to disconnect";
@@ -169,21 +166,18 @@ export function useRovyBle() {
   /**
    * Register a status change callback
    */
-  const onStatusChange = useCallback(
-    (callback: StatusChangeCallback) => {
-      if (!managerRef.current) {
-        return () => {};
-      }
+  const onStatusChange = useCallback((callback: StatusChangeCallback) => {
+    if (!managerRef.current) {
+      return () => {};
+    }
 
-      managerRef.current.onStatusChange(callback);
-      return () => {
-        if (managerRef.current) {
-          managerRef.current.removeStatusChangeCallback(callback);
-        }
-      };
-    },
-    []
-  );
+    managerRef.current.onStatusChange(callback);
+    return () => {
+      if (managerRef.current) {
+        managerRef.current.removeStatusChangeCallback(callback);
+      }
+    };
+  }, []);
 
   return {
     // State
@@ -202,4 +196,3 @@ export function useRovyBle() {
     onStatusChange,
   };
 }
-

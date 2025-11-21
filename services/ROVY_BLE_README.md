@@ -12,7 +12,7 @@ This module provides functionality to connect to ROVY robots via Bluetooth Low E
 
 ### Core Functionality
 
-1. **Scan for ROVY devices** - Scans for BLE devices with names starting with "ROVY-"
+1. **Scan for JARVIS devices** - Scans for BLE devices with names starting with "JARVIS"
 2. **Connect to device** - Establishes BLE connection and discovers services/characteristics
 3. **Send Wi-Fi configuration** - Sends SSID and password as JSON to the robot
 4. **Monitor Wi-Fi status** - Subscribes to status notifications ("idle", "connecting", "connected", "failed")
@@ -128,7 +128,7 @@ Common errors:
 - "Bluetooth is turned off" - Bluetooth disabled on device
 - "Bluetooth permissions not granted" - User denied permissions
 - "Wi-Fi service not found" - Device doesn't expose expected service
-- "Not connected to ROVY device" - Attempted operation without connection
+- "Not connected to device" - Attempted operation without connection
 
 ## Example Component
 
