@@ -13,7 +13,8 @@
       "bundleIdentifier": "com.rovy.jarvis",
       "icon": "./assets/ios.icon",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Jarvis Controller uses your microphone to communicate with your Jarvis"
+        "NSMicrophoneUsageDescription": "Jarvis Controller uses your microphone to communicate with your Jarvis",
+        "NSLocationWhenInUseUsageDescription": "Jarvis Controller needs location access to scan nearby Wi-Fi networks during setup"
       }
     },
     "android": {
