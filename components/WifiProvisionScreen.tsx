@@ -485,35 +485,37 @@ export function WifiProvisionScreen() {
             <View style={styles.sectionCard}>
               <View style={styles.blockHeader}>
                 <ThemedText style={styles.blockTitle}>Available networks</ThemedText>
-                <Pressable
-                  style={[
-                    styles.scanButton,
-                    (isScanningPhoneWifi || isConfiguringWifi) && styles.disabledPrimary,
-                  ]}
-                  onPress={handleScanNetworks}
-                  disabled={isScanningPhoneWifi || isConfiguringWifi}
-                >
-                  {isScanningPhoneWifi ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <IconSymbol
-                      size={20}
-                      name="arrow.trianglehead.2.clockwise"
-                      color="#fff"
-                    />
-                  )}
-                </Pressable>
+                {Platform.OS !== "ios" && (
+                  <Pressable
+                    style={[
+                      styles.scanButton,
+                      (isScanningRobotWifi || isConfiguringWifi) && styles.disabledPrimary,
+                    ]}
+                    onPress={handleScanNetworks}
+                    disabled={isScanningRobotWifi || isConfiguringWifi}
+                  >
+                    {isScanningRobotWifi ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <IconSymbol
+                        size={20}
+                        name="arrow.trianglehead.2.clockwise"
+                        color="#fff"
+                      />
+                    )}
+                  </Pressable>
+                )}
               </View>
 
-              {phoneWifiNetworks.length === 0 && !isScanningPhoneWifi ? (
+              {robotWifiNetworks.length === 0 && !isScanningRobotWifi ? (
                 <ThemedText style={styles.emptyStateText}>
-                  Scan to find Wi-Fi networks visible to this device.
+                  Scan to find Wi-Fi networks the robot can join.
                 </ThemedText>
               ) : null}
 
-              {phoneWifiNetworks.length > 0 && (
+              {robotWifiNetworks.length > 0 && (
                 <View style={styles.wifiList}>
-                  {phoneWifiNetworks.map((network, index) => {
+                  {robotWifiNetworks.map((network, index) => {
                     const signalInfo = getSignalStrengthInfo(network.rssi);
                     const isSelected = selectedNetwork === network.ssid;
                     return (
@@ -596,6 +598,73 @@ export function WifiProvisionScreen() {
                 </Pressable>
               </View>
             </View>
+
+            {/* Nearby Robots Card */}
+            {savedRobots.some((robot) => robot.status === "ready") && (
+              <ThemedView style={styles.sectionCard}>
+                <View style={styles.sectionHeader}>
+                  <View>
+                    <ThemedText style={styles.sectionTitle}>Nearby robots</ThemedText>
+                    <ThemedText style={styles.sectionHint}>
+                      Connected to this hotspot or Wi-Fi network.
+                    </ThemedText>
+                  </View>
+                  {isCheckingRobots && (
+                    <View style={styles.inlineStatus}>
+                      <ActivityIndicator size="small" color="#1DD1A1" />
+                      <ThemedText style={styles.statusLabelText}>
+                        Refreshing
+                      </ThemedText>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.robotList}>
+                  {savedRobots
+                    .filter((robotCheck) => robotCheck.status === "ready")
+                    .map((robotCheck) => {
+                      const robot = robotCheck.robot;
+                      const statusBadge = getRobotStatusBadge(robotCheck);
+                      const displayName =
+                        robot.name ||
+                        `(${robot.last_wifi_ssid || robot.last_ip || "unknown"})`;
+                      const subtitle = robotCheck.robotStatus?.wifi?.ssid
+                        ? `Wi-Fi: ${robotCheck.robotStatus.wifi.ssid}`
+                        : robot.last_ip
+                          ? `IP: ${robot.last_ip}`
+                          : "Tap to connect";
+
+                      return (
+                        <Pressable
+                          key={`nearby-${robot.robot_id}`}
+                          style={styles.robotItem}
+                          onPress={() => handleReconnectToRobot(robotCheck)}
+                        >
+                          <View style={styles.robotItemContent}>
+                            <View style={styles.robotItemHeader}>
+                              <ThemedText style={styles.robotName}>
+                                {displayName}
+                              </ThemedText>
+                              <StatusPill
+                                color={statusBadge.color}
+                                label={statusBadge.label}
+                              />
+                            </View>
+                            <ThemedText style={styles.robotSubtitle}>
+                              {subtitle}
+                            </ThemedText>
+                          </View>
+                          <IconSymbol
+                            size={20}
+                            name="chevron.right"
+                            color="#67686C"
+                          />
+                        </Pressable>
+                      );
+                    })}
+                </View>
+              </ThemedView>
+            )}
 
             {/* Previously Connected Robots Card */}
             {savedRobots.length !== 0 && <ThemedView style={styles.sectionCard}>
