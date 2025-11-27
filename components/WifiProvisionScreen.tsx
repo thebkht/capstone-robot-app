@@ -12,6 +12,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Modal,
+  PermissionsAndroid,
   Platform,
   Pressable,
   ScrollView,
@@ -29,6 +30,7 @@ import { checkAllRobotsStatus } from "@/services/robot-status-check";
 import { RobotStatusCheck as RobotStatusCheckType } from "@/services/robot-storage";
 import { Image } from "expo-image";
 import { IconSymbol } from "./ui/icon-symbol";
+import WifiManager from "react-native-wifi-reborn";
 
 const deriveHost = (value: string | null | undefined) => {
   if (!value) {
@@ -108,10 +110,10 @@ export function WifiProvisionScreen() {
   const [isManualConnecting, setIsManualConnecting] = useState(false);
   const [savedRobots, setSavedRobots] = useState<RobotStatusCheckType[]>([]);
   const [isCheckingRobots, setIsCheckingRobots] = useState(false);
-  const [robotWifiNetworks, setRobotWifiNetworks] = useState<
+  const [phoneWifiNetworks, setPhoneWifiNetworks] = useState<
     { ssid: string; rssi: number }[]
   >([]);
-  const [isScanningRobotWifi, setIsScanningRobotWifi] = useState(false);
+  const [isScanningPhoneWifi, setIsScanningPhoneWifi] = useState(false);
   const [isConfiguringWifi, setIsConfiguringWifi] = useState(false);
 
   const isCheckingNetworkRef = useRef(false);
@@ -138,35 +140,59 @@ export function WifiProvisionScreen() {
   }, [baseUrl, manualIpEdited, status?.network?.ip]);
 
   /**
-   * Scan for Wi-Fi networks while connected to the robot hotspot
+   * Scan for Wi-Fi networks visible to this device (used to find the robot hotspot)
    */
   const handleScanNetworks = useCallback(async () => {
-    if (!api) {
+    if (Platform.OS !== "android") {
       Alert.alert(
-        "Not Connected",
-        "Connect to the robot's hotspot first, then try scanning again."
+        "Scanning not supported",
+        "Wi-Fi scanning is only available on Android. Please manually connect your phone to the robot hotspot, then continue."
       );
       return;
     }
 
-    setIsScanningRobotWifi(true);
-    setRobotWifiNetworks([]);
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      {
+        title: "Location permission required",
+        message:
+          "We need location access to scan Wi-Fi networks near this device.",
+        buttonPositive: "Allow",
+        buttonNegative: "Deny",
+      }
+    );
+
+    if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+      Alert.alert(
+        "Permission required",
+        "Enable location access to scan nearby Wi-Fi networks."
+      );
+      return;
+    }
+
+    setIsScanningPhoneWifi(true);
+    setPhoneWifiNetworks([]);
 
     try {
-      const response = await api.scanWifiNetworks();
-      const networks = Array.isArray(response.networks)
-        ? response.networks.map((network: any) => ({
-          ssid: typeof network === "string" ? network : network.ssid || "",
-          rssi: typeof network === "object" && network.rssi ? network.rssi : -100,
-        }))
-        : [];
+      const scanResults = await WifiManager.reScanAndLoadWifiList();
 
-      setRobotWifiNetworks(networks);
+      const networks = (scanResults || []).map((network: any) => ({
+        ssid: network?.SSID || network?.ssid || "",
+        rssi:
+          typeof network?.level === "number"
+            ? network.level
+            : typeof network?.signalStrength === "number"
+              ? network.signalStrength
+              : -100,
+      }));
 
-      if (networks.length === 0) {
+      const filtered = networks.filter((network) => network.ssid);
+      setPhoneWifiNetworks(filtered);
+
+      if (filtered.length === 0) {
         Alert.alert(
           "No Networks Found",
-          "No Wi-Fi networks were detected. Move closer to your router and try again."
+          "No Wi-Fi networks were detected near this device. Move closer to your router or robot hotspot and try again."
         );
       }
     } catch (error) {
@@ -174,12 +200,12 @@ export function WifiProvisionScreen() {
         "Scan Error",
         error instanceof Error
           ? error.message
-          : "Failed to scan Wi-Fi networks via hotspot"
+          : "Failed to scan nearby Wi-Fi networks from this device"
       );
     } finally {
-      setIsScanningRobotWifi(false);
+      setIsScanningPhoneWifi(false);
     }
-  }, [api]);
+  }, []);
 
   /**
    * Get phone's current network info
