@@ -143,35 +143,38 @@ export function WifiProvisionScreen() {
    * Scan for Wi-Fi networks visible to this device (used to find the robot hotspot)
    */
   const handleScanNetworks = useCallback(async () => {
-    if (Platform.OS === "android") {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        {
-          title: "Location permission required",
-          message:
-            "We need location access to scan Wi-Fi networks near this device.",
-          buttonPositive: "Allow",
-          buttonNegative: "Deny",
-        }
+    if (Platform.OS !== "android") {
+      Alert.alert(
+        "Scanning not supported",
+        "Wi-Fi scanning is only available on Android. Please manually connect your phone to the robot hotspot, then continue."
       );
+      return;
+    }
 
-      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-        Alert.alert(
-          "Permission required",
-          "Enable location access to scan nearby Wi-Fi networks."
-        );
-        return;
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      {
+        title: "Location permission required",
+        message:
+          "We need location access to scan Wi-Fi networks near this device.",
+        buttonPositive: "Allow",
+        buttonNegative: "Deny",
       }
+    );
+
+    if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+      Alert.alert(
+        "Permission required",
+        "Enable location access to scan nearby Wi-Fi networks."
+      );
+      return;
     }
 
     setIsScanningPhoneWifi(true);
     setPhoneWifiNetworks([]);
 
     try {
-      const scanResults =
-        Platform.OS === "android"
-          ? await WifiManager.reScanAndLoadWifiList()
-          : await WifiManager.loadWifiList();
+      const scanResults = await WifiManager.reScanAndLoadWifiList();
 
       const networks = (scanResults || []).map((network: any) => ({
         ssid: network?.SSID || network?.ssid || "",
