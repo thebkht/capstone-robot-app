@@ -13,8 +13,8 @@
       "bundleIdentifier": "com.rovy.jarvis",
       "icon": "./assets/ios.icon",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "Jarvis Controller uses Bluetooth to securely provision and connect to your Jarvis.",
-        "NSMicrophoneUsageDescription": "Jarvis Controller uses your microphone to communicate with your Jarvis"
+        "NSMicrophoneUsageDescription": "Jarvis Controller uses your microphone to communicate with your Jarvis",
+        "NSLocationWhenInUseUsageDescription": "Jarvis Controller needs location access to scan nearby Wi-Fi networks during setup"
       }
     },
     "android": {
@@ -25,13 +25,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "permissions": [
-        "android.permission.BLUETOOTH_SCAN",
-        "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.BLUETOOTH",
-        "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.ACCESS_FINE_LOCATION"
-      ],
+      "permissions": ["android.permission.ACCESS_FINE_LOCATION"],
       "minSdkVersion": 23,
       "package": "com.rovy.jarvis"
     },
@@ -57,17 +51,7 @@
         }
       ],
       "expo-secure-store",
-      [
-        "react-native-ble-plx",
-        {
-          "isBackgroundEnabled": true,
-          "modes": ["peripheral", "central"],
-          "bluetoothAlwaysPermission": "Allow Jarvis Controller to connect to bluetooth devices"
-        }
-      ],
-      "./plugins/withAndroidBlePermissions",
-      "./plugins/withAndroidBuildGradleTweaks",
-      "./plugins/withPodfileBleCleanup"
+      "./plugins/withAndroidBuildGradleTweaks"
     ],
     "experiments": {
       "typedRoutes": true,
