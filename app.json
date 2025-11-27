@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.jarvis.controller",
+      "bundleIdentifier": "com.rovy.jarvis",
       "icon": "./assets/ios.icon",
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "Jarvis Controller uses Bluetooth to securely provision and connect to your Jarvis.",
@@ -33,7 +33,7 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "minSdkVersion": 23,
-      "package": "com.jarvis.controller"
+      "package": "com.rovy.jarvis"
     },
     "web": {
       "output": "static",
